@@ -41,7 +41,7 @@ CHAPTERS_DIR = HERE / "chapters"
 OUT = ROOT / "docs" / "EduMate-Zero-to-Hero.html"
 
 SUMMARY_ONLY = {"frontend/package-lock.json", "backend/mvnw", "backend/mvnw.cmd"}
-EXCLUDED_PREFIXES = ("docs/",)
+EXCLUDED_PREFIXES = ("docs/", "screenshots/")
 
 
 def esc(text: str) -> str:
