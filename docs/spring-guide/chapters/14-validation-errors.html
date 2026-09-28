@@ -1,0 +1,137 @@
+<!-- level: 1 -->
+<h1>Validation and error handling: saying "no" clearly</h1>
+
+<p class="lead">A good API refuses bad input early, explains exactly what was wrong, never leaks internals, and
+answers every kind of failure in the same shape. Spring gives you declarative validation and one central place to turn
+exceptions into responses.</p>
+
+<h2>Bean Validation: rules written on the data</h2>
+<p><strong>Jakarta Bean Validation</strong> (implemented by Hibernate Validator, brought in by
+<code>spring-boot-starter-validation</code>) lets you put rules on the fields of the object that receives a request:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/admissions/ApplicationForm.java" data-lines="15-36" data-expect="public record ApplicationForm("></pre>
+<p>Put <code>@Valid</code> before the <code>@RequestBody</code> parameter and Spring checks every rule
+<em>before</em> the controller method runs. If any fails, the method is never called; Spring throws
+<code>MethodArgumentNotValidException</code> listing every failed field.</p>
+<table>
+<thead><tr><th>Annotation</th><th>Rule</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td><code>@NotNull</code></td><td>must be present</td><td>for any type</td></tr>
+<tr><td><code>@NotBlank</code></td><td>text with at least one non-space character</td><td>implies not null</td></tr>
+<tr><td><code>@NotEmpty</code></td><td>a non-empty text, list or map</td><td><code>marks</code> list of the attendance request</td></tr>
+<tr><td><code>@Size(min, max)</code></td><td>length of text / size of a collection</td><td>match the database column's length</td></tr>
+<tr><td><code>@Min</code>, <code>@Max</code></td><td>whole-number range</td><td><code>@Min(1) @Max(6) int period</code></td></tr>
+<tr><td><code>@DecimalMin</code>, <code>@DecimalMax</code></td><td>decimal range, given as text</td><td>for <code>BigDecimal</code> scores</td></tr>
+<tr><td><code>@Email</code>, <code>@Pattern(regexp)</code></td><td>format</td><td><code>^$|…</code> in EduMate's patterns allows an empty optional field</td></tr>
+<tr><td><code>@Past</code>, <code>@Future</code>, <code>@PastOrPresent</code></td><td>dates</td><td>date of birth must be in the past</td></tr>
+<tr><td><code>@Valid</code> on a field or list</td><td>validate nested objects too</td><td><code>@NotEmpty @Valid List&lt;MarkEntry&gt; marks</code></td></tr>
+</tbody></table>
+<p>Most rules ignore <code>null</code> (only <code>@NotNull</code>/<code>@NotBlank</code>/<code>@NotEmpty</code> reject
+it), which is why optional fields like <code>phone</code> have a pattern but no "not" rule.</p>
+
+<h3>Validation versus business rules</h3>
+<p>Bean Validation checks the <strong>shape</strong> of one request: types, required fields, lengths, ranges.
+<strong>Business rules</strong> need the database or the current state ("this student is not in this section", "this
+fee is already paid", "you gave the first approval, a different person must give the second"). Those belong in the
+service, which throws an exception with a clear code:</p>
+<pre class="code" data-lang="java">// PaymentOrchestrator.initiate
+if (due.signum() &lt;= 0) {
+    throw ApiException.conflict("ALREADY_PAID", "This fee has already been paid in full.");
+}</pre>
+<div class="callout warn"><strong>The browser's checks are a courtesy, the server's are the law</strong>
+EduMate's frontend checks the application form too, to give instant feedback. But anyone can send a request with
+<code>curl</code> and skip the browser. The server must check everything again, which is exactly what the annotations
+on <code>ApplicationForm</code> do.</div>
+
+<h2>One exception type for "the request cannot be done"</h2>
+<p>EduMate's services throw one kind of exception when they refuse a request, carrying the HTTP status and a stable,
+machine-readable code:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/common/ApiException.java" data-lines="5-35" data-expect="public class ApiException extends RuntimeException"></pre>
+<p>Why these choices?</p>
+<ul>
+<li><strong>Unchecked</strong> (<code>extends RuntimeException</code>): no <code>throws</code> clauses everywhere, and, as
+the Level 2 transactions chapter shows, an unchecked exception makes Spring <em>roll back</em> the transaction, so a
+refused request leaves no half-written data.</li>
+<li><strong>A code as well as a message</strong>: the message is for people and may be reworded; the code
+(<code>ALREADY_PAID</code>, <code>STALE_UPDATE</code>) is for programs: the frontend and the tests rely on it.</li>
+<li><strong>Factory methods</strong> (<code>notFound</code>, <code>conflict</code>…) keep the calls short and the statuses
+consistent.</li>
+</ul>
+
+<h2>One place that turns exceptions into responses</h2>
+<p>A class annotated <code>@RestControllerAdvice</code> applies to every controller. Its <code>@ExceptionHandler</code>
+methods catch exceptions of a given type, wherever they were thrown during a request:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/common/GlobalExceptionHandler.java" data-lines="30-68" data-expect="@RestControllerAdvice"></pre>
+<p>The rest of the class follows the same pattern for every kind of failure:</p>
+<table>
+<thead><tr><th>Exception</th><th>Thrown by</th><th>Answer</th></tr></thead>
+<tbody>
+<tr><td><code>ApiException</code></td><td>EduMate's own services</td><td>its status and code</td></tr>
+<tr><td><code>MethodArgumentNotValidException</code></td><td>Spring, when <code>@Valid</code> fails</td><td>400 <code>VALIDATION_FAILED</code> + <code>fieldErrors</code></td></tr>
+<tr><td><code>ObjectOptimisticLockingFailureException</code></td><td>Spring/Hibernate, when a <code>@Version</code> check fails</td><td>409 <code>STALE_UPDATE</code></td></tr>
+<tr><td><code>DataIntegrityViolationException</code></td><td>the database: a UNIQUE or CHECK rule</td><td>409 <code>DUPLICATE_OR_INVALID</code> (details only in the log)</td></tr>
+<tr><td><code>MaxUploadSizeExceededException</code></td><td>the multipart parser</td><td>413 <code>FILE_TOO_LARGE</code></td></tr>
+<tr><td><code>HttpMessageNotReadableException</code></td><td>Jackson: body is not valid JSON</td><td>400 <code>MALFORMED_JSON</code></td></tr>
+<tr><td>missing / wrong-type parameters</td><td>Spring MVC</td><td>400 <code>BAD_PARAMETER</code></td></tr>
+<tr><td><code>AccessDeniedException</code></td><td>method security</td><td>403, and an <code>ACCESS_DENIED</code> line in the audit log</td></tr>
+<tr><td><code>Exception</code> (anything else)</td><td>a bug</td><td>500 with a short reference number; the full stack trace goes to the server log with the same number</td></tr>
+</tbody></table>
+<p>Every answer has the same JSON shape:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/common/ApiError.java" data-lines="6-19" data-expect="public record ApiError("></pre>
+<pre class="code" data-lang="json">{
+  "timestamp": "2026-09-28T10:20:11.402Z",
+  "status": 400,
+  "code": "VALIDATION_FAILED",
+  "message": "Some fields are missing or invalid.",
+  "path": "/api/admissions/applications",
+  "traceId": null,
+  "fieldErrors": { "email": "Enter a valid e-mail address.", "programId": "Choose a programme." }
+}</pre>
+<p>The frontend has one function that reads this shape: it shows <code>message</code>, and puts each entry of
+<code>fieldErrors</code> under the matching form field.</p>
+
+<div class="callout deep"><strong>How Spring picks the handler</strong>
+When a controller method throws, Spring MVC looks for an <code>@ExceptionHandler</code> first in the controller's own
+class, then in <code>@ControllerAdvice</code> classes, choosing the handler for the <em>closest</em> exception type
+(a handler for <code>ApiException</code> wins over one for <code>Exception</code>). That is why a catch-all
+<code>Exception</code> handler is safe: it only receives what nothing more specific handled. Note that errors raised
+inside the security filters (a bad token) happen <em>before</em> Spring MVC, so they are answered by Spring Security's
+entry point and access-denied handler instead; EduMate's <code>RestAuthHandlers</code> writes the same JSON shape
+there.</div>
+
+<h2>Never leak internals</h2>
+<ul>
+<li><code>server.error.include-stacktrace: never</code> and <code>include-message: never</code> in
+<code>application.yml</code> stop Spring Boot's fallback error page from showing Java details.</li>
+<li>The database handler logs the real constraint message but tells the client only "conflicts with data that already
+exists": table and column names help attackers.</li>
+<li>The catch-all handler gives a reference (<code>traceId</code>) that support can find in the log, and nothing else.</li>
+</ul>
+
+<div class="callout tip"><strong>The standard alternative: Problem Details (RFC 9457)</strong>
+Spring supports a standard error format, <code>application/problem+json</code>, through the <code>ProblemDetail</code>
+class and <code>ErrorResponseException</code>; switch it on for Spring MVC's own errors with
+<code>spring.mvc.problemdetails.enabled=true</code>. Its fields are <code>type</code>, <code>title</code>,
+<code>status</code>, <code>detail</code>, <code>instance</code>, plus your own. EduMate predates that choice and has its
+own <code>ApiError</code>, which carries the same information; for a new public API, prefer the standard.</div>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Log in as <code>applicant.minor</code> and <code>POST /api/admissions/applications</code> with
+<code>{"fullName":"","email":"not-an-email"}</code>. Compare the <code>fieldErrors</code> with the annotations of
+<code>ApplicationForm</code>.</li>
+<li>Send a body that is not JSON at all (<code>-d 'hello'</code>). Which handler answered?</li>
+<li>Add a rule <code>@Size(min = 3)</code> to <code>fullName</code>, restart, and try a two-letter name.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>What happens if you forget <code>@Valid</code> on a <code>@RequestBody</code> parameter?</summary>
+<div>The annotations on the record are simply not checked; invalid data reaches your method. <code>@Valid</code> is
+what triggers validation.</div></details>
+<details class="quiz"><summary>Why should "the fee is already paid" not be a Bean Validation annotation?</summary>
+<div>It depends on the database state, not on the shape of the request. Business rules belong in the service, which
+throws an exception with a clear code.</div></details>
+<details class="quiz"><summary>Why does <code>ApiException</code> extend <code>RuntimeException</code>?</summary>
+<div>So it needs no <code>throws</code> declarations, and so Spring's transaction management rolls back the transaction
+when it is thrown (by default, only unchecked exceptions cause a rollback).</div></details>
+<details class="quiz"><summary>Two handlers exist, one for <code>ApiException</code> and one for <code>Exception</code>. Which one handles an <code>ApiException</code>?</summary>
+<div>The <code>ApiException</code> handler: Spring chooses the handler for the most specific matching type.</div></details>

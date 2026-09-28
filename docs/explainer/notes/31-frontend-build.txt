@@ -1,111 +1,3 @@
-=== FILE frontend/index.html
->>> SUMMARY
-The **only HTML page** of the whole frontend. It is almost empty: a `<div id="root">` and one `<script>`. React fills that div with every screen of EduMate.
-
-This is what "single-page application" (SPA) means. The browser loads this one page once. After that, moving from "Dashboard" to "My fees" does **not** load a new page from the server. React swaps the content inside the div, and only the data travels as JSON. That is why moving between screens feels instant.
-
-The alternative is a multi-page site, where the server builds a new HTML page for every click (as Spring MVC with Thymeleaf templates would). That is simpler for small sites, but slower to use, and it mixes the look of the pages into the Java code. The report asks for a React SPA.
->>> 1
-`<!doctype html>`: "this is a modern HTML5 page". Without it, browsers switch to an old compatibility mode.
->>> 2
-The page starts here. `lang="en"` tells screen readers and translators that the text is English.
->>> 3
-`<head>`: information **about** the page, not shown in the page itself.
->>> 4
-The characters are UTF-8, so ₹, é and Hindi letters display correctly.
->>> 5
-On phones, use the phone's real width instead of pretending to be a desktop screen. Without this, the page would appear tiny on a phone.
->>> 6
-A one-sentence description of the page, which search engines may show.
->>> 7
-The small icon in the browser tab: `favicon.svg`.
->>> 8
-The text in the browser tab: "EduMate".
->>> 9
-End of the head.
->>> 10
-`<body>`: what is shown.
->>> 12
-The empty box that React fills. `main.tsx` finds it by its id, `root`.
->>> 13
-Shown only if JavaScript is switched off, because without JavaScript React cannot draw anything.
->>> 14
-Loads the app's starting file, `src/main.tsx`. `type="module"` means it may use `import`. In development Vite translates the TypeScript on the fly; in production `vite build` replaces this line with the bundled, minified JavaScript file.
->>> 15-16
-End of the body and of the page.
-
-=== FILE frontend/public/favicon.svg
->>> SUMMARY
-The **tab icon**: a white graduation cap on a dark-blue rounded square. It is an **SVG**, a picture described with shapes rather than pixels, so it stays sharp at any size. Files in `public/` are copied unchanged into the built site.
->>> 1
-The SVG starts. `viewBox="0 0 64 64"` means shapes are drawn on a 64 × 64 grid, which is then scaled to whatever size the browser needs.
->>> 2
-The background: a 64 × 64 square with rounded corners (`rx="14"`) in EduMate's dark blue `#1f4e79`.
->>> 3
-The top of the cap: a white diamond. A path is a list of points: start at (12, 26), go to (32, 16), (52, 26), (32, 36), and `z` closes the shape.
->>> 4
-The body of the cap, in light blue.
->>> 5
-The tassel: a thin white rounded rectangle on the right.
->>> 6
-The SVG ends.
-
-=== FILE frontend/package.json
->>> SUMMARY
-The frontend's **"shopping list"** (the npm version of `pom.xml`). It names the project, lists the **commands** (`npm run dev`, `npm test`…), and lists the **packages** it needs with their versions.
-
-`npm install` reads this file, downloads the packages into `node_modules/`, and records the **exact** versions it chose in `package-lock.json`. The lock file is what makes every install identical, so it is committed to Git.
-
-**`dependencies` vs `devDependencies`:** dependencies end up inside the app that users download (React itself). Dev dependencies are only tools used while building and testing (TypeScript, Vite, Vitest); none of their code reaches the user.
-
-**Version signs:** `^19.3.0` means "19.3.0 or any newer 19.x", i.e. accept bug-fix and feature updates but not a new major version, which could break things.
->>> 1
-The file is one JSON object.
->>> 2
-The package's name.
->>> 3
-`private: true`: this is an application, not a library, so npm refuses to ever publish it to the public registry by accident.
->>> 4
-The version, 2.0.0, the same as the backend.
->>> 5
-`"type": "module"`: `.js` files use modern `import`/`export`.
->>> 6
-A one-line description.
->>> 7
-The commands, run as `npm run <name>`:
->>> 8
-`npm run dev`: starts the Vite development server on port 5173.
->>> 9
-`npm run build`: first checks all TypeScript types (`tsc --noEmit` checks without writing files), then builds the optimised production files into `dist/`. If a type is wrong, the build stops.
->>> 10
-`npm run preview`: serves the built `dist/` folder locally, to try the production version.
->>> 11
-`npm run typecheck`: only the type check.
->>> 12
-`npm test`: runs every `*.test.ts` file once with Vitest.
->>> 14
-Packages the app needs at run time:
->>> 15
-React: builds the screen out of components.
->>> 16
-React DOM: puts React's components into a web page.
->>> 17
-React Router: shows the right page for each address (`/fees`, `/results`…).
->>> 19
-Tools used only while developing:
->>> 20-21
-Type descriptions of React for TypeScript, so it can check that components are used correctly.
->>> 22
-The Vite plugin that understands React's JSX and refreshes components instantly when a file is saved.
->>> 23
-jsdom: a pretend browser page for tests, so tests can run in Node without a real browser.
->>> 24
-TypeScript: checks the types.
->>> 25
-Vite: the development server and the production bundler.
->>> 26
-Vitest: the test runner.
-
 === FILE frontend/tsconfig.json
 >>> SUMMARY
 Settings for the **TypeScript** checker. TypeScript is JavaScript plus **types**: every value has a declared kind (text, number, a `Student` object…), and the checker refuses code that mixes them up **before** the code ever runs. For example, if the backend's JSON has `sgpa` but the code says `sgpA`, the build fails with a clear error instead of the page quietly showing nothing.
@@ -217,3 +109,177 @@ Older way of forbidding frames (for browsers that do not understand `frame-ances
 Every `/api/...` request goes to `http://backend:8080`. Inside Docker's network, `backend` is the backend container's name. The three `proxy_set_header` lines pass along the original host name, the visitor's IP address (`X-Forwarded-For`) and whether they used http or https.
 >>> 29-32
 Everything else: send the requested file if it exists (for example `/assets/index-3f2a.js`); otherwise send `index.html`. This is needed for a single-page app. If someone opens `/hall-ticket` directly or presses refresh, there is no file with that name, so nginx sends `index.html`, and React Router shows the hall-ticket page.
+
+=== FILE frontend/package.json
+>>> SUMMARY
+The frontend's **"shopping list"** (the npm version of `pom.xml`). It names the project, lists the **commands** (`npm run dev`, `npm test`…), and lists the **packages** it needs with their versions.
+
+`npm install` reads this file, downloads the packages into `node_modules/`, and records the **exact** versions it chose in `package-lock.json`. The lock file is what makes every install identical, so it is committed to Git.
+
+**`dependencies` vs `devDependencies`:** dependencies end up inside the app that users download (React itself). Dev dependencies are only tools used while building and testing (TypeScript, Vite, Vitest); none of their code reaches the user.
+
+**Version signs:** `^19.3.0` means "19.3.0 or any newer 19.x", i.e. accept bug-fix and feature updates but not a new major version, which could break things.
+
+**Release 3.0 added eight run-time packages** for the new look and feel. Each one does a job that would take hundreds of careful lines to write by hand, and each is explained in the chapter *The new look: design, motion and scrolling*:
+| Package | What it gives EduMate |
+|---|---|
+| `motion` | Animations: page transitions, springs, reveals, the sliding menu highlight |
+| `lenis` | Smooth scrolling |
+| `lucide-react` | About 1,500 matching line icons |
+| `radix-ui` | Accessible dialogs, drop-down menus and tooltips |
+| `cmdk` | The Ctrl+K command menu's search and keyboard navigation |
+| `sonner` | Toast messages |
+| `canvas-confetti` | The celebration after a successful payment |
+| `@fontsource…` | The Geist and Instrument Serif fonts, bundled with the app |
+>>> 1
+The file is one JSON object.
+>>> 2
+The package's name.
+>>> 3
+`private: true`: this is an application, not a library, so npm refuses to ever publish it to the public registry by accident.
+>>> 4
+The version number of the frontend package.
+>>> 5
+`"type": "module"`: `.js` files use modern `import`/`export`.
+>>> 6
+A one-line description.
+>>> 7
+The commands, run as `npm run <name>`:
+>>> 8
+`npm run dev`: starts the Vite development server on port 5173.
+>>> 9
+`npm run build`: first checks all TypeScript types (`tsc --noEmit` checks without writing files), then builds the optimised production files into `dist/`. If a type is wrong, the build stops.
+>>> 10
+`npm run preview`: serves the built `dist/` folder locally, to try the production version.
+>>> 11
+`npm run typecheck`: only the type check.
+>>> 12
+`npm test`: runs every `*.test.ts` file once with Vitest.
+>>> 14
+Packages the app needs at run time (listed in alphabetical order, which is how npm writes them):
+>>> 15-16
+The **Geist** font family (a clean, modern sans-serif made by Vercel) and its monospaced sister **Geist Mono**, for codes such as USNs and receipt numbers. "variable" means one file holds every weight from thin to black.
+>>> 17
+**Instrument Serif**, an elegant italic serif used for a few accent words ("*Aarav*" in the dashboard greeting, "*beautifully*" on the welcome page).
+>>> 18
+**canvas-confetti**: draws the burst of confetti when a payment succeeds.
+>>> 19
+**cmdk**: the engine of the command menu (Ctrl+K): fuzzy search, arrow-key selection, grouping.
+>>> 20
+**Lenis**: smooth scrolling. It glides the page instead of jumping 100 pixels per wheel click.
+>>> 21
+**Lucide**: the icon set. Every icon is a small React component, and only the icons actually used are included in the build.
+>>> 22
+**motion** (formerly called Framer Motion): the animation library behind page transitions, springs, reveals and the sliding menu highlight.
+>>> 23
+**Radix UI**: unstyled but fully accessible building blocks (dialog, drop-down menu, tooltip). They handle keyboard focus, the Escape key and screen readers; EduMate's CSS gives them their look.
+>>> 24
+React: builds the screen out of components.
+>>> 25
+React DOM: puts React's components into a web page.
+>>> 26
+React Router: shows the right page for each address (`/fees`, `/results`…).
+>>> 27
+**Sonner**: the toast messages in the corner (stacking, swipe to dismiss, pause on hover).
+>>> 29
+Tools used only while developing:
+>>> 30
+Type descriptions of canvas-confetti for TypeScript.
+>>> 31-32
+Type descriptions of React for TypeScript, so it can check that components are used correctly.
+>>> 33
+The Vite plugin that understands React's JSX and refreshes components instantly when a file is saved.
+>>> 34
+jsdom: a pretend browser page for tests, so tests can run in Node without a real browser.
+>>> 35
+TypeScript: checks the types.
+>>> 36
+Vite: the development server and the production bundler.
+>>> 37
+Vitest: the test runner.
+
+=== FILE frontend/index.html
+>>> SUMMARY
+The **only HTML page** of the whole frontend. It is almost empty: a `<div id="root">` and two `<script>` tags. React fills that div with every screen of EduMate.
+
+This is what "single-page application" (SPA) means. The browser loads this one page once. After that, moving from "Dashboard" to "My fees" does **not** load a new page from the server. React swaps the content inside the div, and only the data travels as JSON. That is why moving between screens feels instant.
+
+Release 3.0 added three things here: the `color-scheme` and `theme-color` hints (so the browser's own parts, such as scrollbars and the phone's address bar, match light or dark mode) and the small `theme-init.js` script that applies a saved dark-mode choice before anything is drawn.
+>>> 1
+`<!doctype html>`: "this is a modern HTML5 page". Without it, browsers switch to an old compatibility mode.
+>>> 2
+The page starts here. `lang="en"` tells screen readers and translators that the text is English.
+>>> 3
+`<head>`: information **about** the page, not shown in the page itself.
+>>> 4
+The characters are UTF-8, so ₹, é and Hindi letters display correctly.
+>>> 5
+On phones, use the phone's real width instead of pretending to be a desktop screen. `viewport-fit=cover` lets the page use the whole screen of phones with rounded corners and notches.
+>>> 6
+A one-sentence description of the page, which search engines may show.
+>>> 7
+"This page can be light or dark", so the browser draws its own scrollbars and form controls in the matching colours from the very first moment.
+>>> 8-9
+The colour a phone's browser paints its address bar in: a pale colour in light mode, a near-black one in dark mode.
+>>> 10
+The small icon in the browser tab: `favicon.svg`.
+>>> 11
+The text in the browser tab: "EduMate".
+>>> 13
+Runs `public/theme-init.js` **immediately**, before the page is drawn. It is an ordinary (not `module`) script, so the browser waits for it; it is tiny, so the wait is not noticeable.
+>>> 14
+End of the head.
+>>> 15
+`<body>`: what is shown.
+>>> 17
+The empty box that React fills. `main.tsx` finds it by its id, `root`.
+>>> 18
+Shown only if JavaScript is switched off, because without JavaScript React cannot draw anything.
+>>> 19
+Loads the app's starting file, `src/main.tsx`. `type="module"` means it may use `import`. In development Vite translates the TypeScript on the fly; in production `vite build` replaces this line with the bundled, minified JavaScript file.
+>>> 20-21
+End of the body and of the page.
+
+=== FILE frontend/public/favicon.svg
+>>> SUMMARY
+The **tab icon**: a white graduation cap on a rounded square that fades from EduMate blue to violet, the same gradient as the logo inside the app. It is an **SVG**, a picture described with shapes rather than pixels, so it stays sharp at any size. Files in `public/` are copied unchanged into the built site.
+>>> 1
+The SVG starts. `viewBox="0 0 64 64"` means shapes are drawn on a 64 × 64 grid, which is then scaled to whatever size the browser needs.
+>>> 2
+`<defs>`: definitions used further down (not drawn by themselves).
+>>> 3
+A **linear gradient** named `brand`, running diagonally from the top-left corner (0, 0) to the bottom-right corner (1, 1).
+>>> 4-5
+Its two colours: blue at the start, violet at the end.
+>>> 6-7
+End of the gradient and of the definitions.
+>>> 8
+The background: a 64 × 64 square with rounded corners (`rx="16"`), filled with the `brand` gradient.
+>>> 9
+The top of the cap: a white diamond. A path is a list of points: start at (12, 26), go to (32, 16), (52, 26), (32, 36), and `z` closes the shape.
+>>> 10
+The body of the cap, in white at 72% strength, so a little of the gradient shows through.
+>>> 11
+The tassel: a thin white rounded rectangle on the right.
+>>> 12
+End of the picture.
+
+=== FILE frontend/public/theme-init.js
+>>> SUMMARY
+**Seven lines that prevent a white flash.** If someone chose dark mode, the page must be dark from the very first frame. React only starts drawing after its JavaScript has downloaded, which is too late: the browser would already have painted a white page for a moment.
+
+This script is loaded by `index.html` before anything is drawn. It reads the saved choice from `localStorage` (the browser's small per-site memory) and writes it onto the `<html>` tag as `data-theme="dark"` (or `"light"`). `theme.css` then picks every colour for that theme.
+
+**Why a separate file and not a few lines inside `index.html`?** The Content-Security-Policy in `nginx.conf` (`default-src 'self'`) forbids scripts written inside the page, because that is exactly what cross-site-scripting attacks inject. Scripts that come from the site's own files are allowed, so the few lines live in their own file.
+>>> 7
+`(function () { … })();` defines a function and runs it at once. Everything inside stays private, so it cannot clash with any other script's names.
+>>> 8
+`try`: reading storage can fail (for example in a private window with storage blocked); `catch` below handles that.
+>>> 9
+Reads the saved choice. The key `edumate.theme` is the same one `config.ts` names `THEME_STORAGE_KEY`, which the theme switch writes.
+>>> 10-11
+Only the two exact values `light` and `dark` are applied, as `<html data-theme="…">`. Anything else (including "nothing saved") leaves the attribute off, and the page follows the computer's own light/dark setting.
+>>> 13
+If storage failed, do nothing: the page simply follows the computer's setting.
+>>> 16
+End of the function, which is run straight away by the final `()`.

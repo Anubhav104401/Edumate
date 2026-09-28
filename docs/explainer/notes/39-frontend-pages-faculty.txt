@@ -1,0 +1,255 @@
+=== FILE frontend/src/pages/faculty/TakeAttendancePage.tsx
+>>> SUMMARY
+**A teacher marks attendance for one class meeting.**
+
+1. The teacher picks the **course**, **section**, **date** (today or earlier, never in the future) and **period**, and presses **"Open register"** → `GET /api/attendance/sessions?courseId=…&section=A&date=2026-09-28&period=2`. The backend answers with the class list. If the register was already taken, it comes with the saved marks and a **version number**; if not, everyone starts as present.
+2. Every student is a **large tile** with an avatar, name and USN. **Tap a tile to mark the student absent** (it turns red and the tick flips to a cross); tap again for present. "Mark all present" / "Mark all absent" set every tile at once. Big tiles are easier to hit than tiny checkboxes, especially on a phone in a classroom.
+3. A bar **stuck to the bottom of the screen** (`position: sticky`) always shows a small ring with the share present, "27 of 30 present", and the **Save** button, so a teacher with a long list never has to scroll back to save.
+4. **"Save attendance"** → `PUT /api/attendance/sessions` with every mark **and the version number that was loaded**.
+
+**The two-teachers problem (defect DR-01 of the report).** Suppose two teachers open the same register at the same time. Teacher A saves first. Teacher B, still looking at the old version, saves second. Without protection, B's save would silently wipe out A's work. EduMate uses **optimistic locking**: the database row has a version number; a save only succeeds if the version sent is still the current one. B's save is refused with **409 STALE_UPDATE**, and this page shows a red box: "Someone else saved this register while you were editing. Your changes were not saved, so nothing was overwritten…", with a "Reload register" button. `AttendanceConcurrencyIntegrationTest` proves this on the backend.
+>>> 39-44
+When the teacher's course list arrives, pick the first course and its first section automatically, so the teacher can often just press "Open register". The check `courseId === null` makes sure a choice the teacher already made is never overwritten.
+>>> 46
+The currently chosen course (to list its sections).
+>>> 48-51
+`show(loaded)`: display a register from the server. `present` becomes an object from student id to true/false, e.g. `{ 41: true, 42: false }`. `Object.fromEntries` builds such an object from a list of `[key, value]` pairs. Any old "someone else saved" warning is cleared.
+>>> 54-55
+`open()`: load the register (nothing to do without a course).
+>>> 56-58
+A date in the future is refused here with a toast, before asking the server (which refuses it too). Dates in the form `2026-09-28` can be compared as plain text, because the year comes first.
+>>> 60-67
+Busy; load the register and show it; any error becomes a toast; no longer busy.
+>>> 70-72
+`save()`: nothing to save without a register; busy.
+>>> 73-80
+Send the register back: which class it is, **the version that was loaded**, and one mark per student (present true or false).
+>>> 82-83
+Success: show the saved register (with its new version number) and a green "Attendance saved." toast.
+>>> 84-86
+If the server says `STALE_UPDATE` (someone else saved in between), show the red explanation box instead of a toast: this situation needs more than a one-line message. `err instanceof ApiError` checks that the error really is one of our API errors before reading its `code`.
+>>> 87-89
+Any other error: a red toast.
+>>> 90-91
+Always: no longer busy.
+>>> 95
+`setAll(value)`: mark every student present (true) or absent (false).
+>>> 96
+How many are present: the `true` values, counted.
+>>> 97
+How many students are in the register.
+>>> 99-101
+The drawing: the title and subtitle ("Choose the class, mark who was absent, then save. Everyone starts as present.").
+>>> 102-103
+While the course list loads: a one-row skeleton. Its error: the red box with "Try again".
+>>> 105-106
+The toolbar card with the four choices and the "Open register" button in a row.
+>>> 107-111
+The course drop-down, in a `Field` (label + input).
+>>> 112-115
+Choosing another course: remember it, choose its first section, and close the open register (it belonged to the old course). `courses.data!` — the `!` tells TypeScript "this is certainly loaded here" (the toolbar is only drawn once it is).
+>>> 118-120
+One option per course: "CS301 Software Engineering".
+>>> 125-127
+The section drop-down, listing the chosen course's sections.
+>>> 132-133
+The date picker. `max={todayIso()}` greys out future days in the calendar.
+>>> 135-139
+The period drop-down: "P2 (10:00)" and so on.
+>>> 144-145
+"Open register", disabled while busy or without a course.
+>>> 150-151
+The red "Someone else saved this register while you were editing." box…
+>>> 153-154
+…with a "Reload register" button that opens the latest version.
+>>> 159-160
+Once a register is open: its card.
+>>> 161-164
+The heading: course code, name and section.
+>>> 166-167
+"New register: not saved yet." or "Saved register (version 3). Changes will update it."
+>>> 170-172
+On the right: "Mark all present"…
+>>> 174-175
+…and "Mark all absent".
+>>> 181-183
+The tiles, appearing one after another very quickly (0.02 s apart, so even 60 students take about a second). For each student: are they marked present? (`?? true`: present unless marked otherwise.)
+>>> 184-188
+The tile is a real `<button>`, so it works with Tab and Enter/Space too.
+>>> 189
+`aria-pressed`: a screen reader announces "pressed" for present, "not pressed" for absent…
+>>> 190
+…and reads the tile as e.g. "Aarav Sharma 1JG22CS001: Present".
+>>> 191
+Tapping flips this student's mark. `{ ...present, [id]: !here }` makes a **new** object: a copy of the old one with this one student changed (React only notices changes if a new object is given).
+>>> 193-194
+The avatar (initials in the student's own colour) and the name and USN.
+>>> 198-206
+The round mark on the right. When it changes, the old icon spins away and shrinks while the new one spins in (`AnimatePresence mode="wait"`; `key` tells it which icon it is). `initial={false}` stops the icons from spinning in when the register first appears.
+>>> 208
+A tick for present, a cross for absent. The tile's colours (green/red) come from `aria-pressed` in `app.css`.
+>>> 218-219
+The sticky action bar: a small green ring showing the share present…
+>>> 220
+…"27 of 30 present" (`aria-live` makes a screen reader announce the new count after each tap)…
+>>> 223-225
+…and the pill-shaped "Save attendance" button, with a spinner and "Saving…" while busy.
+
+=== FILE frontend/src/pages/faculty/CourseAttendancePage.tsx
+>>> SUMMARY
+**A teacher's view of one class**: every student's attendance, who is below the minimum, and a button to **e-mail those students' guardians** (requirement FR-31).
+
+- The toolbar chooses the course, the section, and the threshold for the "below" list (75 % unless changed; a teacher may want to warn students at 80 % early).
+- **"Below the minimum"** (`GET /api/attendance/courses/{id}/shortfall?section=A&threshold=75`): the students under the threshold, with a red count badge (green 0 when nobody is short).
+- **"Whole class"** (`GET /api/attendance/courses/{id}/summary?section=A`): everyone, each row with an avatar, "18 of 24", the percentage with a small bar, and an "On track" / "Below minimum" badge.
+- **"E-mail guardians…"** asks for confirmation, then `POST /api/attendance/courses/{id}/notify-guardians?section=A`. The backend (`ShortfallNotifier.java`) puts one e-mail per guardian in the **outbox** and never e-mails the same guardian about the same course twice in a week; the toast says "3 e-mail(s) queued. 1 guardian(s) had already been told this week."
+>>> 26-30
+When the course list arrives, choose the first course automatically (only if none is chosen yet).
+>>> 32
+The chosen course (to list its sections).
+>>> 33
+The whole-class list. `useLoad`'s third argument, `courseId !== null`, means "only load once a course is chosen". The `[courseId, section]` list means "load again whenever the course or section changes". `courseId!` tells TypeScript it is not null here (the load does not run while it is).
+>>> 34-38
+The "below the minimum" list, loaded the same way, and again whenever the threshold changes.
+>>> 40-42
+`notify()`: how many students are short, and a confirm dialog ("Queue an e-mail to the guardians of 3 student(s)? Each guardian is e-mailed at most once a week per course."). If the teacher cancels, stop.
+>>> 43-45
+Ask the backend to queue the e-mails, then say how many were queued and how many guardians had already been told.
+>>> 46-47
+Any error: a red toast.
+>>> 51-54
+The drawing: title, subtitle, and the course list's error, if any.
+>>> 55-58
+The toolbar: the course drop-down…
+>>> 59-61
+…one option per course…
+>>> 66-68
+…the section drop-down…
+>>> 73-79
+…and the threshold, a number box from 1 to 100.
+>>> 80
+If the box is emptied (`Number('')` is 0, which counts as "false"), `|| ATTENDANCE_THRESHOLD` falls back to 75 instead of listing nobody.
+>>> 86-88
+The "Below the minimum" card and its header.
+>>> 90
+Next to the title, a count badge: red if anyone is short, green 0 if nobody is.
+>>> 92-94
+The e-mail button, only when someone is short.
+>>> 98
+Loading: a two-row skeleton **inside** the card (`inline`).
+>>> 99
+Error.
+>>> 100
+Nobody short: "No student is below this threshold." with a person-with-a-tick icon.
+>>> 101
+Otherwise the table (`StudentTable` below).
+>>> 104-107
+The "Whole class" card, with a people icon in its title.
+>>> 108-110
+Loading, error, and the same kind of table for everyone.
+>>> 117-120
+`StudentTable`: one table used for both lists. The header row: student, attended, attendance, status.
+>>> 127-129
+One row per student.
+>>> 130-133
+The first cell: the avatar, then…
+>>> 140-142
+The percentage (two decimals) with a thin bar under it, red when below the threshold.
+>>> 144-146
+"On track" (green) or "Below minimum" (red).
+
+=== FILE frontend/src/pages/faculty/MarksEntryPage.tsx
+>>> SUMMARY
+**Internal-assessment marks entry** for a teacher's course (requirement FR-17), and the place where test case **TC-012** (amending a mark from 18 to 22 with an audit trail) is demonstrated. Data: `GET /api/exams/marks?courseId&examSessionId`.
+
+The teacher picks a course and an exam session; a table lists every student with the internal mark (out of 40, editable), the external mark (out of 60), the total, a coloured grade chip, and who changed the row last and when.
+
+**Changing a mark:**
+1. The teacher types a new mark. The row turns **amber** (`row-changed`), so an unsaved change is never forgotten, and a **reason box** and a **Save** button slide in on that row.
+2. The page checks the mark (a number from 0 to 40) and that a reason was given.
+3. `PUT /api/exams/marks/{id}` with `{ internalMarks, version, reason }`. The backend checks the teacher teaches this course, refuses changes once the results are approved or published, uses the **version** for optimistic locking (the same idea as attendance: a stale save is refused), and writes an **audit** entry with the old value, the new value and the reason.
+4. The saved row replaces the old one in the table (with its new version, total, grade and "last change").
+
+Each row saves on its own, so one mistake never blocks the others, and every change carries its own reason in the audit log.
+
+**Locked sheets.** Once results for the course are approved or published, the backend marks the sheet `locked`: a lock icon appears in the title, an amber box explains why, and the inputs are disabled.
+>>> 25-27
+When the course list arrives, pick the first course (if none is chosen yet)…
+>>> 28-30
+…and likewise the first exam session.
+>>> 32-36
+The marks sheet: loaded only once both a course and a session are chosen, and again whenever either changes.
+>>> 38-39
+`replaceLine(line)`: after a row is saved, put the saved version into the table. (Nothing to do if no sheet is loaded.)
+>>> 40
+A **new** sheet object: a copy of the old one whose `lines` are the old lines, except the one with the same id, which is swapped for the saved one. React state is never changed in place, so a new object is built.
+>>> 41
+Store it (`setData` is offered by `useLoad` for exactly this: updating loaded data without reloading from the server).
+>>> 44-46
+The drawing: title and subtitle ("Internal assessment marks are out of 40. Every change is written to the audit log with the old and new value.").
+>>> 47
+An error loading either list. `(a || b)!` takes whichever error exists; the `!` tells TypeScript it is certainly there (we are inside the check).
+>>> 48-51
+The toolbar: the course drop-down…
+>>> 52-54
+…one option per course…
+>>> 59-61
+…and the exam session drop-down…
+>>> 62-63
+…with options such as "ES-2026-ODD – Odd semester 2026".
+>>> 70-71
+The sheet's loading and error.
+>>> 72-73
+The sheet card.
+>>> 74-75
+Its title: a lock icon if locked, otherwise a pen icon, then the course code and name.
+>>> 77
+If locked: "Results for this course are approved or published. Marks can no longer be changed here."
+>>> 78-80
+The table and its header: student, internal (40), external (60), total, grade, last change, change.
+>>> 90-92
+One `MarkRow` per student. `sheet.data!` — certainly loaded here.
+>>> 102-106
+`MarkRow`: one student's row, with its own memory: the text in the mark box (starting as the saved mark, or empty), the reason, and `busy`.
+>>> 107
+`changed`: is the text in the box different from the saved mark?
+>>> 109-110
+`save()`: turn the text into a number.
+>>> 111-113
+Refuse anything that is empty, not a number, below 0 or above 40: "Enter a number from 0 to 40." `Number.isFinite` rejects `NaN` (the result of `Number('abc')`) and infinity.
+>>> 115-117
+Refuse a missing reason: "Give a reason for the change."
+>>> 119-121
+Busy; send the new mark with the row's **version** and the reason.
+>>> 122-124
+Success: put the saved row into the table, empty the reason box, and say "Marks of 1JG22CS001 updated."
+>>> 125-126
+Failure (for example the sheet was locked meanwhile, or someone else changed this row): a red toast with the server's message.
+>>> 127-128
+Always: no longer busy.
+>>> 132-133
+The row, amber while changed but not saved.
+>>> 134-136
+The student cell: an avatar, then…
+>>> 137
+…the name and USN.
+>>> 143-150
+The mark box: a number from 0 to 40 in steps of 0.5, disabled when the sheet is locked.
+>>> 151-153
+88 px wide. Its screen-reader label is "Internal (40) 1JG22CS001", because a table full of boxes all called "Internal" would be useless to a screen-reader user.
+>>> 156-158
+The external mark ("—" if not entered yet), and "revalued" under it if a revaluation changed it.
+>>> 160
+The total, in bold.
+>>> 163-166
+The grade as a coloured chip…
+>>> 168-169
+…or "—" when there is no grade yet.
+>>> 172-173
+Who changed the row last, and when.
+>>> 175-182
+Only when the row is changed and not locked: the reason box and Save button slide in from the left.
+>>> 183-188
+The reason box ("Reason for the change").
+>>> 190-191
+The row's Save button, disabled while saving.

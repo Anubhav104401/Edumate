@@ -8,6 +8,8 @@
  *   3. sends it with fetch() to /api/... (Vite or nginx forwards it to port 8080)
  *   4. turns the JSON text of the answer back into a JavaScript object (response.json())
  *   5. turns any error answer into an ApiError with a friendly message
+ * It also counts the requests still travelling, so the thin loading line at the top of the
+ * screen (components/TopLoader.tsx) can show while the app waits for the backend.
  */
 import { API_BASE } from '../config';
 import { t } from '../i18n/messages';
@@ -50,6 +52,28 @@ export function setUnauthorizedHandler(handler: () => void): void {
   onUnauthorized = handler;
 }
 
+// ---------- How many requests are on their way right now ----------
+let inFlight = 0;
+const activityListeners = new Set<() => void>();
+
+function changeInFlight(by: number): void {
+  inFlight += by;
+  activityListeners.forEach((listener) => listener());
+}
+
+/** Calls `listener` whenever a request starts or finishes. Returns a function that stops listening. */
+export function subscribeActivity(listener: () => void): () => void {
+  activityListeners.add(listener);
+  return () => {
+    activityListeners.delete(listener);
+  };
+}
+
+/** The number of requests still waiting for an answer. */
+export function activeRequests(): number {
+  return inFlight;
+}
+
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 /**
@@ -70,13 +94,18 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
     headers.Authorization = `Bearer ${token}`;
   }
 
-  let response: Response;
+  changeInFlight(+1);
   try {
-    response = await fetch(API_BASE + path, { method, headers, body: payload });
-  } catch {
-    throw new ApiError(0, 'NETWORK', t.errors.network);
+    let response: Response;
+    try {
+      response = await fetch(API_BASE + path, { method, headers, body: payload });
+    } catch {
+      throw new ApiError(0, 'NETWORK', t.errors.network);
+    }
+    return await handleResponse<T>(response);
+  } finally {
+    changeInFlight(-1); // runs whether the request worked or failed
   }
-  return handleResponse<T>(response);
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -113,13 +142,18 @@ async function toApiError(response: Response): Promise<ApiError> {
  */
 export async function download(path: string): Promise<Blob> {
   const token = getToken();
-  const response = await fetch(API_BASE + path, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!response.ok) {
-    throw await toApiError(response);
+  changeInFlight(+1);
+  try {
+    const response = await fetch(API_BASE + path, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw await toApiError(response);
+    }
+    return await response.blob();
+  } finally {
+    changeInFlight(-1);
   }
-  return response.blob();
 }
 
 /**

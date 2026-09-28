@@ -62,7 +62,11 @@ Creates the 60 students and makes a quick "USN → student" look-up.
 >>> 235-239
 Finds Aarav and Ishaan and creates their logins: `student` (Aarav), `guardian` (Aarav's guardian, linked to Aarav) and `student2` (Ishaan).
 >>> 241-246
-Gives every student a random "ability" between 48 and 94 (used to make realistic marks), plus a second random trait used by another part of the demo data.
+Gives every student two random traits: a "diligence" between 0.66 and 0.98 (the chance of attending a class) and an "ability" between 48 and 94 (used to make realistic marks).
+>>> 247
+Creates 8 weeks of attendance for all 60 students in the 5 current courses, each course taught by its own teacher.
+>>> 248-249
+Gives Ishaan an **approved medical exemption** in the third course (Operating Systems): "Hospitalised for 9 days (certificate verified)", approved by `examsup`. This is decision-table rule **R2**: short attendance, but still eligible.
 >>> 250
 Creates the current semester's marks.
 >>> 251
@@ -89,6 +93,38 @@ Creates the student: USN, name, birth date, e-mail, phone, programme, semester 5
 Adds a guardian with the same surname. Aarav's guardian is always "Rajesh Sharma".
 >>> 292-294
 Saves the student and adds them to the list, which is returned at the end.
+>>> 303-304
+`seedAttendance`: the class meetings and the present/absent marks.
+>>> 305-307
+The two students whose attendance must be **exact**, because the demo test cases depend on it: Aarav has attended 30, 28, 18, 21 and 15 classes of his five courses; in Operating Systems that is 18 of 24 = **exactly 75.00 %** (TC-009, DEF-019). Ishaan is short in DBMS (68.75 %) and Operating Systems (70.83 %).
+>>> 308
+The Monday 8 weeks ago (`WEEKS_TAUGHT = 8`): teaching started then.
+>>> 309
+All the present/absent rows, collected here and inserted in one go at the end.
+>>> 311-313
+For every course and both sections…
+>>> 314
+…the period: section A has course 1 in period 1, course 2 in period 2, and so on; section B uses a shifted period (`(c + 5) % 6 + 1`), so the same teacher is never in two rooms at once.
+>>> 315-316
+The section's students, and a list for the ids of its class meetings.
+>>> 317-319
+For every week and every teaching day of the course (a course with 3 weekly hours meets Monday to Wednesday)…
+>>> 320-323
+…create the class meeting at 10:00 on that day, taken by the course's teacher, and remember its id.
+>>> 326-328
+For every student of the section: their present/absent pattern (`presence` below).
+>>> 329-330
+One row per class meeting: session id, student id, present.
+>>> 336
+Insert all rows (several thousand) with **one batched JDBC statement**. Saving thousands of entities one by one through JPA would be much slower; `JdbcTemplate.batchUpdate` sends them to the database in large groups.
+>>> 339-340
+`presence`: a true/false pattern for `held` classes.
+>>> 341-346
+For a student with exact counts: take this course's number of attended classes, and list the class numbers 0, 1, 2, …
+>>> 347-351
+Shuffle that list and mark the first `attended` classes present. The count is exact; only **which** classes were missed is random, so the calendar looks natural.
+>>> 353-356
+Everyone else: each class is attended with a chance equal to the student's "diligence" (between 66 % and 98 %), so a realistic handful of students ends up below 75 %.
 >>> 361-362
 `seedMarks`: Aarav's fixed marks as (internal, external) pairs. The totals 92, 84, 75, 72, 65 give the grades S, A, B, B, C.
 >>> 363-367

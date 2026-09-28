@@ -13,12 +13,20 @@ own, but using tested ones is faster and safer. Tools are the builder's equipmen
 <table>
 <thead><tr><th>Layer</th><th>Technology (version)</th><th>Job in EduMate</th></tr></thead>
 <tbody>
-<tr><td rowspan="6">Frontend (browser)</td><td>TypeScript 7.0</td><td>The language of the frontend: JavaScript plus types</td></tr>
+<tr><td rowspan="14">Frontend (browser)</td><td>TypeScript 7.0</td><td>The language of the frontend: JavaScript plus types</td></tr>
 <tr><td>React 19.3</td><td>Builds the screens out of components; redraws what changes</td></tr>
 <tr><td>React Router 8.4</td><td>Chooses the page for each address (<code>/fees</code>, <code>/results</code>…)</td></tr>
-<tr><td>Vite 8.3</td><td>Development server on port 5173 (with the <code>/api</code> proxy) and production bundler</td></tr>
+<tr><td>Vite 8.3 (Rolldown)</td><td>Development server on port 5173 (with the <code>/api</code> proxy) and production bundler; splits every page into its own small file</td></tr>
 <tr><td>Vitest 5 + jsdom</td><td>Runs the frontend tests</td></tr>
-<tr><td>Plain CSS with variables</td><td>All colours and sizes in <code>theme.css</code>, layout in <code>app.css</code></td></tr>
+<tr><td>Modern CSS with design tokens</td><td>All colours, fonts, sizes, shadows and animation curves in <code>theme.css</code> (OKLCH colours, automatic light and dark mode); components in <code>app.css</code>; the public pages in <code>landing.css</code></td></tr>
+<tr><td>motion 13 (formerly Framer Motion)</td><td>Every animation: page transitions, staggered entrances, the sliding menu highlight, scroll-linked effects, self-drawing charts, springs</td></tr>
+<tr><td>Lenis 1.3</td><td>Smooth, inertia-based scrolling of the whole page</td></tr>
+<tr><td>Radix UI 1.6</td><td>Accessible "headless" building blocks: dialogs, confirm boxes, drop-down menus, tooltips (keyboard, focus and screen-reader behaviour done right)</td></tr>
+<tr><td>cmdk 1.1</td><td>The command palette (Ctrl K): type to jump to any page or action</td></tr>
+<tr><td>Sonner 2.0</td><td>Toast messages ("Attendance saved.") that stack, swipe away and pause on hover</td></tr>
+<tr><td>lucide-react 1.48</td><td>About 1,500 consistent line icons, each its own tiny component (only the ones used are shipped)</td></tr>
+<tr><td>canvas-confetti 1.9</td><td>The celebration after a successful payment</td></tr>
+<tr><td>Fontsource (Geist, Geist Mono, Instrument Serif)</td><td>The typefaces, bundled with the app instead of loaded from Google (faster, private, allowed by the security policy)</td></tr>
 <tr><td rowspan="9">Backend (server)</td><td>Java 21 (runs on JDK 21 or newer)</td><td>The language of the backend</td></tr>
 <tr><td>Spring Boot 4.1 (Spring Framework 7)</td><td>The framework: web server, dependency injection, configuration</td></tr>
 <tr><td>Spring Web MVC + embedded Tomcat</td><td>Receives HTTP requests, calls the right controller method</td></tr>
@@ -36,7 +44,7 @@ own, but using tested ones is faster and safer. Tools are the builder's equipmen
 <tr><td>Docker + Docker Compose; nginx 1.27; Redis 7</td><td>The production-like set-up with one command</td></tr>
 <tr><td rowspan="3">Testing</td><td>JUnit 5 + AssertJ + MockMvc</td><td>64 backend tests: unit and integration</td></tr>
 <tr><td>embedded-postgres (PostgreSQL 17 binaries)</td><td>A real PostgreSQL inside the test run (Compatibility objective)</td></tr>
-<tr><td>Vitest</td><td>15 frontend tests</td></tr>
+<tr><td>Vitest</td><td>34 frontend tests</td></tr>
 </tbody></table>
 
 <h2>Why each main piece, and what else could have been used</h2>
@@ -106,9 +114,26 @@ in-memory cache replaces it (<code>spring.cache.type: simple</code>).</p>
 security headers. <strong>Docker</strong> packs each program with everything it needs, so the same four containers
 (PostgreSQL, Redis, backend, frontend) run identically on any machine: <code>docker compose up --build</code>.</p>
 
+<h3>The Release 3.0 interface libraries</h3>
+<p>Release 3.0 redesigned every screen (see <a href="#09b-design-and-motion">the chapter on the new look</a>). Each
+library was chosen for one job it does better than hand-written code, and each is small, actively maintained and
+works with React 19.</p>
+<table>
+<thead><tr><th>Library</th><th>Why this one</th><th>Alternatives considered</th></tr></thead>
+<tbody>
+<tr><td><strong>motion</strong></td><td>Declarative: an element says <code>initial</code>, <code>animate</code> and <code>exit</code>, and motion works out the rest. Springs, gestures, <em>layout</em> animations (an element sliding to its new place) and scroll-linked values, all respecting "reduce motion". Scroll-linked values change without redrawing React, so they stay at 60–120 frames a second.</td><td><strong>GSAP</strong> (very powerful timelines, but imperative code outside React's model); <strong>React Spring</strong> (physics only, no layout animations); <strong>CSS only</strong> (used where enough, e.g. hover effects, the marquee, scroll-reveal; but it cannot animate an element that is being removed).</td></tr>
+<tr><td><strong>Lenis</strong></td><td>Smooths the wheel into a glide while keeping the page's <em>native</em> scrolling (so sticky elements, the Find bar, anchors and screen readers keep working). It switches itself off for "reduce motion".</td><td><strong>Locomotive Scroll</strong> (fakes scrolling by moving the page with transforms, which breaks <code>position: sticky</code>); CSS <code>scroll-behavior: smooth</code> (only for jumps to anchors, not for the wheel).</td></tr>
+<tr><td><strong>Radix UI</strong></td><td>"Headless": it brings behaviour (focus trapping, Escape to close, arrow keys in menus, correct ARIA roles) and <em>no</em> styling, so EduMate's own CSS decides the look.</td><td><strong>Material UI / Chakra</strong> (styled components that look like someone else's product); <strong>shadcn/ui</strong> (copies Radix-based components into the project; built on Tailwind, which EduMate does not use); writing dialogs by hand (easy to get focus handling wrong).</td></tr>
+<tr><td><strong>cmdk</strong></td><td>A fast, accessible command menu with fuzzy filtering, used by Linear, Vercel and Raycast-style apps.</td><td><strong>kbar</strong> (similar, less active); a hand-made search box (no keyboard list navigation for free).</td></tr>
+<tr><td><strong>Sonner</strong></td><td>Beautiful stacked toasts with one function call, swipe-to-dismiss, pause on hover, and a live region for screen readers.</td><td><strong>react-hot-toast</strong> (similar, fewer features); the old hand-written toast list.</td></tr>
+<tr><td><strong>lucide-react</strong></td><td>One consistent visual family, open licence, tree-shakeable (each icon is a separate import, so unused icons are not shipped).</td><td>Heroicons, Phosphor, Material Symbols (all fine; lucide has the widest set in one style).</td></tr>
+<tr><td><strong>Fontsource</strong></td><td>The font files are bundled with the app: no request to Google (privacy, speed), and the Content-Security-Policy stays strict (<code>default-src 'self'</code>).</td><td>The Google Fonts link (blocked by the CSP, and leaks every visitor's address to Google).</td></tr>
+</tbody></table>
+
 <h3>Deliberately <em>not</em> used</h3>
 <ul>
-<li><strong>No UI component library</strong> (Material UI, Bootstrap): plain CSS with variables keeps every colour in one file (<code>theme.css</code>) and keeps the app small.</li>
+<li><strong>No styled UI component library</strong> (Material UI, Bootstrap) and <strong>no Tailwind</strong>: hand-written CSS with design tokens keeps every colour, size and curve in one file (<code>theme.css</code>), keeps the markup readable line by line, and gives EduMate its own look. Radix supplies behaviour only.</li>
+<li><strong>No chart library</strong> (Recharts, Chart.js): the two charts (the attendance ring and the SGPA/CGPA trend) are about 200 lines of SVG in <code>charts.tsx</code>, fully animated, keyboard-accessible and themed, where a chart library would add 100–400 kB.</li>
 <li><strong>No state-management library</strong> (Redux): React's own state, context and the small <code>useLoad</code> hook are enough for these screens.</li>
 <li><strong>No HTTP library</strong> (Axios): the browser's built-in <code>fetch</code>, wrapped in one small file (<code>http.ts</code>).</li>
 <li><strong>No Lombok</strong> in Java: getters are written out, so every line can be read and explained.</li>

@@ -1,0 +1,139 @@
+<!-- level: 0 -->
+<h1>Why Spring exists: the problem before the framework</h1>
+
+<p class="lead">Before learning <em>how</em> to use Spring, it helps to feel the problem it solves. This chapter builds a
+tiny web server in plain Java, lists everything a real one still needs, and then shows where Spring and Spring Boot
+come in.</p>
+
+<h2>A web server in plain Java</h2>
+<p>The JDK contains a small HTTP server. Here is a complete program that answers <code>GET /hello</code>:</p>
+<pre class="code" data-lang="java">import com.sun.net.httpserver.HttpServer;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+
+public class PlainServer {
+    public static void main(String[] args) throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
+        server.createContext("/hello", exchange -> {
+            byte[] body = "{\"message\":\"Hello\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+    }
+}</pre>
+<p>It works. Now imagine turning it into EduMate, where a teacher saves the attendance of a class. You would have to
+write, by hand:</p>
+<table>
+<thead><tr><th>Job</th><th>What "by hand" means</th></tr></thead>
+<tbody>
+<tr><td>Routing</td><td>Map every method + path (<code>PUT /api/attendance/sessions</code>) to the right Java method, including path variables like <code>/api/library/loans/{id}/return</code>.</td></tr>
+<tr><td>JSON</td><td>Turn request text into Java objects and objects back into text, with dates, decimals and nested lists.</td></tr>
+<tr><td>Validation</td><td>Check that <code>period</code> is between 1 and 6, that <code>section</code> is not blank… and report every problem clearly.</td></tr>
+<tr><td>Security</td><td>Read the <code>Authorization</code> header, verify a signed token, check the role against the address, refuse politely with 401 or 403.</td></tr>
+<tr><td>Database</td><td>Open connections (and share them in a pool), write SQL for every query, copy each row into an object and back.</td></tr>
+<tr><td>Transactions</td><td>Make "save the register, write the audit line, queue the e-mails" succeed or fail <em>together</em>, even when an exception is thrown half-way.</td></tr>
+<tr><td>Concurrency</td><td>Stop two teachers from overwriting each other's save.</td></tr>
+<tr><td>Configuration</td><td>Read the database address, secrets and limits from files and environment variables, differently on a laptop and in production.</td></tr>
+<tr><td>Wiring</td><td>Create the controller, which needs the service, which needs four repositories, a clock and a notifier, each of which needs something else… in the right order, once.</td></tr>
+<tr><td>Everything else</td><td>Error pages, logging, health checks for Docker, caching, scheduled jobs, file uploads with size limits, tests that start the whole thing…</td></tr>
+</tbody></table>
+<p>None of these jobs is specific to a university. Every server application needs them. Writing them yourself takes
+months, and each hand-made version has its own bugs, especially the security and transaction parts.</p>
+
+<div class="callout note"><strong>Like building a house</strong>
+You could make your own bricks, pipes and wiring. Or you could buy tested parts that fit together and spend your time
+on the rooms that make <em>this</em> house special. Spring is the tested parts plus the builder who assembles them;
+EduMate's code is the rooms.</div>
+
+<h2>Spring Framework: the container and the integrations</h2>
+<p><strong>Spring Framework</strong> (first released in 2003) has two big ideas:</p>
+<ol>
+<li><strong>A container that builds your objects for you.</strong> You write classes that say what they need
+(<code>AttendanceCaptureService</code> needs repositories, a clock and a notifier). The container creates each object
+once, hands every object what it asked for, and keeps them all ready. This is called <em>Inversion of Control</em> and
+<em>Dependency Injection</em> (see <a href="#11-ioc-di">Beans and dependency injection</a>).</li>
+<li><strong>Integrations that plug into the container.</strong> Web (Spring MVC), data access, transactions,
+security, caching, scheduling, messaging, testing. Because every integration talks to the same container, they
+combine: a method can be a web endpoint, run in a transaction and be cached, just by adding annotations.</li>
+</ol>
+
+<h2>Spring Boot: Spring with the set-up already done</h2>
+<p>Classic Spring was powerful but needed a lot of configuration (at first in XML) before the first request worked.
+<strong>Spring Boot</strong> (2014) removed that step with four ideas:</p>
+<table>
+<thead><tr><th>Idea</th><th>What it means</th><th>In EduMate</th></tr></thead>
+<tbody>
+<tr><td><strong>Starters</strong></td><td>One dependency brings a whole, tested set of libraries for one job</td><td><code>spring-boot-starter-webmvc</code> = Tomcat + Spring MVC + Jackson (JSON)</td></tr>
+<tr><td><strong>Auto-configuration</strong></td><td>Boot looks at what is on the classpath and in your settings, and creates sensible beans for you (a DataSource, a JSON mapper, a transaction manager…), stepping aside when you define your own</td><td>EduMate never creates a database connection pool or a Jackson <code>ObjectMapper</code> itself</td></tr>
+<tr><td><strong>Embedded server</strong></td><td>The web server lives <em>inside</em> your application: <code>java -jar app.jar</code> and it listens on port 8080</td><td>Tomcat, started by <code>EduMateApplication.main</code></td></tr>
+<tr><td><strong>Production features</strong></td><td>Health checks, metrics, externalised configuration, profiles</td><td><code>/actuator/health</code> for Docker; <code>application-docker.yml</code></td></tr>
+</tbody></table>
+
+<h2>A short timeline</h2>
+<table>
+<thead><tr><th>Year</th><th>Event</th><th>Why it matters to you</th></tr></thead>
+<tbody>
+<tr><td>2003–2004</td><td>Spring Framework 1.0 (Rod Johnson)</td><td>A lighter alternative to the heavyweight Java EE of the time</td></tr>
+<tr><td>2014</td><td>Spring Boot 1.0</td><td>Starters, auto-configuration, embedded servers</td></tr>
+<tr><td>2022</td><td>Spring Framework 6 / Boot 3</td><td>Java 17 minimum; <code>javax.*</code> packages renamed to <code>jakarta.*</code>; native images</td></tr>
+<tr><td>2023</td><td>Boot 3.2</td><td>Virtual threads (Java 21) with one setting</td></tr>
+<tr><td>2025</td><td>Spring Framework 7 / Boot 4</td><td>Jakarta EE 11, JSpecify null-safety annotations, Jackson 3, smaller modular starters, API versioning, built-in retry and concurrency limits</td></tr>
+<tr><td>2026</td><td>Boot 4.1 (used by EduMate)</td><td>The version this course is written against</td></tr>
+</tbody></table>
+<div class="callout warn"><strong>Old tutorials</strong>
+Much of what you find online was written for Spring Boot 2 (before 2022). Two quick signs: imports from
+<code>javax.persistence</code> or <code>javax.validation</code> (now <code>jakarta.*</code>), and security code that
+extends <code>WebSecurityConfigurerAdapter</code> (removed; now you declare a <code>SecurityFilterChain</code> bean, as
+EduMate does). The ideas are still right; the spelling has changed.</div>
+
+<h2>The family</h2>
+<p>"Spring" is a family of projects that all build on the Framework. You will meet these in this course:</p>
+<table>
+<thead><tr><th>Project</th><th>Job</th><th>Used by EduMate</th></tr></thead>
+<tbody>
+<tr><td>Spring Framework</td><td>container, MVC, transactions, caching and scheduling abstractions, testing support</td><td>yes, everywhere</td></tr>
+<tr><td>Spring Boot</td><td>starters, auto-configuration, embedded server, Actuator</td><td>yes</td></tr>
+<tr><td>Spring Data JPA</td><td>repositories that write queries from method names</td><td>yes, every <code>*Repository</code></td></tr>
+<tr><td>Spring Security</td><td>authentication, authorisation, JWT resource server</td><td>yes, <code>security/</code></td></tr>
+<tr><td>Spring Data Redis</td><td>Redis access, used by the cache in Docker</td><td>yes</td></tr>
+<tr><td>Spring Modulith</td><td>enforcing module boundaries inside one application</td><td>discussed in Level 4</td></tr>
+<tr><td>Spring Cloud, Batch, Integration, AI, Authorization Server…</td><td>distributed systems, batch jobs, messaging, LLMs, running your own OAuth server</td><td>not needed; named so you know they exist</td></tr>
+</tbody></table>
+
+<h2>The shape of a Spring Boot application</h2>
+<p>Almost every Spring Boot web application, EduMate included, is organised in the same layers. Learn this picture;
+the rest of the course fills it in.</p>
+<pre class="diagram">HTTP request
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Embedded Tomcat  →  Security filter chain  (token? role allowed?)           │
+│                  →  DispatcherServlet      (which controller method?)       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ @RestController   AttendanceController     HTTP ⇄ Java: paths, JSON, status │
+│        │                                                                    │
+│        ▼                                                                    │
+│ @Service          AttendanceCaptureService business rules, @Transactional   │
+│        │                                                                    │
+│        ▼                                                                    │
+│ Repository        AttendanceSessionRepository   Spring Data JPA → Hibernate │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ DataSource (HikariCP pool)  →  H2 / PostgreSQL                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+    ▲
+    └── all of these objects are beans, created and wired by the Spring container</pre>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>What is the difference between Spring Framework and Spring Boot?</summary>
+<div>The Framework provides the container (dependency injection) and the integrations (MVC, transactions, data access,
+security hooks…). Boot sits on top and does the set-up: starters choose compatible libraries, auto-configuration
+creates the usual beans, an embedded server makes the application a runnable jar, and Actuator adds production
+features.</div></details>
+<details class="quiz"><summary>Why is "every server needs it" a good reason to use a framework for transactions and security?</summary>
+<div>Because these are hard to get right and easy to get subtly wrong. A framework's implementation has been tested by
+millions of applications; a hand-made one is tested only by yours, usually after something has gone wrong.</div></details>
+<details class="quiz"><summary>You find a tutorial with <code>import javax.persistence.Entity;</code>. What does that tell you?</summary>
+<div>It was written for Spring Boot 2 or older. Since Boot 3 the package is <code>jakarta.persistence</code>.</div></details>

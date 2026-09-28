@@ -1,30 +1,111 @@
-=== FILE frontend/src/components/Layout.tsx
+=== FILE frontend/src/components/ui.tsx
 >>> SUMMARY
-**The frame around every page after login**: a dark menu on the left (the links for the user's role), a white bar at the top with a tagline, the user's name, role and campus, and a "Log out" button. The current page appears in the middle, where `<Outlet />` stands.
+**Small reusable pieces** used by many pages. Writing them once keeps every page consistent: every error box looks the same, every form field shows its error in the same place, and every page title arrives with the same little rise.
 
-The page area is wrapped in an `ErrorBoundary`, so a crashing page never takes the menu down with it.
+| Piece | Looks like |
+|---|---|
+| `PageHeader` | a small "eyebrow" (icon + menu section), the page title, an optional subtitle, and buttons on the right |
+| `Loading` | a **skeleton**: grey shimmering blocks shaped like the content that is coming |
+| `ErrorBanner` | a red box with an icon, the message and an optional "Try again" button |
+| `Alert` | a coloured box with a matching icon: blue info, green good, amber warn, red bad |
+| `EmptyState` | a floating icon in a soft circle, with grey text under it |
+| `Badge` | a small coloured pill with a status dot, such as "Paid" or "Overdue" |
+| `Field` | a label, the input, a hint, and an animated error message under it |
+| `PercentBar` | a thin bar filled to a percentage, red when too low, amber when close |
+| `IconTile` | a rounded, tinted square with an icon inside |
+| `Avatar` | a round badge with someone's initials, coloured from their name |
+| `Segmented` | two or three joined buttons, one chosen, with a sliding highlight |
+| `Steps` | a step tracker: numbered circles joined by a line |
 
-On narrow (phone) screens, `app.css` moves the menu above the page instead of beside it.
->>> 17-19
-`handleLogout`: logs out with the message "You have been logged out." and goes to the login page.
->>> 22-23
-The drawing starts: the outer "shell" (a grid of menu + main area; see `app.css`).
->>> 24
-The menu. `<nav>` with `aria-label="Main menu"` tells screen readers this is the main navigation.
->>> 25-26
-The brand at the top of the menu: the logo (the same picture as the tab icon). `alt=""` marks it as decoration, which screen readers skip.
->>> 29-31
-One link per menu item of the user's role (from `navigation.ts`). `NavLink` automatically adds the class `active` to the link of the current page, which `app.css` highlights. `end` on the dashboard link (`/`) makes it active **only** on `/` itself; otherwise every address, since all begin with `/`, would highlight it.
->>> 35-36
-The main area, and the top bar.
->>> 38-40
-The user block on the right of the top bar.
->>> 43-44
-The role's display name and the campus, e.g. "Student · Campus JGC", from `messages.ts` (`t.roles`, `t.topbar.campus`).
->>> 47
-The "Log out" button.
->>> 52-54
-The page itself, inside the error safety net. `resetKey={location.pathname}` forgets a crash when the address changes.
+Every colour here comes from a **tone** name (`info`, `good`, `warn`, `bad`), never from a raw colour. `app.css` turns the tone into the colour (for example `.alert-good`), and `theme.css` decides what "good" looks like in light and dark mode.
+>>> 14
+`Tone`: the four meanings a coloured element can have. A TypeScript "union type": a value must be exactly one of these four texts.
+>>> 16
+Which icon goes with which tone: an "i" for info, a tick for good, a triangle for warn, an exclamation mark in a circle for bad. The icon means the meaning never relies on colour alone (someone who cannot tell red from green still sees the shape).
+>>> 23-35
+`PageHeader`'s inputs. Only `title` is required. `ReactNode` means "anything React can draw": text, a number, or other elements. `icon` and `eyebrow` let a page choose its own eyebrow; usually it is found automatically.
+>>> 38
+Look up the menu item of the current address for the signed-in role (`findNavItem` in `navigation.ts`), for example "My results" when the address is `/results`.
+>>> 39-40
+The eyebrow's icon and text: the page's own choice if it gave one (`??` means "if the left side is missing, use the right side"), otherwise the menu item's icon and section name ("Academics", "Finance"…).
+>>> 41-45
+`rise(delay)`: a small recipe for motion. Start invisible and 12 px lower, and rise into place over 0.55 s with the app's standard curve, after `delay` seconds. The eyebrow, title, subtitle and buttons use increasing delays, so they arrive one after another, like a cascade.
+>>> 47-49
+The header box; the left side holds the texts.
+>>> 50-58
+The eyebrow, if there is one: a small tinted icon and the section name. The `{...rise(0)}` syntax spreads the recipe's three settings onto the `motion.div` as if they had been written out one by one.
+>>> 60
+The title: a real `<h1>` (every page has exactly one, so screen-reader users can jump to it), rising 0.05 s after the eyebrow.
+>>> 61
+The subtitle, if given, 0.05 s later.
+>>> 63-66
+The action buttons on the right, if given, last.
+>>> 78-79
+The skeleton box. `aria-busy="true"` tells screen readers this part is still loading; `aria-live="polite"` lets them announce it when it finishes. Inside an existing card, `inline` leaves out the card frame.
+>>> 81-86
+The first skeleton row imitates a typical content header: a rounded square (like an icon tile) and two lines of text of different lengths.
+>>> 88-89
+Then `rows` grey bars (4 unless told otherwise), each a little fainter than the one above, so the placeholder fades out downwards. `Array.from({ length: rows }, …)` makes a list of `rows` items to draw. The shimmer itself is a CSS animation on `.skeleton` in `app.css`.
+>>> 97-99
+The red error box. `role="alert"` makes screen readers read it out immediately. The icon comes first.
+>>> 101-103
+The "Try again" button, only if the page gave an `onRetry` function (usually `reload` from `useLoad`). The circular-arrow icon shows what it does.
+>>> 112
+Pick the icon for the tone.
+>>> 113-115
+The box, coloured by its tone class. Only red boxes use `role="alert"` (read out at once); calmer boxes are read in the normal order.
+>>> 116-118
+The text: an optional bold title, then whatever was placed between `<Alert>` and `</Alert>` (`children`).
+>>> 126-129
+The empty state: a large icon (an inbox, unless the page chose another) in a soft circle that floats gently up and down (the `float` animation on `.empty-icon`).
+>>> 138
+The badge's classes: always `badge`; `badge-good`, `badge-warn` or `badge-bad` for a coloured one (info is the default look, so it needs no extra class); and `badge-plain` for a badge without the status dot. `.filter(Boolean)` drops the `false` entries, and `.join(' ')` glues the rest together with spaces, e.g. `"badge badge-good"`.
+>>> 139
+The pill, with its content.
+>>> 144-155
+`Field`'s inputs: the id of the input it belongs to, the label text, an optional hint, an optional error, and the input itself (`children`).
+>>> 156-157
+The field box: the label on top.
+>>> 159
+Then the input, exactly as the page wrote it.
+>>> 160
+The hint is shown only while there is **no** error, so the two never compete for the same spot.
+>>> 161-163
+The error: it slides down a little and fades in when it appears. Its id is the input's id plus `-error`; the page puts that id in the input's `aria-describedby`, so a screen reader reads the error when the input is focused.
+>>> 172
+The filled width, from 0 to 100. `percent ?? 0` treats "no data" as 0; `Math.max`/`Math.min` keep values like 104 inside the bar.
+>>> 173-175
+The bar and its filled part, red (`low`) or amber (`warn`) when needed. It is hidden from screen readers because the percentage is always written next to it as text. The grow-in animation is in `app.css`.
+>>> 182-189
+`IconTile`'s inputs: the icon, a tone (the four meanings plus `neutral` and `accent`), and a size.
+>>> 190
+The icon's size in pixels for each tile size.
+>>> 191-193
+The tile. Its classes become, for example, `icon-tile tone-good lg`; `app.css` tints it with a soft version of the tone's colour. It is decoration (the text next to it says the same), so it is hidden from screen readers.
+>>> 200
+The colour of this person's avatar: a hue (0–360 on the colour wheel) worked out from the name by `hueFor`. The same name always gets the same colour, so a person is recognisable across pages. It is passed to CSS as the variable `--hue`; `as CSSProperties` tells TypeScript that a custom `--…` property is fine here.
+>>> 201-203
+The round badge with the initials, e.g. "PS" for Priya Sharma.
+>>> 212-223
+`Segmented`'s inputs. `<T extends string>` makes it **generic**: if the options are `'DRAFT' | 'PUBLISHED'`, then `value` and `onChange` use exactly that type, so TypeScript catches a misspelt option. `id` must be unique on the page because it names the sliding background (two segmented controls must not share one).
+>>> 224-225
+The group of buttons. `role="group"` tells screen readers they belong together.
+>>> 226-227
+One button per option. `aria-pressed` says whether this one is chosen, so screen readers announce "pressed" / "not pressed".
+>>> 228
+The raised background, drawn only inside the chosen button. Because it has a `layoutId`, motion notices when it disappears from one button and appears in another, and **animates it sliding across** instead of jumping (a "shared layout animation"), with the app's springy `SPRING` timing.
+>>> 242-251
+`Steps`' inputs: the step names, which step is current (counting from 0), whether the process stopped at that step (for example a rejected application), and a compact look.
+>>> 252-253
+An ordered list (`<ol>`), because steps have an order.
+>>> 254-255
+For each step, its state: before the current one → `done`; the current one → `current` (or `current stopped`, drawn red); after it → nothing (grey).
+>>> 256-257
+The step. `aria-current="step"` marks the current one for screen readers.
+>>> 258-262
+Its circle pops in (from 60 % size, transparent) with a spring, each one 0.06 s after the previous, so the tracker fills from left to right.
+>>> 264
+A done step shows a tick; the others show their number.
 
 === FILE frontend/src/components/TimetableGrid.tsx
 >>> SUMMARY
@@ -32,77 +113,54 @@ Draws a week as a **grid**: one row per day (Monday–Friday), one column per pe
 
 It is used by "My timetable" (students and teachers) and by the administrator's timetable page, where clashing lectures are outlined in red and each lecture gets a "Move" button.
 
+What the redesign added:
+- **A colour per course.** The colour is worked out from the course code (`hueFor`), so "CS301" is the same colour on every page and for every user, without anyone choosing colours by hand.
+- **Today's row is highlighted**, and **the lecture running right now glows** (a soft pulsing ring, `.tt-now` in `app.css`).
+- **It scrolls sideways on a phone** (`.tt-scroll`) instead of squashing six periods into a narrow screen.
+
 The layout is a **CSS grid** (`.tt-grid` in `app.css`): 7 columns (day names + 6 periods). It is marked with ARIA roles (`table`, `columnheader`, `rowheader`, `cell`), so screen readers read it as a real table.
->>> 10-14
+>>> 14-19
 Inputs:
 - the lectures;
-- optionally, the ids of lectures in a clash (outlined in red);
+- optionally, the ids of lectures in a clash (outlined in red). A `Set` is a list that can answer "is this id in here?" instantly;
 - whether to show the section letter;
-- optionally, extra buttons to draw under each lecture (the admin's "Move").
->>> 18
+- optionally, a function that draws extra buttons under each lecture (the admin's "Move").
+>>> 23
+The current date and time, from the computer's clock.
+>>> 24
+JavaScript numbers the days Sunday = 0, Monday = 1 … Saturday = 6. The timetable (like the backend) uses Monday = 1 … Sunday = 7, so Sunday's 0 becomes 7.
+>>> 25
+The period running now: the time is turned into "minutes since midnight" (10:15 → 615) and `periodAt` (in `utils/visuals.ts`) finds the period whose 55 minutes contain it, or `null` in a break, before 9:00 or after the last period.
+>>> 29
+Work out "now" once per drawing.
+>>> 30
 `at(day, period)`: the lectures in one cell.
->>> 20-22
-The grid, and its top-left empty corner cell.
->>> 23-25
+>>> 32-33
+The outer box that can scroll sideways on narrow screens.
+>>> 34-35
+The grid, announced to screen readers as a table named "My timetable", and its top-left empty corner cell.
+>>> 36-38
 The header row: "P1 9:00", "P2 10:00", and so on. Texts from `messages.ts`.
->>> 28-29
-One row per day, drawn by `DayRow` below.
->>> 36-40
-`DayRow`'s inputs: the day, the `at` function, and the same optional settings.
->>> 41
-The end of the list of inputs; the function body starts.
->>> 42-45
-A row starts with the day's name ("Monday"). `<>` groups the cells without adding an extra box, so they sit directly in the grid.
->>> 47-49
-For each period: the lectures there, and whether any of them is in a clash.
->>> 50-51
-The cell. Its class becomes e.g. `tt-cell filled clash`, which colours it (filled cells tinted, clashing ones outlined in red).
->>> 52-53
-Each lecture in the cell. Hovering shows the full course name (`title`).
->>> 55
+>>> 41-42
+One row per day, drawn by `DayRow` below. Everything the row needs is passed down to it.
+>>> 49-63
+`DayRow`'s inputs: the day, the `at` function, the same optional settings, and "now".
+>>> 64
+Is this row today?
+>>> 65-68
+A row starts with the day's name ("Monday"), highlighted when it is today. `<>` (a "fragment") groups the cells without adding an extra box, so they sit directly in the grid.
+>>> 70-72
+For each period: the lectures there, and whether any of them is in a clash (`clashIds?.has(…)` is simply `undefined`, which counts as "no", when no clash list was given).
+>>> 73
+The cell's classes, e.g. `tt-cell filled clash today`. The list holds `false` for the conditions that do not apply; `.filter(Boolean)` removes those before joining.
+>>> 74-75
+The cell.
+>>> 76-81
+Each lecture in the cell, as a coloured card:
+- `tt-now` is added when this is today and this is the period running now;
+- `--hue` gives the card its course colour (`app.css` mixes it into the background, the left stripe and the text);
+- hovering shows the full course name (`title`).
+>>> 84
 The section letter, if asked for (on the admin's page).
->>> 58
+>>> 87
 Any extra buttons for this lecture. `actions?.(e)` calls `actions` only if it was given.
-
-=== FILE frontend/src/components/ui.tsx
->>> SUMMARY
-**Small reusable pieces** used by many pages. Writing them once keeps every page consistent: every error box looks the same, and every form field shows its error message in the same place.
-
-| Piece | Looks like |
-|---|---|
-| `PageHeader` | the page title, an optional subtitle, and buttons on the right |
-| `Loading` | a spinning circle and "Loading…" |
-| `ErrorBanner` | a red box with the message and an optional "Try again" button |
-| `Alert` | a coloured box: blue info, green good, amber warn, red bad |
-| `EmptyState` | grey "Nothing to show yet." in an empty list |
-| `Badge` | a small coloured pill, such as "Paid" or "Overdue" |
-| `Field` | a label, the input, a hint, and the error message under it |
-| `PercentBar` | a thin bar filled to a percentage, red when too low |
->>> 9-11
-`PageHeader` draws a row holding the title block …
->>> 13
-… the subtitle, only if one was given (`&&` means "draw the right-hand part only if the left-hand part is true") …
->>> 15
-… and the buttons on the right, if any.
->>> 22-23
-`Loading`: a box marked `aria-busy`, which tells screen readers content is on its way.
->>> 31-35
-`ErrorBanner`: a red box with `role="alert"` (screen readers announce it immediately), the message, and a "Try again" button if the page passed an `onRetry` function.
->>> 45-48
-`Alert`: a box whose class, e.g. `alert alert-warn`, sets the colour. Only red ones are announced as alerts. An optional bold title comes first, then the content.
->>> 55
-`EmptyState`: grey text; by default "Nothing to show yet."
->>> 60-61
-`Badge`: the plain `badge` class for info, otherwise e.g. `badge badge-good`.
->>> 66-67
-`Field`: a box holding …
->>> 69
-… the input the page passed in (text box, date picker, drop-down…).
->>> 70
-A grey hint, shown only while there is no error.
->>> 71-73
-The red error message. Its id, e.g. `email-error`, lets the input point to it with `aria-describedby`, so screen readers read the error together with the field.
->>> 82
-`PercentBar`: the fill width, kept between 0 and 100 (a missing percentage counts as 0).
->>> 83-85
-The bar. Its class adds `low` (red) or `warn` (amber). `aria-hidden` hides it from screen readers, because the number is already written next to it.

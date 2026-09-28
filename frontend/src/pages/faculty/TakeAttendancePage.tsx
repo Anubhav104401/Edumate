@@ -4,16 +4,23 @@
  *   Save:           PUT /api/attendance/sessions  (sends the version number that was loaded)
  * If another teacher saved the same register in between, the backend answers 409 STALE_UPDATE
  * and this page explains what happened instead of overwriting their work (fix for DR-01).
+ *
+ * Every student is a large tile: tap it to mark the student absent (red), tap again for present
+ * (green). A bar stuck to the bottom of the screen shows the count and the Save button.
  */
+import { AnimatePresence, motion } from 'motion/react';
+import { Check, ClipboardCheck, LoaderCircle, RotateCw, Save, UserCheck, UserX, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api/endpoints';
 import { ApiError, errorMessage } from '../../api/http';
 import type { AttendanceSheet } from '../../api/types';
+import { Ring } from '../../components/charts';
 import { useToast } from '../../components/Toast';
-import { Alert, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
+import { Alert, Avatar, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
 import { PERIODS } from '../../config';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
+import { Stagger, StaggerItem } from '../../motion/Reveal';
 import { todayIso } from '../../utils/format';
 
 export function TakeAttendancePage() {
@@ -85,14 +92,14 @@ export function TakeAttendancePage() {
     }
   }
 
-  const setAll = (value: boolean) =>
-    setPresent(Object.fromEntries((sheet?.rows ?? []).map((row) => [row.studentId, value])));
+  const setAll = (value: boolean) => setPresent(Object.fromEntries((sheet?.rows ?? []).map((row) => [row.studentId, value])));
   const presentCount = Object.values(present).filter(Boolean).length;
+  const total = sheet?.rows.length ?? 0;
 
   return (
     <>
       <PageHeader title={t.takeAttendance.title} subtitle={t.takeAttendance.subtitle} />
-      {courses.loading && <Loading />}
+      {courses.loading && <Loading rows={1} />}
       {courses.error && <ErrorBanner message={courses.error} onRetry={courses.reload} />}
 
       {courses.data && (
@@ -135,7 +142,7 @@ export function TakeAttendancePage() {
             </select>
           </Field>
           <button type="button" className="btn" disabled={busy || !courseId} onClick={open}>
-            {t.takeAttendance.open}
+            <ClipboardCheck size={16} /> {t.takeAttendance.open}
           </button>
         </div>
       )}
@@ -144,63 +151,77 @@ export function TakeAttendancePage() {
         <Alert tone="bad" title={t.takeAttendance.staleTitle}>
           <p>{t.takeAttendance.staleBody}</p>
           <button type="button" className="btn btn-small" onClick={open}>
-            {t.takeAttendance.reload}
+            <RotateCw size={14} /> {t.takeAttendance.reload}
           </button>
         </Alert>
       )}
 
       {sheet && (
         <div className="card">
-          <div className="page-header" style={{ marginBottom: 12 }}>
+          <div className="card-header">
             <div>
               <h2>
-                {sheet.courseCode} {sheet.courseName} · {sheet.section}
+                <span className="mono muted">{sheet.courseCode}</span> {sheet.courseName} · {sheet.section}
               </h2>
-              <p className="small">
+              <p className="small muted" style={{ margin: 0 }}>
                 {sheet.alreadyTaken ? t.takeAttendance.existingRegister(sheet.version ?? 0) : t.takeAttendance.newRegister}
               </p>
             </div>
             <div className="btn-row">
-              <strong>{t.takeAttendance.summary(presentCount, sheet.rows.length)}</strong>
               <button type="button" className="btn btn-secondary btn-small" onClick={() => setAll(true)}>
-                {t.takeAttendance.markAllPresent}
+                <UserCheck size={14} /> {t.takeAttendance.markAllPresent}
               </button>
               <button type="button" className="btn btn-secondary btn-small" onClick={() => setAll(false)}>
-                {t.takeAttendance.markAllAbsent}
+                <UserX size={14} /> {t.takeAttendance.markAllAbsent}
               </button>
             </div>
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t.common.usn}</th>
-                  <th>{t.common.name}</th>
-                  <th>{t.takeAttendance.present}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sheet.rows.map((row) => (
-                  <tr key={row.studentId}>
-                    <td className="mono">{row.usn}</td>
-                    <td>{row.fullName}</td>
-                    <td>
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={present[row.studentId] ?? true}
-                          onChange={(e) => setPresent({ ...present, [row.studentId]: e.target.checked })}
-                        />{' '}
-                        {present[row.studentId] ? t.takeAttendance.present : t.takeAttendance.absent}
-                      </label>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="btn-row" style={{ marginTop: 16 }}>
-            <button type="button" className="btn" disabled={busy} onClick={save}>
+          <p className="small muted">{t.takeAttendance.tapHint}</p>
+
+          <Stagger className="roster" gap={0.02}>
+            {sheet.rows.map((row) => {
+              const here = present[row.studentId] ?? true;
+              return (
+                <StaggerItem key={row.studentId}>
+                  <button
+                    type="button"
+                    className="roster-chip"
+                    aria-pressed={here}
+                    aria-label={`${row.fullName} ${row.usn}: ${here ? t.takeAttendance.present : t.takeAttendance.absent}`}
+                    onClick={() => setPresent({ ...present, [row.studentId]: !here })}
+                  >
+                    <Avatar name={row.fullName} size="sm" />
+                    <span className="roster-chip-text">
+                      <strong>{row.fullName}</strong>
+                      <span>{row.usn}</span>
+                    </span>
+                    <span className="roster-mark" aria-hidden="true">
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.span
+                          key={here ? 'in' : 'out'}
+                          style={{ display: 'grid' }}
+                          initial={{ scale: 0, rotate: -90 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          exit={{ scale: 0, rotate: 90 }}
+                          transition={{ duration: 0.18 }}
+                        >
+                          {here ? <Check size={15} /> : <X size={15} />}
+                        </motion.span>
+                      </AnimatePresence>
+                    </span>
+                  </button>
+                </StaggerItem>
+              );
+            })}
+          </Stagger>
+
+          <div className="action-bar">
+            <Ring percent={total === 0 ? 0 : (presentCount * 100) / total} size={44} stroke={5} tone="good" />
+            <strong className="grow" aria-live="polite">
+              {t.takeAttendance.summary(presentCount, total)}
+            </strong>
+            <button type="button" className="btn btn-lg" disabled={busy} onClick={save} style={{ borderRadius: 999 }}>
+              {busy ? <LoaderCircle size={18} className="spin" /> : <Save size={18} />}
               {busy ? t.common.saving : t.takeAttendance.save}
             </button>
           </div>

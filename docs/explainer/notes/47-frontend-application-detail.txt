@@ -1,61 +1,96 @@
 === FILE frontend/src/pages/admissions/ApplicationDetailPage.tsx
 >>> SUMMARY
 **One application as the admissions officer (or admin) sees it**, at `/admissions/<id>`:
-- three cards: personal details (with a "Minor (17)" badge when relevant), programme and scores, and guardian with consent status;
+- **"Where this application is"**: a step tracker along the normal road, Draft → Submitted → Under review → Shortlisted → Offered → Enrolled. An application that left the road (rejected, withdrawn, enrolment reversed) shows a red box with that status instead. The reason for the last decision, if any, is shown under it;
+- three **info cards**: personal details (with a "Minor (17)" badge when relevant), programme and scores, and guardian with consent status (a green shield when consent is granted, amber otherwise);
 - **all five document boxes**, read-only. Staff can press **View** to open a scan. Each view is written to the audit log as DOCUMENT_VIEWED, because these can be a minor's personal documents;
 - the **consent history** (requested / granted / revoked, with the masked guardian contact);
-- the **decision** card: a reason box and **one button per action the state machine allows for this role** (for example Shortlist and Reject on an UNDER_REVIEW application). Reject and Reverse enrolment are red.
+- the **decision** card: a reason box and **one button per action the state machine allows for this role** (for example Shortlist and Reject on an UNDER_REVIEW application). Actions that end or undo something (Reject, Reverse enrolment, Withdraw) are **red**, and their confirmation dialog has a red button too.
 
 The buttons come from the backend's `allowedActions`, built from the same table that enforces the rules, so the page can never offer a button the backend would refuse (except when the rules need a reason and none was typed: then the backend answers "Please give a reason for this decision.").
->>> 18
-All five document types, from the keys of `t.documentTypes`.
 >>> 21
+All five document types, from the keys of `t.documentTypes`.
+>>> 24
+The normal road of an application, in order, for the step tracker.
+>>> 27
+The actions shown in red and confirmed as dangerous.
+>>> 30
 The application id from the address: `/admissions/7` → 7. `useParams().id` is text, so `Number(...)` turns it into a number.
->>> 24-26
-Loads the application, its documents and its consent history, again whenever the id changes.
->>> 31-32
-`act(action)`: asks "Are you sure you want to shortlist this application?" (with the button's own label) and stops unless confirmed.
->>> 33-38
-Busy; sends the action with the typed reason; puts the updated application straight into the page (`setData`, no reload needed); clears the reason; and shows "Application is now: Shortlisted."
->>> 39-42
-Refusals become toasts (a missing reason, a wrong role, a 409 because someone else acted first). Always stop being busy.
->>> 46-49
-While loading: "Loading…"; on error: the red box with "Try again"; no data: nothing.
->>> 51-57
-The drawing: the title "Application APP-2026-000042", a status badge as subtitle, and a "Back" button to the list.
->>> 62
-The reason for the last decision, if there is one.
->>> 64-65
-A grid of three cards. The first is "Applicant":
->>> 67-68
-The name in bold, plus an amber "Minor (17)" badge for applicants under 18.
->>> 70-71
-Date of birth, e-mail and phone.
->>> 74
-The second card, "Programme and scores":
->>> 77-79
-The category's display name and both scores (or "—").
->>> 82
-The third card, "Guardian":
->>> 84-85
-The guardian's name and e-mail (or "—").
->>> 92-101
-The documents: any loading error, then all five boxes. Each is given its uploaded document if there is one, and `editable={false}`: staff can View but never upload or remove an applicant's documents.
->>> 106-107
-If there is any consent history: a card …
->>> 109-113
-… a table with one row per consent record, newest first …
->>> 116-117
-… the guardian's name and **masked** contact, e.g. "Anita Gupta (an****om)" …
->>> 119-120
-… and the relevant time: when granted, else when revoked, else when the code expires.
->>> 129
+>>> 40-42
+`act(action)`: asks "Are you sure you want to shortlist this application?" (with the button's own label as the confirm button, red for a dangerous action) and stops unless confirmed.
+>>> 43-45
+Busy; send the action with the typed reason.
+>>> 46-48
+Put the updated application straight into the page (`setData`, no reload needed: the tracker, badge and buttons all update); clear the reason; and show "Application is now: Shortlisted."
+>>> 49-50
+Refusals become toasts (a missing reason, a wrong role, a 409 because someone else acted first).
+>>> 51-52
+Always stop being busy.
+>>> 56-59
+While loading: a skeleton; on error: the red box with "Try again"; no data: nothing. `a` is a short name for the application.
+>>> 60
+The application's position on the normal road, or −1 if it has left it (`indexOf` answers −1 when not found).
+>>> 62-66
+The drawing: the title "Application APP-2026-000042", and a status badge as subtitle…
+>>> 67-69
+…and a "Back" button to the list.
+>>> 74-75
+On the road: a card with the step tracker…
+>>> 78
+…where the current step is the application's status. ENROLLED is the last step; putting `current` one past it makes every step show as done (ticked), instead of the last one showing as "in progress".
+>>> 80-81
+Off the road: a red box whose title is the status (e.g. "Rejected").
+>>> 83
+The reason for the last decision, in a blue box, if there is one.
+>>> 85-89
+Three info cards, appearing one after another. The first: a person icon and "Personal details".
+>>> 92-93
+The name in bold, and an amber "Minor (17)" badge for an applicant under 18 (who needs guardian consent).
+>>> 95-96
+A list of facts: date of birth…
+>>> 100
+…e-mail…
+>>> 104
+…and phone.
+>>> 111-114
+The second card: a graduation cap and "Programme and scores", with the programme's name.
+>>> 118-119
+Category…
+>>> 123
+…entrance score…
+>>> 127
+…and qualifying percentage ("—" while missing).
+>>> 134-137
+The third card: a shield, green when consent is granted, amber otherwise, and "Guardian".
+>>> 140-141
+The guardian's name…
+>>> 145
+…e-mail…
+>>> 149
+…and the consent status in words.
+>>> 158
+The "Documents" heading.
+>>> 161-163
+Any error loading the documents; then a grid with a box for each of the five document types.
+>>> 164-170
+Each box shows the uploaded document of that type, if any, **read-only** for staff (`editable={false}`): no drop area, no Remove, only View.
+>>> 175-176
+If there is any consent history: a card with a table.
+>>> 178-181
+One row per consent request.
+>>> 182
+The status badge: green GRANTED, red REVOKED, amber otherwise (e.g. PENDING).
+>>> 185-186
+The guardian and the **masked** contact (e.g. "p****@example.com"): staff see enough to recognise it without the full address.
+>>> 196
 The decision card.
->>> 131
-If this role has no actions in this state: "No further action is possible for you on this application." …
->>> 133-136
-… otherwise a reason box of at most 300 characters (the backend's `@Size(max = 300)`), used for rejections and reversals …
->>> 138-145
-… and one button per allowed action. REJECT and REVERSE_ENROLMENT get the red `btn-danger` style, because they end or undo something. All are disabled while busy.
->>> 147
-The button's label from `messages.ts`, e.g. "Start review", "Shortlist", "Make offer".
+>>> 198-199
+If no action is allowed for this role: "No further action is possible for you on this application."
+>>> 202-205
+Otherwise: a reason box (up to 300 characters; required for rejection and reversal)…
+>>> 207-208
+…and one button per allowed action…
+>>> 209-214
+…red for the dangerous ones, disabled while busy, running `act` when pressed.
+>>> 216
+The button's label, e.g. "Shortlist".

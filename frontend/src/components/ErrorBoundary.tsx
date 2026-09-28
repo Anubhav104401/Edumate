@@ -4,6 +4,7 @@
  * while the menu stays usable so the user can go to another page.
  * (React only supports this with a "class component", which is why this file looks different.)
  */
+import { Bug, RotateCw } from 'lucide-react';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { t } from '../i18n/messages';
 
@@ -37,9 +38,15 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.failed) {
       return (
-        <div className="alert alert-bad" role="alert">
-          <strong>{t.errors.pageCrashedTitle}</strong>
-          {t.errors.pageCrashedBody}
+        <div className="card empty" role="alert">
+          <div className="empty-icon" style={{ color: 'var(--color-bad)' }}>
+            <Bug size={28} />
+          </div>
+          <h2>{t.errors.pageCrashedTitle}</h2>
+          <p className="muted">{t.errors.pageCrashedBody}</p>
+          <button type="button" className="btn btn-secondary" onClick={() => window.location.reload()}>
+            <RotateCw size={16} /> {t.errors.reload}
+          </button>
         </div>
       );
     }

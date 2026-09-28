@@ -1,0 +1,169 @@
+<!-- level: 1 -->
+<h1>Building a REST API with Spring MVC</h1>
+
+<p class="lead">A controller turns HTTP into method calls: an address and a verb choose the method, parts of the
+request become its parameters, and its return value becomes the response. This chapter covers every piece you need
+for a real JSON API, and follows a request through Spring MVC's machinery.</p>
+
+<h2>HTTP in two minutes</h2>
+<p>A request has a <strong>method</strong> (verb), a <strong>path</strong>, optional <strong>query parameters</strong>,
+<strong>headers</strong> and an optional <strong>body</strong>. A response has a <strong>status code</strong>, headers
+and a body.</p>
+<pre class="diagram">PUT /api/attendance/sessions HTTP/1.1            ← method + path
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9…      ← headers
+Content-Type: application/json
+
+{"courseId":3,"section":"A","date":"2026-09-26","period":6,"version":0,"marks":[…]}   ← body
+
+HTTP/1.1 200 OK                                   ← status
+Content-Type: application/json
+
+{"sessionId":41,"version":1,"courseCode":"23CS503",…}</pre>
+<table>
+<thead><tr><th>Method</th><th>Meaning in a REST API</th><th>EduMate example</th></tr></thead>
+<tbody>
+<tr><td>GET</td><td>read, never changes anything</td><td><code>GET /api/attendance/me</code></td></tr>
+<tr><td>POST</td><td>create something, or run an action</td><td><code>POST /api/auth/login</code>, <code>POST /api/library/loans</code></td></tr>
+<tr><td>PUT</td><td>replace / update a resource</td><td><code>PUT /api/attendance/sessions</code>, <code>PUT /api/exams/marks/{id}</code></td></tr>
+<tr><td>DELETE</td><td>remove</td><td><code>DELETE /api/admissions/documents/{id}</code></td></tr>
+</tbody></table>
+<p>Status codes you will use constantly: <strong>200</strong> OK, <strong>201</strong> Created, <strong>204</strong> No
+Content, <strong>400</strong> bad input, <strong>401</strong> not logged in, <strong>403</strong> logged in but not
+allowed, <strong>404</strong> not found, <strong>409</strong> conflict with the current state (someone else saved
+first, already paid…), <strong>413</strong> too large, <strong>500</strong> a bug on the server.</p>
+
+<h2>A complete controller</h2>
+<pre class="code" data-src="backend/src/main/java/com/edumate/attendance/AttendanceController.java" data-lines="22-86" data-expect="@RequestMapping(&quot;/api/attendance&quot;)"></pre>
+<p>Everything in it, one annotation at a time:</p>
+<table>
+<thead><tr><th>Annotation</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>@RestController</code></td><td>makes the class a bean <em>and</em> a controller whose return values are written straight into the response body (as JSON), instead of naming an HTML template</td></tr>
+<tr><td><code>@RequestMapping("/api/attendance")</code></td><td>a common prefix for every method in the class</td></tr>
+<tr><td><code>@GetMapping("/sessions")</code>, <code>@PutMapping</code>, <code>@PostMapping</code>, <code>@DeleteMapping</code></td><td>method + path of one endpoint (added to the class prefix)</td></tr>
+<tr><td><code>@RequestParam Long courseId</code></td><td>a query parameter, <code>?courseId=3</code>, converted to the parameter's type; missing → 400</td></tr>
+<tr><td><code>@RequestParam(defaultValue = "A")</code></td><td>optional, with a default</td></tr>
+<tr><td><code>@RequestParam(required = false) Integer threshold</code></td><td>optional, <code>null</code> when absent (so use a wrapper type, not <code>int</code>)</td></tr>
+<tr><td><code>@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date</code></td><td>how to read text as a date: <code>2026-09-28</code></td></tr>
+<tr><td><code>@PathVariable Long courseId</code></td><td>a part of the path: <code>/courses/{courseId}/summary</code></td></tr>
+<tr><td><code>@RequestBody</code></td><td>the JSON body, turned into the parameter's type (a record here)</td></tr>
+<tr><td><code>@Valid</code></td><td>check the body's validation annotations before the method runs (next chapter)</td></tr>
+<tr><td><code>CurrentUser me</code></td><td>not a Spring type at all: EduMate taught Spring MVC to fill it from the login token (see "Custom parameters" below)</td></tr>
+</tbody></table>
+<div class="callout tip"><strong>Thin controllers</strong>
+Look at how little each method does: read the request, check access, call a service, return the result. All rules
+(future dates, stale versions, who belongs to a section) live in the service, where they can be tested without HTTP
+and reused by other entry points. A controller method longer than a few lines is usually a sign that business logic
+has leaked into the web layer.</div>
+
+<h2>Request and response bodies: records and JSON</h2>
+<p>Spring MVC uses <strong>Jackson</strong> (version 3 in Spring Boot 4) to convert between JSON text and Java objects.
+Java <strong>records</strong> are ideal for this: their components become JSON fields, in order.</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/security/AuthController.java" data-lines="31-58" data-expect="public record LoginResponse(String token, Instant expiresAt, MeResponse user)"></pre>
+<p>The request <code>{"username":"student","password":"Edumate@2026"}</code> becomes a <code>LoginRequest</code>; the
+returned <code>LoginResponse</code> becomes:</p>
+<pre class="code" data-lang="json">{
+  "token": "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOi…",
+  "expiresAt": "2026-09-28T18:15:30.123Z",
+  "user": { "id": 12, "username": "student", "fullName": "Aarav Sharma", "role": "STUDENT",
+            "campusCode": "JGC", "studentId": 7 }
+}</pre>
+<ul>
+<li><code>Instant</code>, <code>LocalDate</code> and friends become ISO-8601 text (<code>"2026-09-28"</code>), which every
+language can read.</li>
+<li>Enums (<code>Role.STUDENT</code>) become their name, <code>"STUDENT"</code>.</li>
+<li><code>BigDecimal</code> becomes an exact JSON number (<code>62500.00</code>), never a rounded double.</li>
+<li><code>null</code> fields are written as <code>null</code> (configurable).</li>
+</ul>
+<div class="callout warn"><strong>Never return entities directly</strong>
+It is tempting to return the JPA entity (<code>AppUser</code>) from a controller. Don't: you would leak fields (the
+password hash!), tie your API to your table design, and risk "lazy loading" errors while JSON is written. EduMate always
+returns small records made for the response (<code>MeResponse</code>, <code>AttendanceSheet</code>,
+<code>DocumentView</code>). These are often called <strong>DTOs</strong>, data transfer objects.</div>
+
+<h2>Controlling the status and headers: <code>ResponseEntity</code></h2>
+<p>Returning a plain object means <strong>200 OK</strong>. When you need another status, headers, or a body that is
+not JSON, return a <code>ResponseEntity</code>:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/documents/DocumentController.java" data-lines="55-71" data-expect="ResponseEntity.noContent().build()"></pre>
+<ul>
+<li>The download returns the file's bytes (a <code>Resource</code>) with its real content type, a
+<code>Content-Disposition</code> header with a safely encoded file name, and <code>Content-Security-Policy: sandbox</code>
+so that even a malicious PDF cannot run scripts on EduMate's site.</li>
+<li>The delete answers <strong>204 No Content</strong>: success, nothing to say.</li>
+<li>For "created" you would write <code>ResponseEntity.created(uri).body(view)</code> (201 with a
+<code>Location</code> header), or put <code>@ResponseStatus(HttpStatus.CREATED)</code> on the method.</li>
+</ul>
+<p>One method can even choose the format: <code>ReportController.consolidatedMarks</code> returns JSON by default and a
+CSV file for <code>?format=csv</code>.</p>
+
+<h2>File uploads</h2>
+<pre class="code" data-src="backend/src/main/java/com/edumate/documents/DocumentController.java" data-lines="39-44" data-expect="@RequestParam(&quot;file&quot;) MultipartFile file"></pre>
+<p>A <code>multipart/form-data</code> request carries fields and files. <code>@RequestParam("type")</code> reads a text
+field (converted to the <code>DocumentType</code> enum), <code>@RequestParam("file") MultipartFile</code> the file:
+its name, size, content type and bytes. The size limits in <code>application.yml</code>
+(<code>spring.servlet.multipart.*</code>) are enforced by the server before this method is called.</p>
+
+<h2>What happens between Tomcat and your method</h2>
+<pre class="diagram">Tomcat thread receives PUT /api/attendance/sessions
+  │
+  ├─ Filters (Servlet filters, in order)
+  │    └─ Spring Security's filter chain: Bearer token → verified JWT → authorities → RoleMatrix check
+  │          (401 / 403 are sent from here; your controller is never reached)
+  │
+  └─ DispatcherServlet   ← Spring MVC's single entry point
+       1. HandlerMapping: which @…Mapping matches "PUT /api/attendance/sessions"?  → AttendanceController.saveSheet
+       2. HandlerAdapter prepares the call. For each parameter an argument resolver fills it:
+             CurrentUser  ← CurrentUserArgumentResolver (EduMate's own)
+             @RequestBody ← HttpMessageConverter (Jackson) reads the JSON; then @Valid runs Bean Validation
+       3. Your method runs (and calls the service, inside a transaction)
+       4. Return value handler: HttpMessageConverter (Jackson) writes the record as JSON
+       5. If anything threw: @ExceptionHandler methods (GlobalExceptionHandler) build the error response</pre>
+<p>Every step is replaceable. That is how EduMate added its own parameter type.</p>
+
+<h2>Custom parameters: teaching Spring MVC about <code>CurrentUser</code></h2>
+<p>Almost every EduMate endpoint needs to know who is calling. Instead of repeating "read the security context, get the
+JWT, read the claims" in every method, EduMate wrote an <strong>argument resolver</strong>:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/security/CurrentUserArgumentResolver.java" data-lines="16-37" data-expect="implements HandlerMethodArgumentResolver"></pre>
+<p>and registered it with Spring MVC through a <code>WebMvcConfigurer</code>, the standard hook for customising MVC
+without replacing Boot's configuration:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/config/WebConfig.java" data-lines="11-25" data-expect="resolvers.add(currentUserResolver);"></pre>
+<p>Now any controller method can declare <code>CurrentUser me</code>, and it receives a small record with the user's id,
+username, role, campus and (for students and guardians) the student id, all taken from the verified token, never from
+the request body. A client cannot claim to be someone else by sending a different id.</p>
+
+<h2>Designing good REST addresses</h2>
+<ul>
+<li><strong>Nouns for resources, verbs from HTTP</strong>: <code>GET /api/library/loans</code>, <code>POST /api/library/loans</code>.
+Actions that are not simple CRUD become sub-resources: <code>POST /api/library/loans/{id}/return</code>,
+<code>POST /api/exams/result-sets/{id}/approve</code>.</li>
+<li><strong><code>/me</code> for "mine"</strong>: <code>/api/attendance/me</code>, <code>/api/fees/me</code>. The server
+decides who "me" is from the token.</li>
+<li><strong>Plural nouns, lower case, dashes</strong>: <code>/result-sets</code>, not <code>/ResultSet</code>.</li>
+<li><strong>Stable, documented errors</strong>: one JSON shape for every error (next chapter).</li>
+<li><strong>Versioning</strong>: when an API must change incompatibly, Spring Framework 7 has built-in API versioning
+: you choose once how clients send the version (a header, a query parameter, the path or the media type) in
+<code>WebMvcConfigurer.configureApiVersioning</code>, then map methods per version with
+<code>@GetMapping(path = "/…", version = "2")</code>. EduMate, with one frontend it controls, does not need it yet.</li>
+</ul>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Add <code>GET /api/library/books/{id}</code> to <code>LibraryController</code> returning one book (404 if it does
+not exist, using <code>ApiException.notFound("Book")</code>), and a line for it in the <code>RoleMatrix</code>. Run
+<code>RoleMatrixCoverageTest</code> before and after adding the line.</li>
+<li>Call <code>GET /api/attendance/courses/abc/summary</code> and look at the error: which part of the pipeline
+refused it, and which handler produced the JSON?</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>What is the difference between <code>@RequestParam</code> and <code>@PathVariable</code>?</summary>
+<div><code>@PathVariable</code> reads a named part of the path (<code>/courses/{courseId}</code>);
+<code>@RequestParam</code> reads a query parameter (<code>?section=A</code>) or a form field.</div></details>
+<details class="quiz"><summary>How does a record returned from a controller become JSON?</summary>
+<div>The return value handler of a <code>@RestController</code> hands it to an <code>HttpMessageConverter</code>; for
+<code>application/json</code> that is Jackson, which writes each record component as a field.</div></details>
+<details class="quiz"><summary>Why does EduMate return <code>MeResponse</code> instead of the <code>AppUser</code> entity?</summary>
+<div>To expose only what the client may see (never the password hash), to keep the API independent of the table
+design, and to avoid lazy-loading problems while writing JSON.</div></details>
+<details class="quiz"><summary>A logged-out request to <code>/api/attendance/me</code> gets 401. Does <code>AttendanceController</code> run?</summary>
+<div>No. Spring Security's filters run before the <code>DispatcherServlet</code> and send 401 themselves.</div></details>

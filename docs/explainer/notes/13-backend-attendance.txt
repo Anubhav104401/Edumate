@@ -1,0 +1,370 @@
+=== FILE backend/src/main/java/com/edumate/attendance/AttendanceMath.java
+>>> SUMMARY
+**Pure arithmetic for attendance**: no database, no Spring, just numbers in and numbers out. Keeping it separate makes it trivial to test (`AttendanceMathTest`) and impossible to get wrong by accident somewhere else.
+
+**The key idea: decide with whole numbers, round only for display.** "Is 18 out of 24 at least 75 %?" is answered as `18 × 100 >= 75 × 24`, i.e. `1800 >= 1800`: true, with no division and no rounding. If the code first computed 74.996 % and rounded it to 75.00 %, a student just under the line would be let through; with whole numbers that cannot happen.
+
+**Worked example** (a course with 3 lectures a week × 16 weeks = 48 planned classes, 24 held so far, 18 attended, threshold 75 %):
+- `percent(18, 24)` = 75.00;
+- `meetsThreshold(18, 24, 75)` = true (exactly 75 % is enough, the fix for **DEF-019**);
+- `classesCanMiss(18, 24, 48, 75)`: 24 classes remain; 75 % of 48 = 36 must be attended; 18 + 24 − 36 = **6** more classes may be missed;
+- `maxAchievablePercent(18, 24, 48)` = (18 + 24) ÷ 48 = 87.50 %.
+>>> 21-23
+`percent`: with no class held yet there is no percentage at all, so it answers `null` (shown as "—"), not 0 % and not 100 %.
+>>> 25-26
+attended × 100 ÷ held, divided to exactly 2 decimals with the school rounding rule (HALF_UP: 0.005 rounds up). `BigDecimal` is Java's exact decimal number type; `double` could show 74.99999999 for 75.
+>>> 30-32
+`meetsThreshold`: with no class held, nobody can be short yet, so the answer is "meets".
+>>> 34
+The exact, inclusive comparison, in whole numbers: attended × 100 ≥ threshold × held. `(long)` makes the multiplication use 64-bit numbers so it can never overflow.
+>>> 41-42
+`classesCanMiss`: the classes still to come (never negative, even if more were held than planned).
+>>> 43
+The classes that must be attended over the whole semester: threshold % of the planned total, rounded **up** (74.4 classes means 75 must be attended).
+>>> 44
+What the student will have if they attend everything from now on, minus what they need. The difference is how many they can still skip; a negative answer means even perfect attendance is no longer enough.
+>>> 48-51
+`maxAchievablePercent`: the best percentage still possible if every remaining class is attended.
+>>> 54-55
+`ceilDiv(a, b)`: whole-number division that rounds **up** (7 ÷ 2 = 4). Adding `b − 1` before the normal (rounding-down) division does the trick.
+
+=== FILE backend/src/main/java/com/edumate/attendance/AttendanceSession.java
+>>> SUMMARY
+**One class meeting whose attendance was taken**: course + section + date + period (e.g. CS301, section A, 28 Sep 2026, period 2), who took it and when. The present/absent marks themselves are `AttendanceRecord` rows pointing at this session.
+
+The table also has a UNIQUE constraint on (course, section, date, period), so even two **first** saves at the same instant cannot create two sessions for one class: the second insert is refused by the database.
+
+The `@Version` field is the fix for design defect **DR-01**: every save adds 1 to it, and Hibernate adds `WHERE version = <the number read>` to its UPDATE. If another teacher saved in between, the number no longer matches, no row is updated, and the save fails instead of silently overwriting their marks (**optimistic locking**).
+>>> 65
+`touch`: records who changed the sheet and when. Changing a field also marks the row as "dirty", so Hibernate will UPDATE it and raise the version number, even if no mark changed.
+
+=== FILE backend/src/main/java/com/edumate/attendance/AttendanceRecord.java
+>>> SUMMARY
+**Present or absent: one student in one attendance session.** A register of 60 students saved once creates one `AttendanceSession` row and 60 of these. Table `attendance_record` (created by the Flyway migration), with a unique pair (session, student), so a student can never be marked twice in the same class.
+
+=== FILE backend/src/main/java/com/edumate/attendance/AttendanceCount.java
+>>> SUMMARY
+**The answer row of a grouped attendance query**: `key` (a course id or a student id, depending on the query), `held` (classes conducted) and `attended` (classes present). The queries in `AttendanceRecordRepository` build these directly with `select new com.edumate.attendance.AttendanceCount(...)`, so the database does the counting and only one small row per course (or per student) travels to Java.
+
+=== FILE backend/src/main/java/com/edumate/attendance/MedicalExemption.java
+>>> SUMMARY
+**An approved medical exemption** for one student in one course: it lets the student sit that course's exam despite an attendance shortfall (rule **R2** of the decision table in `EligibilityEvaluator`). It stores the reason, whether it is approved, by whom, and when. Only approved exemptions count.
+
+=== FILE backend/src/main/java/com/edumate/attendance/MedicalExemptionRepository.java
+>>> SUMMARY
+Database access for medical exemptions. The two methods are **derived queries**: Spring Data reads the method name and writes the SQL itself. `findByStudentIdAndApprovedTrue(7)` becomes `select … from medical_exemption where student_id = 7 and approved = true`.
+
+=== FILE backend/src/main/java/com/edumate/attendance/AttendanceSessionRepository.java
+>>> SUMMARY
+Database access for attendance sessions. Besides the usual save/find methods it inherits from `JpaRepository`, it has one derived query that finds the session of one exact class meeting.
+>>> 11-12
+"Find the session with this course, section, date and period." Spring Data turns the long method name into `where course_id = ? and section = ? and session_date = ? and period = ?`. The answer is an `Optional`: a box that is empty when the register has not been taken yet.
+
+=== FILE backend/src/main/java/com/edumate/attendance/AttendanceRecordRepository.java
+>>> SUMMARY
+Database access for present/absent marks. The two `@Query` methods **count attendance with ONE grouped query each**, instead of loading every mark into Java or running one query per student (the "N+1 queries" problem). For a class of 60 students over 40 lectures that is 1 query instead of 60, and 60 small rows instead of 2,400.
+
+The queries are written in **JPQL**, the query language of JPA: it looks like SQL but talks about the Java classes (`AttendanceRecord`, `s.courseId`) instead of the tables, and Hibernate translates it into the SQL of whichever database is used (H2 or PostgreSQL).
+>>> 19-25
+For one student, per course: join each mark to its session (`where r.sessionId = s.id`), keep this student's marks, and group them by course. `count(r)` = classes held; `sum(case when r.present = true then 1 else 0 end)` = classes attended (1 for each present mark, 0 for each absent one, added up). `select new …AttendanceCount(…)` builds the result objects directly.
+>>> 29-35
+The same idea the other way round: for one course and section, per student.
+>>> 36-37
+`@Param("courseId")` connects each Java parameter to its `:courseId` placeholder in the query. Placeholders are filled in safely by the database driver, so a value can never change the query itself (no SQL injection).
+
+=== FILE backend/src/main/java/com/edumate/attendance/AttendanceCaptureService.java
+>>> SUMMARY
+**Teachers take and correct attendance here** (design element "AttendanceCaptureService", FR-11). Two operations:
+- `loadSheet`: the register for one class meeting, with the saved marks if it was already taken, otherwise everyone present;
+- `saveSheet`: store the marks, write the audit log, and queue guardian e-mails for anyone who has fallen below the minimum.
+
+**Concurrency protection** (the fix for **DR-01**) works in two layers:
+1. The browser sends back the **version number it loaded**. If the sheet has been saved by someone else since, the save is refused with **409 STALE_UPDATE** before anything is written.
+2. If two saves pass that check at the very same instant, the database UPDATE "… WHERE version = n" succeeds for only one of them; the other fails with the same 409 (Spring reports it as an `ObjectOptimisticLockingFailureException`, and `GlobalExceptionHandler` turns that into the 409 answer). `AttendanceConcurrencyIntegrationTest` proves this.
+
+**Other checks**: the teacher must teach the course (`CourseAccess.requireTaughtBy`), the date may not be in the future, and every student in the request must belong to the section.
+
+**The audit line** records only what changed, e.g. `before: 23BTRCS007=P` → `after: 23BTRCS007=A`; for a first save it records "58/60 present".
+>>> 66-68
+`loadSheet`: check that this teacher teaches the course (otherwise 403/404), then build the register. `readOnly = true` tells Spring and Hibernate nothing will be written, which lets them skip some work.
+>>> 72-73
+`saveSheet` runs in one transaction (`@Transactional` on line 71): either everything is saved or nothing is. First the same teacher check.
+>>> 74-75
+A date after today is refused with 400 FUTURE_DATE. `LocalDate.now(clock)` reads "today" from the injected `Clock`, so tests can pretend it is any day.
+>>> 77-78
+The section's students, as a map from id to student (`Collectors.toMap(Student::getId, Function.identity())`: the key is the id, the value is the student itself).
+>>> 79-81
+Every mark must be for a student of this section; otherwise 400 NOT_IN_SECTION. (Without this, a teacher could send marks for students of another course.)
+>>> 85-87
+The time now, and the existing session for this class meeting, if any.
+>>> 89-91
+Three things to decide below: the session, its current marks, and the audit action name.
+>>> 92-96
+**First save**: create the session (version 0), with no marks yet; the action is ATTENDANCE_TAKEN.
+>>> 97-98
+**A correction**: use the existing session…
+>>> 99-101
+…but only if the version the browser loaded is still the current one. Missing or different → **409 STALE_UPDATE** "Another teacher saved this attendance sheet after you opened it. Reload to see their changes." Nothing has been written yet.
+>>> 103
+Mark the session as changed (so its version goes up on save).
+>>> 104-106
+The current marks, as a map from student id to mark; the action is ATTENDANCE_UPDATED.
+>>> 109-110
+Lists of the changes, for the audit log ("23BTRCS007=P").
+>>> 111-113
+For each mark sent: the student's current mark, if any, and their USN.
+>>> 114-115
+No mark yet → create one.
+>>> 116-119
+A mark that changed → note the old and new value (P = present, A = absent) and update it. Hibernate notices the change and writes it at the end of the transaction (**dirty checking**: no explicit save needed for a loaded entity). Unchanged marks are left alone.
+>>> 122
+`flush()` sends the pending UPDATEs to the database **now**, not at the end. If another save won the race, the version check fails here, inside this request, and the teacher gets the 409.
+>>> 124-127
+The audit line: who, what, which session, and either the changed marks or, for a first save, "58/60 present".
+>>> 129
+Queue e-mails to the guardians of anyone now below the minimum (at most once a week per guardian and course, see `ShortfallNotifier`).
+>>> 130
+Answer with the fresh register, which carries the new version number, so the teacher can keep editing and save again.
+>>> 133-136
+`buildSheet`: the section's students, and the session of this class meeting if it exists.
+>>> 137-140
+The saved marks, as a map from student id to present/absent; an empty map when the register was never taken. (`Optional.map` runs only when the session exists; `orElse` gives the fallback.)
+>>> 141-143
+One row per student, in USN order; a student without a saved mark counts as present (`getOrDefault(…, true)`), which is what "everyone starts as present" on the screen means.
+>>> 144-148
+The register: session id and version (both `null` before the first save), the course, section, date, period, whether it was already taken, and the rows.
+>>> 151-153
+`roster`: the students of the course's programme and semester in this section, in USN order.
+>>> 154-157
+No students → 404 "Section X not found" (a typo in the section, for example).
+>>> 171-176
+The request body, checked by Bean Validation before the method runs (`@Valid` in the controller): a course id, a section of 1–10 characters, a date, a period from 1 to 6, the version (may be null for a first save), and at least one mark, each of which is checked too (`@Valid` on the list).
+
+=== FILE backend/src/main/java/com/edumate/attendance/AttendanceController.java
+>>> SUMMARY
+**Every attendance web address.** The controller only translates HTTP into method calls; the rules live in the services, and who may call what is decided in `RoleMatrix`.
+
+| Method and address | Who | What |
+|---|---|---|
+| `GET /api/attendance/sessions?courseId&section&date&period` | faculty | open a register |
+| `PUT /api/attendance/sessions` | faculty | save a register (with its version) |
+| `GET /api/attendance/me` | student, guardian | my (my child's) attendance per course |
+| `GET /api/attendance/courses/{id}/summary?section` | faculty, staff | the whole class |
+| `GET /api/attendance/courses/{id}/shortfall?section&threshold` | faculty, staff | students below a threshold |
+| `POST /api/attendance/courses/{id}/notify-guardians?section` | faculty, staff | queue guardian e-mails (FR-31) |
+>>> 43-48
+`loadSheet`: the logged-in user (`CurrentUser`, filled in from the token by a resolver) and four query parameters. `@RequestParam(defaultValue = "A")` makes the section optional. `@DateTimeFormat(iso = DATE)` tells Spring the date comes as `2026-09-28`.
+>>> 49
+Hand over to the capture service; Jackson turns the returned record into JSON.
+>>> 54-56
+`saveSheet`: the JSON body becomes a `SaveSheetRequest` (`@RequestBody`), which is validated first (`@Valid`); a bad body is answered with 400 and the field messages before this method even runs.
+>>> 61-62
+`mine`: `requireStudentId()` gives the student's own id, or for a guardian their child's id, taken from the login token, never from the request. So nobody can ask for another student's attendance.
+>>> 66-69
+`courseSummary`: check that this user may see this course (its teacher, or staff), then list the whole section.
+>>> 73-77
+`shortfall`: the same check, then the students below the threshold (75 unless given).
+>>> 81-84
+`notifyGuardians`: the same check, then queue the e-mails and answer how many were queued and how many guardians had already been told this week.
+
+=== FILE backend/src/main/java/com/edumate/attendance/AttendanceSummaryService.java
+>>> SUMMARY
+**Turns raw present/absent marks into what people see**: percentages, "classes you can still miss", a status (OK / WARNING / SHORTFALL), and shortfall lists.
+
+**Every method uses a fixed, small number of queries, whatever the class size**: one grouped count query (see `AttendanceRecordRepository`), one query for the students or courses, and one for exemptions; the rest is done in Java on those few rows.
+
+The status rule:
+- **SHORTFALL**: below the threshold now;
+- **WARNING**: at or above it, but at most 2 more classes may be missed before falling below it by the end of the semester;
+- **OK**: otherwise.
+
+The whole class is `@Transactional(readOnly = true)`: it never writes.
+>>> 45-46
+`forStudent`: load the student (404 if unknown).
+>>> 47-48
+The courses of the student's programme and current semester, in code order.
+>>> 49-50
+One grouped query for all the student's counts, turned into a map from course id to count.
+>>> 51-53
+The courses in which the student has an **approved** medical exemption, as a set of course ids.
+>>> 55-57
+One row per course: its counts (or none if no class was held yet) and whether an exemption applies.
+>>> 61-64
+`forCourse`: load the course, and count every student's attendance in this section with one query.
+>>> 65
+The threshold (75), from `application.yml` (`edumate.academic.attendance-threshold-percent`).
+>>> 67-72
+For each student of the section, in USN order: their counts, or 0 held / 0 attended if they have none yet.
+>>> 73-75
+Their row: held, attended, the percentage and whether they meet the threshold.
+>>> 77
+Collect the rows into a list.
+>>> 81-82
+`shortfall`: the threshold asked for, or the configured 75 if none was given.
+>>> 83-84
+A threshold outside 1–100 is refused with 400 INVALID_THRESHOLD.
+>>> 86-88
+Everyone in the section who has had at least one class and does not meet the threshold. (A student with no classes held is not "short"; there is nothing to be short of yet.)
+>>> 91-92
+The classes planned for a course over the semester: weekly hours × weeks per semester (`edumate.academic.weeks-per-semester: 16` in `application.yml`), e.g. 3 × 16 = 48.
+>>> 95-101
+`toCourseAttendance`: the threshold, the counts (0 if none), the planned total, whether the student meets the threshold now, and how many classes they can still miss (`AttendanceMath`).
+>>> 103-109
+The status: SHORTFALL below the threshold, WARNING when at most 2 classes may still be missed, otherwise OK.
+>>> 111-113
+The row sent to the browser, including the best percentage still achievable.
+
+=== FILE backend/src/main/java/com/edumate/attendance/ShortfallNotifier.java
+>>> SUMMARY
+**Queues an e-mail to the guardian of every student below the attendance threshold** in a course section (requirement **FR-31**). It is called by the "E-mail guardians" button and automatically after every attendance save.
+
+It only **queues** messages in the outbox (`NotificationService.enqueue`); the separate `NotificationDispatcher` sends them (the fix for DR-08: a slow mail server can never slow down or break saving attendance).
+
+**At most once a week.** Each message has a **deduplication key** such as `shortfall:7:3:2026-W40` (student 7, course 3, ISO week 40 of 2026). The outbox refuses a second message with the same key, so saving attendance ten times in a week still sends a guardian one e-mail about that course; next week's key is different, so a student who is still short triggers a new reminder.
+>>> 42-43
+`notifySection`: the students of this course section below the (configured) threshold.
+>>> 44-46
+The section's students by id, to get their names, USNs and guardian e-mails.
+>>> 48-49
+This week's label, e.g. `2026-W40`. **ISO weeks** start on Monday, and the "week-based year" is used so that the last days of December that belong to week 1 of the next year get that next year's number.
+>>> 50-51
+The USNs for which an e-mail was queued, and how many were skipped as already sent this week.
+>>> 53-55
+For each student who is short: the subject "Attendance shortfall: Aarav Sharma in CS301"…
+>>> 56-59
+…and the body: "Dear <guardian name>, attendance of Aarav Sharma (23BTRCS007) in Operating Systems is 72.50% (29 of 40 classes), below the required minimum. Please contact the class teacher."
+>>> 60
+The deduplication key: student, course and week.
+>>> 61-62
+Queue the e-mail to the guardian's address. `enqueue` answers `false` when a message with the same key already exists (or when the guardian has no e-mail address).
+>>> 63-67
+Count it as queued or as already notified.
+>>> 69
+The answer: how many were short, how many e-mails were queued, how many were skipped, and for whom.
+>>> 72-73
+The greeting: the guardian's name, or "Parent/Guardian" if it is not known.
+
+=== FILE backend/src/main/java/com/edumate/attendance/EligibilityEvaluator.java
+>>> SUMMARY
+**Decides whether a student may be issued a hall ticket** for a course (design element "EligibilityEvaluator", FR-12). It encodes the **decision table** of the SQA report (Table 3.9):
+
+| Condition / Action | R1 | R2 | R3 | R4 | R5 |
+|---|---|---|---|---|---|
+| Attendance ≥ 75 % | Y | N | Y | N | Y |
+| Fee fully paid | Y | Y | N | N | Y |
+| Internal assessment complete | Y | Y | Y | Y | N |
+| Medical exemption approved | N | Y | N | N | N |
+| **Issue hall ticket** | **Yes** | **Yes** | No | No | No |
+
+**The table lists 5 of the 16 possible combinations** of four yes/no conditions. The code does not only look the case up in the table (that would leave 11 cases undecided); it applies **three independent checks** that cover all 16, and then also reports which table rule the case matched ("derived" if none). So every decision is complete **and** traceable to the report.
+
+The three checks, each adding a reason when it fails:
+1. fee not paid → "Fee dues";
+2. attendance short **and** no medical exemption → "Attendance shortfall";
+3. assessment not complete → "Assessment pending".
+
+Eligible means no reasons. `EligibilityEvaluatorTest` runs the report's test cases TC-008 to TC-010 against it, including the 75.00 % boundary (DEF-019).
+>>> 38-43
+The five rules as data: rule id, then attendance, fee, assessment and medical exemption, exactly as in the table's columns. Keeping them as data (not as `if` statements) means they can be shown ("Rule R3") and tested one by one.
+>>> 48
+The threshold (75), read once from the configuration.
+>>> 56-58
+`attendanceSatisfied(percent)`: a percentage below 0 or above 100 (or missing) is invalid input and is refused with 400 INVALID_PERCENTAGE (test cases TC-008a and TC-008b). `compareTo` is how `BigDecimal` values are compared (< 0 means "smaller").
+>>> 60
+**≥**, not >: exactly 75.00 % is eligible (the fix for DEF-019).
+>>> 64-65
+The same check from raw counts, with no rounding at all (`AttendanceMath.meetsThreshold`). This is the one used for real students.
+>>> 69
+`decide`: the four conditions in, a decision out.
+>>> 71-73
+Check 1: unpaid fee → "Fee dues".
+>>> 75-76
+Check 2: short attendance is excused by an approved medical exemption (rule R2); otherwise → "Attendance shortfall".
+>>> 78-79
+Check 3: incomplete internal assessment → "Assessment pending".
+>>> 81-85
+Which table rule matches this exact combination, if any; otherwise "derived" (decided by the checks alone).
+>>> 86
+The decision: eligible when there are no reasons, the rule, and an unchangeable copy of the reasons (`List.copyOf`).
+>>> 98-99
+A rule matches when all four conditions are equal to its columns.
+
+=== FILE backend/src/test/java/com/edumate/attendance/AttendanceMathTest.java
+>>> SUMMARY
+**Unit tests for the attendance arithmetic.** No Spring, no database: each test calls a static method of `AttendanceMath` and checks the answer, so the whole class runs in milliseconds. The assertions use **AssertJ** (`assertThat(x).isEqualTo(y)`), which reads almost like English and prints a clear message when a check fails.
+>>> 13-16
+Percentages are rounded half-up to 2 decimals **for display**: 18/24 = 75.00, 2/3 = 66.67 (66.666… rounded up), and 0/0 has no percentage at all (`null`). `isEqualByComparingTo("75.00")` compares the numbers' values, so `75.0` and `75.00` count as equal.
+>>> 20-21
+With no class held yet, nobody is short.
+>>> 25-27
+"Can still miss" looks at the whole semester, not just the classes so far. 64 planned, 75 % → 48 needed; 30 attended + 32 remaining = 62 possible → 14 to spare.
+>>> 29
+The example from the explainer: 18 of 24, 48 planned → 6 to spare.
+>>> 31
+10 of 30 attended, 40 planned: 30 needed, at most 20 reachable → negative: the minimum can no longer be reached.
+>>> 35-36
+The best still possible: (10 + 10 remaining) ÷ 40 = 50.00 %.
+
+=== FILE backend/src/test/java/com/edumate/attendance/EligibilityEvaluatorTest.java
+>>> SUMMARY
+**The hall-ticket eligibility rule, tested with the two test-design techniques of the SQA report**:
+- **Boundary value analysis** (Table 3.8): values just below, at and just above the 75 % line (TC-008, TC-009, TC-010), the lowest and highest valid values, and the invalid values just outside the range (TC-008a/b);
+- **the decision table** (Table 3.9): one test per rule R1–R5, checking the decision, the rule reported and the exact reasons; plus a combination the table does not list, which must still be decided.
+
+**Parameterised tests.** `@ParameterizedTest` + `@CsvSource` run the same test method once per line of data. Each line is one test case with its own name in the report (`name = "{0}: {1}% -> eligible = {2}"` fills in the first three values), so one method gives five clearly named results.
+>>> 24-30
+The boundary cases, one per line: name, percentage, expected answer. 74.99 → not eligible; **75.00 → eligible** (the DEF-019 fix); 75.01 → eligible; 0 → not; 100 → eligible.
+>>> 32-33
+Check each: `.as(testCase)` puts the case's name into the failure message.
+>>> 36-38
+Invalid inputs, −1 and 101, …
+>>> 39-42
+…must throw an `ApiException` whose message says "between 0 and 100". `assertThatThrownBy(() -> …)` runs the code and checks the exception it throws.
+>>> 47-48
+Raw counts are compared exactly: 18 of 24 is exactly 75 % and eligible…
+>>> 49
+…7,499 of 10,000 (74.99 %) is not…
+>>> 50
+…and 29,999 of 40,000 (74.9975 %) is not either, even though **rounded** to 2 decimals it would show as 75.00 %. This is why decisions use whole numbers.
+>>> 53-59
+The decision table, one line per rule: rule, attendance, fee, assessment, medical exemption, expected eligibility, expected reasons (joined with `;`). `delimiter = '|'` separates columns with `|`, because the reasons themselves contain no `|` but might contain commas.
+>>> 61-63
+Run the decision for that line's four conditions…
+>>> 64-66
+…and check the rule reported, the decision, and the reasons in order.
+>>> 71-75
+All four conditions false is not one of the table's five rules: it must still be decided (not eligible), marked "derived", and give all three reasons in a fixed order.
+
+=== FILE backend/src/test/java/com/edumate/attendance/AttendanceConcurrencyIntegrationTest.java
+>>> SUMMARY
+**Proves the DR-01 fix end to end**: two teachers editing the same register can no longer overwrite each other silently. It is an **integration test**: it starts the whole Spring application with an in-memory database and the demo data (`IntegrationTestBase`), and sends real HTTP requests through **MockMvc** (Spring's way to call the controllers as if from a browser, without opening a network port), with a real login token.
+
+The story it plays:
+1. Teacher Meera opens a register that was never taken → `alreadyTaken: false`.
+2. She saves it (no version yet) → version **0**.
+3. She saves again with version 0 → accepted, now version **1**.
+4. A save that still carries version **0** (what a second teacher who opened the register before step 3 would send) → **409 STALE_UPDATE**, and nothing is overwritten.
+
+A second test checks that a teacher cannot even open the register of a course they do not teach (403).
+>>> 24-28
+Log in as Meera Nair (`bearer` returns "Bearer <token>") and read her first course's id from `GET /api/academic/courses/mine`. `read(json, "$[0].id")` uses a **JsonPath** expression: `$` is the whole answer, `[0]` its first element, `.id` its id.
+>>> 29
+A date two days ago (attendance for the future is refused).
+>>> 31-35
+Open the register for that course, section A, that date, period 6: expect 200 and `alreadyTaken: false`.
+>>> 36-38
+Everyone's id from the register, turned into the JSON list of marks `[{"studentId":1,"present":true},…]`. `Collectors.joining(",", "[", "]")` glues the pieces with commas and wraps them in brackets.
+>>> 39
+A template for the request body; `%d` and `%s` are filled in by `formatted(...)` below.
+>>> 42-44
+First save, with `"version": null`: accepted, and the answer's version is 0.
+>>> 45-47
+Second save with version 0: accepted, and the version becomes 1.
+>>> 50-53
+A save still based on version 0: refused with 409 and the code STALE_UPDATE.
+>>> 57-58
+Log in as another teacher, Vikram Das…
+>>> 59-62
+…and find Meera's first course.
+>>> 63-66
+Vikram asks for that course's register: 403 Forbidden, because only the course's own teacher may take its attendance.

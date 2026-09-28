@@ -1,0 +1,121 @@
+<!-- level: 3 -->
+<h1>Caching, background jobs and start-up tasks</h1>
+
+<p class="lead">Three kinds of work do not fit "one request, one answer": answers worth remembering (caching), work that
+should happen on a timer or later (scheduling, the outbox), and work that must happen once when the application starts
+(runners). Spring handles each with an annotation and an abstraction you can plug a real technology into.</p>
+
+<h2>Caching with <code>@Cacheable</code></h2>
+<p>On results morning, thousands of students refresh "My results" again and again, and the answer does not change until
+the next publication. Computing it each time wastes the database. EduMate caches it:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/exam/ResultQueryService.java" data-lines="40-42" data-expect="@Cacheable(cacheNames = &quot;publishedResults&quot;, key = &quot;#studentId&quot;)"></pre>
+<p>The first call for student 7 runs the method and stores the result in the cache <code>publishedResults</code> under the
+key <code>7</code>. Every later call with <code>7</code> returns the stored result <em>without running the method</em>.
+<code>key = "#studentId"</code> is a SpEL expression naming the parameter (by default, all parameters form the key).</p>
+<p>A cache is only correct if it is emptied when the truth changes. Publishing new results does exactly that:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/exam/ResultPublicationService.java" data-lines="78-80" data-expect="@CacheEvict(cacheNames = &quot;publishedResults&quot;, allEntries = true)"></pre>
+<table>
+<thead><tr><th>Annotation</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>@Cacheable</code></td><td>return the cached value if present; otherwise run and store</td></tr>
+<tr><td><code>@CacheEvict</code></td><td>remove one key, or <code>allEntries = true</code> for everything in the cache (after the method, by default)</td></tr>
+<tr><td><code>@CachePut</code></td><td>always run, and store the new value (refresh a key)</td></tr>
+<tr><td><code>@Caching</code></td><td>several of the above on one method</td></tr>
+<tr><td><code>@EnableCaching</code></td><td>switches the whole mechanism on (on <code>EduMateApplication</code>)</td></tr>
+</tbody></table>
+
+<h3>Where the cache lives: providers</h3>
+<p>The annotations are an abstraction; the storage is configuration. In development EduMate uses Spring's simple
+in-memory maps; the <code>docker</code> profile switches to Redis, shared by all backend copies and surviving restarts:</p>
+<pre class="code" data-src="backend/src/main/resources/application.yml" data-lines="34-36" data-expect="type: simple"></pre>
+<pre class="code" data-src="backend/src/main/resources/application-docker.yml" data-lines="10-17" data-expect="type: redis"></pre>
+<p>No Java code changes between the two. Values sent to Redis must be serialisable; by default Spring's Redis cache uses
+Java serialization, which is why the cached records are declared <code>implements Serializable</code>:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/exam/ResultQueryService.java" data-lines="65-73" data-expect="implements Serializable"></pre>
+<p>(A JSON serializer can be configured with a <code>RedisCacheConfiguration</code> bean; then the <code>Serializable</code>
+is unnecessary and the cached values are human-readable.) Other providers work the same way: Caffeine for a fast local
+cache with size limits, Hazelcast, or any JCache implementation.</p>
+<div class="callout warn"><strong>Caching traps</strong>
+<ul>
+<li><strong>Self-invocation</strong>: like <code>@Transactional</code>, <code>@Cacheable</code> works through a proxy; calling
+the method from the same class skips the cache.</li>
+<li><strong>Security</strong>: the key must include everything that makes the answer differ. Caching "my results" by
+<code>studentId</code> is safe because the id comes from the login token; a key that forgot the user would serve one
+student's results to another.</li>
+<li><strong>Staleness</strong>: every write path that changes the answer must evict, or a time-to-live must bound how old an
+answer may be. EduMate does both: eviction on publish and a 10-minute TTL in Redis.</li>
+<li><strong>Mutable values</strong>: with an in-memory cache, callers receive the <em>same object</em>; records (immutable)
+avoid accidental edits of the cached copy.</li>
+</ul></div>
+
+<h2>Scheduled jobs and the outbox pattern</h2>
+<p><strong>The problem (design finding DR-08):</strong> computing results used to send e-mails and SMS itself. A slow or
+failing SMS provider then slowed down or broke the result computation, and a rollback after sending could not un-send
+a message.</p>
+<p><strong>The fix: the outbox pattern.</strong> Business code only <em>writes a row</em> into the
+<code>notification_outbox</code> table, in the same transaction as the business change. A separate scheduled job sends
+what is waiting:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/notifications/NotificationService.java" data-lines="28-36" data-expect="public boolean enqueue("></pre>
+<pre class="code" data-src="backend/src/main/java/com/edumate/notifications/NotificationDispatcher.java" data-lines="22-53" data-expect="@Scheduled(fixedDelayString = &quot;PT5S&quot;, initialDelayString = &quot;PT10S&quot;)"></pre>
+<ul>
+<li><code>@EnableScheduling</code> (on the main class) activates <code>@Scheduled</code> methods on any bean.</li>
+<li><code>fixedDelayString = "PT5S"</code>: 5 seconds after the previous run <em>finished</em> (an ISO-8601 duration).
+<code>fixedRate</code> would count from the previous <em>start</em>; <code>cron = "0 0 7 * * MON-FRI"</code> runs at 7:00 on
+weekdays (Spring cron has a seconds field first).</li>
+<li>The message is queued only if the business transaction commits (it is part of it), and it is sent even if the
+provider is down for an hour: failed sends are retried up to 3 times.</li>
+<li>The deduplication key (<code>existsByDedupKey</code>, plus a UNIQUE column) stops the same message being queued twice.</li>
+</ul>
+<div class="callout warn"><strong>Several copies of the application</strong>
+Every running copy runs every <code>@Scheduled</code> method. With two backends, both could pick the same pending message.
+Solutions: lock the rows being processed (<code>SELECT … FOR UPDATE SKIP LOCKED</code>), use a scheduler lock library
+such as ShedLock, or run jobs on one designated instance. EduMate, run as one backend, keeps it simple and notes the
+limit.</div>
+
+<h2>Running work in the background: <code>@Async</code> and virtual threads</h2>
+<p><code>@EnableAsync</code> plus <code>@Async</code> on a method makes callers return immediately while the method runs on
+another thread (returning <code>void</code> or a <code>CompletableFuture</code>). It is useful for work the user need not
+wait for, but it is <em>not</em> durable: if the application stops, the work is lost. For anything that must happen (a
+receipt e-mail), prefer the outbox.</p>
+<p>Java 21's <strong>virtual threads</strong> make blocking cheap: set <code>spring.threads.virtual.enabled=true</code>
+and Tomcat, <code>@Async</code> and the scheduler run tasks on virtual threads, so thousands of requests waiting on the
+database or a slow provider no longer need thousands of expensive platform threads. The Level 4 performance chapter
+discusses when this helps.</p>
+
+<h2>Start-up tasks: <code>ApplicationRunner</code></h2>
+<p>A bean implementing <code>ApplicationRunner</code> (or <code>CommandLineRunner</code>) is called once, after the
+context is ready and Tomcat has started. EduMate creates missing campuses from the configuration:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/campus/TenantProvisioner.java" data-lines="16-50" data-expect="implements ApplicationRunner"></pre>
+<p>Adding a campus is a configuration change (<code>edumate.tenants</code> in the YAML), never a code change.
+<code>@Order(1)</code> makes it run before the demo seeder, which needs the campuses:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/config/DemoDataSeeder.java" data-lines="103-106" data-expect="@ConditionalOnProperty(prefix = &quot;edumate.demo&quot;, name = &quot;seed&quot;, havingValue = &quot;true&quot;)"></pre>
+<p><code>@ConditionalOnProperty</code> means the seeder <strong>bean does not even exist</strong> unless
+<code>edumate.demo.seed=true</code>: in production it cannot run by accident. This is the same conditional mechanism
+Spring Boot's auto-configuration is built on (Level 4).</p>
+<div class="callout tip"><strong>Runners versus events</strong>
+Runners are for "do this once at start-up". To react to the lifecycle more precisely, listen for events:
+<code>@EventListener(ApplicationReadyEvent.class)</code> runs when the application is fully ready to serve (after the
+runners). Do not put slow work in a constructor or <code>@PostConstruct</code>: it delays the whole start-up and runs
+before other beans are ready.</div>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Turn on SQL logging, call <code>GET /api/exams/results/me</code> twice as the student, and count the queries: the
+second call runs none.</li>
+<li>Change the dispatcher to <code>fixedDelayString = "PT30S"</code>, publish results, and watch the Outbox page: messages
+wait longer in PENDING.</li>
+<li>Add a campus under <code>edumate.tenants</code> and restart: look for "Provisioned new campus" in the log.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>What is the difference between <code>fixedDelay</code> and <code>fixedRate</code>?</summary>
+<div><code>fixedDelay</code> waits the given time after the previous run finished; <code>fixedRate</code> starts runs at a
+fixed interval measured from the previous start, whatever their duration.</div></details>
+<details class="quiz"><summary>Why does EduMate write e-mails to an outbox table instead of sending them directly?</summary>
+<div>So a slow or failing provider cannot slow down or break the business operation, the message is queued atomically
+with the change it announces, and failed sends can be retried later.</div></details>
+<details class="quiz"><summary>What would go wrong if publishing results did not evict the <code>publishedResults</code> cache?</summary>
+<div>Students would keep receiving the cached, older list of results until the entries expired.</div></details>
+<details class="quiz"><summary>How is it guaranteed that demo data is never seeded in production?</summary>
+<div>The seeder is annotated <code>@ConditionalOnProperty(… seed = "true")</code>; with the property false the bean is
+never created, so its code cannot run.</div></details>

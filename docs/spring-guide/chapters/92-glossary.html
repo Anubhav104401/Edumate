@@ -1,0 +1,66 @@
+<!-- level: 5 -->
+<h1>Glossary</h1>
+
+<p class="lead">The words of the Spring world, in plain language.</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><strong>Actuator</strong></td><td>Spring Boot's production endpoints: health, info, metrics, configuration, log levels.</td></tr>
+<tr><td><strong>AOP (aspect-oriented programming)</strong></td><td>Adding behaviour (timing, transactions, security) around methods chosen by a rule, without editing them. Spring does it with proxies.</td></tr>
+<tr><td><strong>AOT (ahead-of-time) processing</strong></td><td>Doing at build time what Spring normally does at start-up (evaluating conditions, creating bean definitions), for faster start-up and native images.</td></tr>
+<tr><td><strong>ApplicationContext</strong></td><td>The Spring container: it creates, wires, holds and destroys the beans, and publishes events.</td></tr>
+<tr><td><strong>ApplicationRunner</strong></td><td>A bean whose <code>run</code> method is called once after start-up.</td></tr>
+<tr><td><strong>Auto-configuration</strong></td><td>Configuration classes shipped with Spring Boot, applied when their conditions match (a library is present, no bean of that type exists…).</td></tr>
+<tr><td><strong>Bean</strong></td><td>An object created and managed by the Spring container.</td></tr>
+<tr><td><strong>Bean definition</strong></td><td>The recipe for a bean (its class, scope, dependencies), known before the bean exists.</td></tr>
+<tr><td><strong>BeanPostProcessor</strong></td><td>A hook that sees every bean after creation and may modify or wrap it (this is where proxies are made).</td></tr>
+<tr><td><strong>BOM (bill of materials)</strong></td><td>A list of library versions tested together; Spring Boot's parent POM provides one.</td></tr>
+<tr><td><strong>Component scanning</strong></td><td>Searching packages for annotated classes to turn into beans.</td></tr>
+<tr><td><strong>Condition</strong></td><td>A test (<code>@ConditionalOn…</code>) deciding whether a bean or configuration applies.</td></tr>
+<tr><td><strong>Connection pool</strong></td><td>A set of open database connections lent to requests and returned (HikariCP).</td></tr>
+<tr><td><strong>Controller</strong></td><td>A class whose methods handle HTTP requests.</td></tr>
+<tr><td><strong>CSRF</strong></td><td>Cross-site request forgery: another site making the browser send a request with its cookies. Irrelevant for header-token APIs.</td></tr>
+<tr><td><strong>Dependency injection (DI)</strong></td><td>Giving an object its collaborators from outside (usually through its constructor) instead of letting it create them.</td></tr>
+<tr><td><strong>DispatcherServlet</strong></td><td>Spring MVC's front controller: the one servlet that routes every request to a controller method.</td></tr>
+<tr><td><strong>Dirty checking</strong></td><td>Hibernate comparing managed entities with their loaded state and writing <code>UPDATE</code>s for changes, without explicit saves.</td></tr>
+<tr><td><strong>DTO</strong></td><td>Data transfer object: a simple object (a record, in EduMate) shaped for a request or a response.</td></tr>
+<tr><td><strong>Entity</strong></td><td>A class mapped to a database table (<code>@Entity</code>).</td></tr>
+<tr><td><strong>Fat jar</strong></td><td>One jar containing the application and all its libraries, runnable with <code>java -jar</code>.</td></tr>
+<tr><td><strong>Filter chain</strong></td><td>The ordered servlet filters every request passes through; Spring Security is one of them, containing its own chain.</td></tr>
+<tr><td><strong>Flyway</strong></td><td>A tool that applies versioned SQL migration files to a database, once each, in order.</td></tr>
+<tr><td><strong>Hibernate</strong></td><td>The JPA implementation that generates SQL and manages entities.</td></tr>
+<tr><td><strong>Idempotent</strong></td><td>Doing it twice has the same effect as doing it once (a replay-safe payment callback).</td></tr>
+<tr><td><strong>Inversion of control (IoC)</strong></td><td>The framework, not your code, creates and connects the objects and calls your code.</td></tr>
+<tr><td><strong>Jackson</strong></td><td>The JSON library Spring uses to convert objects to JSON and back (version 3 in Boot 4).</td></tr>
+<tr><td><strong>Jakarta EE</strong></td><td>The standard Java enterprise APIs (Servlet, Persistence, Validation…), formerly Java EE (<code>javax.*</code> → <code>jakarta.*</code>).</td></tr>
+<tr><td><strong>JPA</strong></td><td>Jakarta Persistence: the standard API for mapping objects to relational tables.</td></tr>
+<tr><td><strong>JPQL</strong></td><td>JPA's query language: SQL-like, written against entities and fields.</td></tr>
+<tr><td><strong>JWT</strong></td><td>JSON Web Token: signed claims (who, role, expiry) a client sends with each request.</td></tr>
+<tr><td><strong>Lazy loading</strong></td><td>Loading related data only when first accessed, by an extra query.</td></tr>
+<tr><td><strong>Lost update</strong></td><td>One user's save silently overwriting another's; prevented by optimistic locking.</td></tr>
+<tr><td><strong>Micrometer</strong></td><td>The metrics and observation library behind Spring Boot's metrics and tracing.</td></tr>
+<tr><td><strong>MockMvc</strong></td><td>A test tool that sends requests through Spring MVC and security without a network port.</td></tr>
+<tr><td><strong>Modular monolith</strong></td><td>One deployable application divided into modules with explicit boundaries.</td></tr>
+<tr><td><strong>N+1 problem</strong></td><td>One query for a list, then one more per element: a common performance bug.</td></tr>
+<tr><td><strong>Native image</strong></td><td>An executable compiled ahead of time by GraalVM: fast start, small memory, closed world.</td></tr>
+<tr><td><strong>Optimistic locking</strong></td><td>Detecting concurrent changes at write time with a version column.</td></tr>
+<tr><td><strong>Outbox pattern</strong></td><td>Writing outgoing messages to a table in the business transaction, and sending them from a separate job.</td></tr>
+<tr><td><strong>Persistence context</strong></td><td>Hibernate's per-transaction map of managed entities (identity, dirty checking, write-behind).</td></tr>
+<tr><td><strong>Pessimistic locking</strong></td><td>Locking rows when reading them (<code>SELECT … FOR UPDATE</code>) so others wait.</td></tr>
+<tr><td><strong>Profile</strong></td><td>A named set of settings and beans for an environment (<code>dev</code>, <code>docker</code>).</td></tr>
+<tr><td><strong>Propagation</strong></td><td>How a transactional method behaves when called inside another transaction (join, new, …).</td></tr>
+<tr><td><strong>Proxy</strong></td><td>A generated object standing in front of a bean, adding behaviour around method calls.</td></tr>
+<tr><td><strong>Relaxed binding</strong></td><td>Matching settings regardless of spelling style (<code>jwt-secret</code>, <code>JWT_SECRET</code>, <code>jwtSecret</code>).</td></tr>
+<tr><td><strong>Repository</strong></td><td>An interface for data access whose implementation Spring Data generates.</td></tr>
+<tr><td><strong>Resource server</strong></td><td>An API that accepts access tokens issued by someone (in EduMate, itself).</td></tr>
+<tr><td><strong>Scope</strong></td><td>How many instances of a bean exist and for how long (singleton, prototype, request, session).</td></tr>
+<tr><td><strong>SecurityContext</strong></td><td>The per-request holder of the authenticated user.</td></tr>
+<tr><td><strong>Self-invocation</strong></td><td>A method calling another method of the same object, bypassing the proxy (so its annotations do nothing).</td></tr>
+<tr><td><strong>SpEL</strong></td><td>Spring Expression Language: <code>#studentId</code>, <code>hasRole('ADMIN')</code>.</td></tr>
+<tr><td><strong>Starter</strong></td><td>A dependency that brings a tested set of libraries for one capability.</td></tr>
+<tr><td><strong>Stateless</strong></td><td>Keeping no per-user state on the server between requests; each request carries what is needed.</td></tr>
+<tr><td><strong>Transaction</strong></td><td>A group of database operations that succeed or fail together.</td></tr>
+<tr><td><strong>Twelve-factor app</strong></td><td>A set of practices for cloud applications, including configuration from the environment.</td></tr>
+<tr><td><strong>Virtual thread</strong></td><td>A lightweight Java thread (Java 21) that makes blocking I/O cheap at high concurrency.</td></tr>
+</tbody></table></div>

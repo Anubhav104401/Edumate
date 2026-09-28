@@ -8,6 +8,8 @@
  *                ->  FormData { type, file }  ->  POST /api/admissions/applications/{id}/documents
  *                ->  backend checks everything again, stores the file, answers with its details
  */
+import { AnimatePresence, motion } from 'motion/react';
+import { CloudUpload, Eye, FileCheck2, FileImage, FileText, Trash } from 'lucide-react';
 import { useRef, useState, type DragEvent } from 'react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/http';
@@ -17,7 +19,7 @@ import { ACCEPTED_KINDS, REQUIRED_DOCUMENTS, acceptAttribute, checkFile, describ
 import { formatBytes, formatDateTime } from '../utils/format';
 import { useConfirm } from './ConfirmDialog';
 import { useToast } from './Toast';
-import { Badge } from './ui';
+import { Badge, IconTile } from './ui';
 
 interface Props {
   applicationId: number;
@@ -37,6 +39,7 @@ export function DocumentUpload({ applicationId, type, document, editable, onChan
   const label = t.documentTypes[type];
   const kinds = ACCEPTED_KINDS[type];
   const required = REQUIRED_DOCUMENTS.includes(type);
+  const onlyImages = !kinds.includes('PDF');
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -79,7 +82,7 @@ export function DocumentUpload({ applicationId, type, document, editable, onChan
   }
 
   async function remove() {
-    if (!document || !(await confirm(t.upload.confirmDelete(label)))) return;
+    if (!document || !(await confirm(t.upload.confirmDelete(label), t.common.remove, 'danger'))) return;
     try {
       await api.admissions.deleteDocument(document.id);
       toast.success(t.upload.deletedToast(label));
@@ -90,24 +93,30 @@ export function DocumentUpload({ applicationId, type, document, editable, onChan
   }
 
   return (
-    <div className="card" style={{ marginBottom: 0 }}>
-      <div className="btn-row" style={{ justifyContent: 'space-between' }}>
+    <div className="card doc-card">
+      <div className="doc-card-head">
+        <IconTile icon={document ? FileCheck2 : onlyImages ? FileImage : FileText} tone={document ? 'good' : 'info'} size="sm" />
         <strong>{label}</strong>
         <Badge tone={required ? 'warn' : 'info'}>{required ? t.upload.required : t.upload.optional}</Badge>
       </div>
 
       {document ? (
-        <div className="small" style={{ margin: '8px 0' }}>
-          <Badge tone="good">{t.upload.uploaded}</Badge> {document.originalFilename} ({formatBytes(document.sizeBytes)})
-          <div className="muted">{formatDateTime(document.uploadedAt)}</div>
-          <div className="muted mono" title={document.sha256}>
-            {t.upload.fingerprint}: {document.sha256.slice(0, 16)}…
+        <motion.div className="doc-file" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="doc-file-name" title={document.originalFilename}>
+              {document.originalFilename}
+            </div>
+            <div className="small muted">
+              {formatBytes(document.sizeBytes)} · {formatDateTime(document.uploadedAt)}
+            </div>
+            <div className="small faint mono" title={document.sha256}>
+              {t.upload.fingerprint}: {document.sha256.slice(0, 16)}…
+            </div>
           </div>
-        </div>
+          <Badge tone="good">{t.upload.uploaded}</Badge>
+        </motion.div>
       ) : (
-        <div className="small muted" style={{ margin: '8px 0' }}>
-          {t.upload.notUploaded}
-        </div>
+        <div className="small muted">{t.upload.notUploaded}</div>
       )}
 
       {editable && (
@@ -124,16 +133,24 @@ export function DocumentUpload({ applicationId, type, document, editable, onChan
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
         >
+          <CloudUpload size={26} className="dropzone-icon" />
           <div>{document ? t.upload.replace : t.upload.dropHere}</div>
           <div className="small muted">{t.upload.accepted(describeKinds(kinds))}</div>
-          {progress !== null && (
-            <>
-              <div className="small">{t.upload.uploading(progress)}</div>
-              <div className="progress">
-                <div style={{ width: `${progress}%` }} />
-              </div>
-            </>
-          )}
+          <AnimatePresence>
+            {progress !== null && (
+              <motion.div
+                style={{ width: '100%' }}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <div className="small">{t.upload.uploading(progress)}</div>
+                <div className="progress">
+                  <div style={{ width: `${progress}%` }} />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <input
             ref={inputRef}
             type="file"
@@ -145,13 +162,13 @@ export function DocumentUpload({ applicationId, type, document, editable, onChan
       )}
 
       {document && (
-        <div className="btn-row" style={{ marginTop: 8 }}>
+        <div className="btn-row">
           <button type="button" className="btn btn-secondary btn-small" onClick={view}>
-            {t.common.view}
+            <Eye size={14} /> {t.common.view}
           </button>
           {editable && (
-            <button type="button" className="btn btn-secondary btn-small" onClick={remove}>
-              {t.common.remove}
+            <button type="button" className="btn btn-ghost btn-small" onClick={remove}>
+              <Trash size={14} /> {t.common.remove}
             </button>
           )}
         </div>

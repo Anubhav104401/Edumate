@@ -2,12 +2,15 @@
  * The consolidated marks table of one result set, with a "Download CSV" button.
  * Only examination superintendents and administrators can load it (fix for DEF-031).
  */
+import { Download } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/http';
 import { useToast } from '../../components/Toast';
 import { Badge, ErrorBanner, Loading } from '../../components/ui';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
+import { gradeHue } from '../../utils/visuals';
 
 export function ConsolidatedReportView({ resultSetId }: { resultSetId: number }) {
   const toast = useToast();
@@ -33,10 +36,10 @@ export function ConsolidatedReportView({ resultSetId }: { resultSetId: number })
 
   return (
     <div className="card table-wrap">
-      <div className="page-header" style={{ marginBottom: 8 }}>
+      <div className="card-header">
         <h2>{t.resultsManage.reportTitle(data.resultSet.programName, data.resultSet.semester)}</h2>
         <button type="button" className="btn btn-secondary btn-small" onClick={downloadCsv}>
-          {t.resultsManage.downloadCsv}
+          <Download size={14} /> {t.resultsManage.downloadCsv}
         </button>
       </div>
       <table>
@@ -59,10 +62,18 @@ export function ConsolidatedReportView({ resultSetId }: { resultSetId: number })
               <td>{row.fullName}</td>
               {data.courseCodes.map((code) => (
                 <td key={code} className="nowrap">
-                  {row.grades[code] ?? t.common.none}
+                  {row.grades[code] ? (
+                    <span className="grade" style={{ '--hue': gradeHue(row.grades[code]) } as CSSProperties}>
+                      {row.grades[code]}
+                    </span>
+                  ) : (
+                    t.common.none
+                  )}
                 </td>
               ))}
-              <td className="num">{row.sgpa.toFixed(2)}</td>
+              <td className="num">
+                <strong>{row.sgpa.toFixed(2)}</strong>
+              </td>
               <td className="num">{row.cgpa.toFixed(2)}</td>
               <td>
                 <Badge tone={row.outcome === 'PASS' ? 'good' : 'bad'}>{row.outcome}</Badge>

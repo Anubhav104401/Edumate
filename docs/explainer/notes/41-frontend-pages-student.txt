@@ -1,112 +1,268 @@
+=== FILE frontend/src/pages/student/MyAttendancePage.tsx
+>>> SUMMARY
+**"My attendance"** for a student, or **"Your child's attendance"** for a guardian (the same page; the backend works out whose attendance to send from the login token). Data: `GET /api/attendance/me`.
+
+The page, from top to bottom:
+1. A red warning box if the student is below the minimum in any course (and has no medical exemption there).
+2. **A summary strip**: a ring with the overall percentage across all courses, the number of courses and of classes held, and three badges counting the courses that are "On track", "Careful" and "Below minimum".
+3. **One card per course**: a progress ring (green / amber / red by status) that draws itself, the course code and name, "18 of 24 · 75.00%", a status badge, and **how many more classes the student can still miss** and stay at or above 75 % ("Can still miss: 2 classes", or "Cannot reach the minimum any more").
+
+The three statuses are decided by the backend (`AttendanceSummaryService.java`): **SHORTFALL** below the minimum, **WARNING** when at most two more classes can be missed, **OK** otherwise. The page only colours them.
+
+**Exactly 75 % is enough** (the subtitle says so). This was defect DEF-019 of the SQA report (review finding RR-04, test case TC-009): the old system used `>` instead of `≥`, and a student at exactly 75.00 % was wrongly blocked.
+>>> 21
+The tone for each status: OK → good (green), WARNING → warn (amber), SHORTFALL → bad (red). `as const` keeps the values as those exact texts (not just "some string"), so TypeScript accepts them as tones.
+>>> 26
+How many courses are below the minimum **without** a medical exemption (an exempt student is still allowed to sit the exam). `data?.` and `?? 0` give 0 while the data is still loading.
+>>> 28-33
+The drawing: the title (different for a guardian) and the subtitle with the threshold ("You need at least 75% attendance in every course…").
+>>> 34-35
+Loading and error.
+>>> 36
+The red warning, if any course is short.
+>>> 37
+No courses registered: an empty state with a calendar icon.
+>>> 38-40
+Otherwise: the summary strip…
+>>> 41-44
+…and the course cards, appearing one after another. Each card's ring starts drawing a little later than the previous one's (`0.2 + i * 0.06` seconds), so the rings fill in a wave from left to right.
+>>> 56-57
+Adding up the classes held and attended across every course. `reduce` walks through the list, carrying a running total (`sum`) that starts at 0.
+>>> 58
+The overall percentage, or `null` ("no data") if no classes were held yet (dividing by 0 is impossible).
+>>> 59
+`count(status)`: how many courses have that status. `CourseAttendance['status']` is TypeScript's way of saying "the same type as the `status` field": `'OK' | 'WARNING' | 'SHORTFALL'`.
+>>> 60
+The ring's colour: blue when there is no data yet, green at or above the threshold, red below it.
+>>> 62-64
+The strip: first a ring with the overall percentage (rounded) and the word "Overall" in its middle.
+>>> 68
+The exact overall percentage (two decimals)…
+>>> 72-73
+…a thin vertical divider, then the number of courses…
+>>> 77
+…and the number of classes held.
+>>> 81-84
+Another divider, then the three counts: "4 On track"…
+>>> 86-87
+…"1 Careful"…
+>>> 89-90
+…"0 Below minimum".
+>>> 98
+The card's tone, from its status.
+>>> 99
+Its status icon: a tick, a warning triangle or a cross. Status is never shown by colour alone.
+>>> 101-103
+The card, starting with its ring. `delay` makes it wait its turn in the wave.
+>>> 106
+The text part of the card: course code, course name…
+>>> 109
+…and a row with "18 of 24 · 75.00%" (or "No classes held yet").
+>>> 114-116
+The status badge with its icon. `plain` leaves out the badge's dot, because the icon already does that job.
+>>> 118-119
+"Can still miss: 2 classes". The backend sends a negative number when the minimum can no longer be reached even by attending every remaining class; the page then says so plainly.
+>>> 121-123
+A "Medical exemption approved" chip with a shield-plus icon, when one applies.
+
+=== FILE frontend/src/pages/student/HallTicketPage.tsx
+>>> SUMMARY
+**The hall ticket page**: is the student allowed to sit the coming exams, course by course, and **why**? Data: `GET /api/exams/hall-ticket/me`.
+
+It is drawn like a **real admit card**: a "ticket" with the candidate's name, USN, exam session and start date on the left, and a tear-off **stub** on the right, separated by a dashed line with two half-circle notches (CSS in `app.css`). On the stub, an **"Eligible"** (green) or **"Not yet"** (amber) stamp, in capitals, **thumps down**: it starts at 2.2 × its size, transparent, and lands with a springy bounce (`@keyframes stamp`).
+
+Below it, one row per course: a tick or cross, the attendance (a green or red badge), whether internal assessment is complete, whether a medical exemption applies, the **decision-table rule** that decided it (R1–R5), and the reasons.
+
+Showing the rule and reasons, rather than only "not eligible", means a student knows exactly what to fix, and staff can check every decision against the regulation (the report's decision-table test cases TC-008 to TC-010).
+
+**Printing.** The "Print" button calls the browser's own print dialog (`window.print()`). A `@media print` block in `app.css` hides the sidebar, top bar, toasts and anything marked `no-print`, removes shadows, and keeps each card on one sheet, so only the ticket is printed.
+>>> 20-24
+The drawing: the title, and a subtitle naming the exam session once the data has arrived ("Examination session: …").
+>>> 25-28
+A "Print" button in the header, once the data is there. `no-print` hides the button itself from the printout.
+>>> 33-34
+Loading and error.
+>>> 35-37
+When the data is there: the ticket, tinted green if the hall ticket is issued, amber if not.
+>>> 38-41
+The main part: a large ticket icon, the session name, and "You are eligible in every course. Your hall ticket will be issued." or "You are not yet eligible in every course. The reasons are listed below."
+>>> 46-47
+A grid of facts, each a small grey label over a bold value: the candidate's name…
+>>> 51
+…the USN (University Seat Number, in the fixed-width `mono` font)…
+>>> 55
+…the exam session code…
+>>> 59
+…and the date the exams start.
+>>> 64
+The fee status: "Fee paid" (green) or "Fee due" (red). An unpaid fee blocks the hall ticket.
+>>> 66
+The tear-off stub with the stamp and the start date.
+>>> 72
+The course-by-course card.
+>>> 74-76
+One row per course, appearing one after another.
+>>> 77-80
+A green tick or a red cross (hidden from screen readers, because the badge at the end of the row says the same in words).
+>>> 82-84
+The course code (grey, fixed-width) and name.
+>>> 86-88
+A row of facts: the attendance percentage in a green or red badge…
+>>> 91-92
+…assessment complete or pending…
+>>> 94-95
+…medical exemption yes/no…
+>>> 97-98
+…and the rule, e.g. "Rule R3".
+>>> 101-103
+The reasons, if any, after "Why:", joined with commas (the backend writes them).
+>>> 107-108
+On the right: "Eligible" or "Not eligible".
+>>> 113
+Under the list: "Rules R1–R5 are the decision table of the SQA report (Table 3.9)."
+
+=== FILE frontend/src/pages/student/MyResultsPage.tsx
+>>> SUMMARY
+**"My results"**: every **published** semester. Data: `GET /api/exams/results/me`.
+
+The page, from top to bottom:
+1. **A trend chart** of SGPA (grade point average of one semester) and CGPA (cumulative: all semesters so far) per semester. Its lines draw themselves like a pen when scrolled to; hovering or using the arrow keys shows a read-out for one semester (`TrendChart` in `components/charts.tsx`).
+2. Beside it, **the current CGPA** as the page's one big number, counting up, with the latest SGPA, PASS/FAIL and a bar of credits earned out of registered.
+3. **One card per semester, newest first**: SGPA, CGPA, PASS/FAIL, credits, when it was published, and a table of courses with marks, a **coloured grade chip** (S and A green, B and C blue, D and E amber, F red) and grade points.
+
+The tables repeat every number the chart shows, in plain text, so nothing depends on being able to see the chart (a screen-reader user, or someone who prints the page, loses nothing).
+
+Only **published** results ever reach this page; the backend's query filters on PUBLISHED. On results morning thousands of students open this page at once, so the backend serves it from the **cache** (`@Cacheable("publishedResults")`, Redis in Docker) instead of asking the database each time.
+>>> 23
+The backend sends semesters oldest first; `[...data].reverse()` makes a **copy** and reverses it, so the newest comes first. The original data is left unchanged (the chart still needs it oldest first, left to right), and React state must never be changed in place anyway.
+>>> 24
+The newest semester (or `undefined` if there is none).
+>>> 26-31
+The drawing: the title, loading, error, and "No results have been published yet." with a graduation-cap icon if the list is empty.
+>>> 33-35
+When there is at least one semester: the top row, starting with the chart card…
+>>> 37
+…with the hint "SGPA of each semester, and the CGPA after it" under its title.
+>>> 40-41
+The chart. Each semester becomes one point: a short label ("Sem 3") and its two values, oldest first.
+>>> 44
+Beside the chart: the big CGPA card.
+>>> 48-49
+Then one card per semester, newest first. `key={sem.semester}` lets React tell the cards apart.
+>>> 57
+The share of registered credits that were earned, in per cent (0 if none were registered, to avoid dividing by 0).
+>>> 58-60
+The card, with a large violet graduation-cap tile and the label "Current CGPA".
+>>> 62-63
+The CGPA, counting up from 0 to e.g. 8.63. `toFixed(2)` makes it text with exactly two decimals, which `CountUp` then keeps.
+>>> 65-66
+Two small tiles side by side: the latest SGPA…
+>>> 70
+…and the latest semester's outcome…
+>>> 72
+…as a green PASS or red FAIL badge.
+>>> 77-78
+"Credits earned: 22 of 24"…
+>>> 79
+…and a bar showing that share. It is amber-red while not every credit was earned (`low`), so a missed course stands out.
+>>> 86-88
+A semester card: `flush` removes the card's inner padding so the table can reach its edges; the header row has its own padding.
+>>> 89-91
+"Semester 3" and the exam session's name in small grey text.
+>>> 93-94
+"22 of 24 credits earned · 12 Jan 2027, 10:30 AM" (when it was published).
+>>> 97-98
+On the right: the SGPA tile…
+>>> 102
+…the CGPA tile, and the PASS/FAIL badge.
+>>> 109-110
+If the backend sent no per-course detail: a short grey note instead of an empty table.
+>>> 113-117
+Otherwise the course table (inside `table-wrap`, which lets a wide table scroll sideways on a phone) and its header row: code, course, credits, marks, grade, points. `num` right-aligns number columns so their digits line up.
+>>> 126-128
+One row per course.
+>>> 133-135
+The grade as a coloured chip. `gradeHue` (in `utils/visuals.ts`) gives each letter a hue on the colour wheel (S 150 green … F 25 red); `app.css` turns that hue into a soft background and a darker text colour, in both light and dark mode.
+
 === FILE frontend/src/pages/student/MyFeesPage.tsx
 >>> SUMMARY
-**"My fees"**, for a student (or "Your child's fees", for a guardian). It shows:
-1. a card with the **amount outstanding** (amber if something is due, green if nothing is);
+**"My fees"**, for a student (or "Your child's fees", for a guardian). Data: `GET /api/fees/me`. It shows:
+1. **a summary strip**: the **amount outstanding** (with an amber wallet if something is due, green if nothing is), "₹62,500 paid of ₹1,25,000 billed", and a ring showing the share paid;
 2. the **fee demands** (bills), each with its amount, paid, due, due date, a status badge (Paid / Due / Overdue) and a **"Pay now"** button;
 3. the **payments** made, with the order number, status and receipt number;
-4. the **ledger** (account statement): every debit (a bill) and credit (a payment).
+4. the **account statement** (ledger), drawn as a **timeline**: every bill (debit, amber, a receipt icon) and payment (credit, green, an arrow icon) in the order it happened, joined by a vertical line.
 
 **What "Pay now" does:**
 <pre class="block">POST /api/fees/payments  {"feeDemandId": 12}
   ← {"orderId": "ORD-81D4440CAE9D45BA", "amount": 62500.00, "checkoutPath": "/pay/ORD-81D4440CAE9D45BA"}
 → the browser moves to the (simulated) bank page /pay/ORD-81D4440CAE9D45BA</pre>
->>> 16-17
-Which badge colour each status gets: paid green, due amber, overdue red; payments succeeded green, started blue, failed red.
->>> 19-24
-The page's tools: the user, page navigation, toasts, `starting` (which bill's payment is being started, to show "Opening the payment page…" on that one button), and the loaded fee account.
->>> 27-30
-`pay(demandId)`: remembers which bill, asks the backend to create a payment order, then goes to the gateway page the backend named.
->>> 31-33
-On failure (for example 409 "This fee has already been paid in full."), show the message and re-enable the buttons.
+>>> 22-23
+Which badge colour each status gets: bills paid green, due amber, overdue red; payments succeeded green, started blue, failed red.
+>>> 33
+Remember which bill's payment is starting, so that one button shows a spinner and "Opening the payment page…".
+>>> 34-36
+Ask the backend to create a payment order, then go to the page it names (the simulated bank page).
 >>> 37-39
-The drawing: the title is "Your child's fees" for a guardian, "My fees" otherwise.
->>> 40-41
-Loading and error, as on every page.
->>> 42-45
-When the data is there: the outstanding card, amber or green.
->>> 52
-The bills table, inside a card that scrolls sideways on narrow screens (`table-wrap`).
->>> 54-56
-The table and its header row. `className="num"` right-aligns number columns, so the digits line up.
->>> 63
-An empty header above the button column.
->>> 66-68
-One row per bill.
->>> 74
-The status badge cell.
->>> 77-80
-For an unpaid bill: the "Pay now" button. All pay buttons are disabled while any payment is being started, so two orders cannot be started at once.
->>> 90
-The payments table.
->>> 92-94
-Its header.
->>> 102-104
-One row per payment: when, order number (in a fixed-width `mono` font, so long codes are easy to read), amount …
->>> 108
-… the status badge …
->>> 110
-… and, for a failed payment, the bank's reason in small grey text.
->>> 119
-The ledger table.
->>> 121-123
-Its header.
->>> 131-133
-One row per ledger line. A CREDIT (money received) is written with a minus sign, because it reduces what is owed.
-
-=== FILE frontend/src/pages/student/MockGatewayPage.tsx
->>> SUMMARY
-**The pretend bank page** at `/pay/<orderId>`. In real life this page belongs to the payment gateway (Razorpay, PayU…), and the student would enter card or UPI details there, **never on EduMate**. Here it is simulated, because a real gateway needs a merchant account.
-
-It shows the order and amount, and two buttons, **Approve payment** and **Decline payment**. The interesting part is the **"Send the bank’s confirmation"** choice ("once (normal)", "2 times (replay test)", "3 times (replay test)"): 1, 2 or 3 times. Real gateways sometimes send the same "payment succeeded" message more than once, which caused defect DEF-014 in the report (the student was credited twice). Choosing 2 or 3 lets you **watch the fix working**: the first delivery says PROCESSED with a receipt, and the others say DUPLICATE_IGNORED. The ledger is credited once.
-
-**Behind the buttons:** `POST /api/payments/gateway/mock/<orderId>/complete {"success": true, "deliveries": 2}`. The backend's `MockPaymentGateway` then builds the callback exactly as a real gateway would, **HMAC-signs** it with the shared secret, and delivers it to the real callback endpoint the chosen number of times.
->>> 26-33
-`complete(success)`: busy; asks the simulated gateway to finish the payment (approve or decline) with the chosen number of deliveries; shows the outcomes and reloads the order; shows any error; and is no longer busy.
->>> 37
-The first delivery's result, the one that counts (it holds the receipt number or the failure reason).
->>> 39-43
-The drawing: title, loading and error.
->>> 44-47
-A card showing the order number …
->>> 49-50
-… the amount in large text …
->>> 52-53
-… and the order's current status. If the status has no translation, the raw value is shown (`?? data.status`).
->>> 56-58
-Before paying: the "deliveries" choice …
->>> 60-62
-… a drop-down with 1, 2 and 3. `Number(e.target.value)` turns the chosen text into a number.
->>> 69-71
-The "Approve payment" button ("Contacting EduMate…" while busy) …
->>> 73
-… and "Decline payment".
->>> 80-81
-After paying: the results list …
->>> 83-86
-… one numbered line per delivery with its outcome badge (green PROCESSED, blue DUPLICATE_IGNORED) and an explanation.
->>> 90-92
-A green "Receipt number: RCPT-…" box, or a red failure box, and a button back to "My fees".
-
-=== FILE frontend/src/pages/student/HallTicketPage.tsx
->>> SUMMARY
-**The hall ticket page**: is the student allowed to sit the coming exams, course by course, and **why**?
-
-At the top, a green "You are eligible in every course. Your hall ticket will be issued." or an amber "You are not yet eligible in every course. The reasons are listed below." box, the fee status, and when exams start. Then a table with, for each course: attendance, whether internal assessment is complete, whether a medical exemption applies, the decision (eligible or not), the **decision-table rule** that decided it (R1–R5), and the reasons.
-
-Showing the rule and reasons, rather than only "not eligible", means a student knows exactly what to fix, and staff can check every decision against the regulation (the report's decision-table test cases TC-008 to TC-010).
->>> 14-16
-The drawing: the title, and a subtitle naming the exam session once the data has arrived.
->>> 17-18
+On failure: show the error and make the buttons usable again. (On success nothing needs resetting: this page is left.)
+>>> 43-45
+The drawing: the title (different for a guardian).
+>>> 46-47
 Loading and error.
->>> 19-20
-When the data is there:
->>> 22
-A row with the fee badge and the exam start date.
->>> 26-29
-The course table and its header row.
->>> 39-43
-One row per course, starting with its code (bold) and name.
->>> 45
-The attendance cell: a green or red badge with the percentage.
->>> 50
-The decision cell: a green "Eligible" or red "Not eligible" badge.
+>>> 48-50
+When the data is there: the summary strip first.
+>>> 52
+The bills card. `table-wrap` lets the table scroll sideways on a narrow screen.
+>>> 54-56
+The table and its header row: description, amount, paid, due, due date, status…
+>>> 63
+…and an empty header over the button column.
+>>> 66-69
+One row per bill, starting with its description in bold.
+>>> 76
+The status badge.
+>>> 79-81
+For an unpaid bill, the "Pay now" button, aligned right. While **any** payment is starting, every button is disabled (so two orders cannot be started at once).
+>>> 82-83
+The button that was pressed shows a spinner and "Opening the payment page…"; the others show a card icon and "Pay now".
+>>> 93-94
+Below, two cards side by side (`grid-2`; stacked on a phone). First the payments.
+>>> 96
+No payments yet: an empty state with a card icon.
+>>> 97-100
+Otherwise, a table of payments: when, amount, status, receipt.
+>>> 107-111
+One row per payment: its last update time…
+>>> 115
+…its status badge…
+>>> 117
+…and, for a failed payment, why (e.g. "Declined by the bank").
+>>> 127-128
+The second card: the account statement. Its sideways padding is removed so the timeline can use the full width, and put back on the title.
+>>> 131
+The timeline: an ordered list (`<ol>`), because the order matters. `app.css` draws the vertical line down its left side.
+>>> 132-133
+For each line of the statement: is it a credit (money in, a payment) or a debit (a bill)?
+>>> 134-135
+The item, tinted green for a credit or amber for a debit. Its dot on the line holds an arrow (credit) or a receipt (debit).
+>>> 137
+The text: the description…
+>>> 139-140
+…"Payment · 28 Sep 2026, 10:30 AM"…
+>>> 142-144
+(the reference in small grey text), and on the right the amount; credits get a minus sign, because they reduce what is owed.
+>>> 159-160
+Everything billed, and everything paid, added up over all bills.
+>>> 161
+The share paid, in per cent (100 % if nothing was ever billed).
+>>> 162
+`clear`: nothing is outstanding.
+>>> 164-166
+The strip: a large wallet tile, green or amber.
+>>> 167
+The amount outstanding, large (never shown below 0: an overpayment is not "negative debt" to the student)…
+>>> 170-171
+…and under it "Everything is paid. Thank you!" or "₹62,500 paid of ₹1,25,000 billed". (The inline style undoes the capital letters that `.metric span` normally uses for labels.)
+>>> 174
+An empty stretchy box that pushes the ring to the far right (the same trick the top bar uses).
+>>> 175
+The ring: the share paid, with "50% Paid" in its middle.

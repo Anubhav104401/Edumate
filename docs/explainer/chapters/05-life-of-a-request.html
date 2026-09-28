@@ -6,16 +6,17 @@ The second is <strong>opening "My fees"</strong>. Every step links to the line t
 <h2>Journey 1: logging in</h2>
 
 <h3>Step 1: the person types and presses "Sign in" (browser)</h3>
-<p><a href="#f-frontend-src-pages-LoginPage-tsx-L28"><code>LoginPage.handleSubmit</code></a> runs. It stops the browser's
-old-fashioned page reload, checks that both boxes are filled, and calls
+<p><a href="#f-frontend-src-pages-LoginPage-tsx-L73"><code>LoginPage.handleSubmit</code></a> runs. It stops the browser's
+old-fashioned page reload and hands over to <a href="#f-frontend-src-pages-LoginPage-tsx-L56"><code>signIn</code></a>
+(the same function a double-click on a demo account uses), which checks that both boxes are filled, shows the spinner, and calls
 <a href="#f-frontend-src-auth-AuthContext-tsx-L60"><code>login(username, password)</code></a> from <code>AuthContext</code>,
 which calls <a href="#f-frontend-src-api-endpoints-ts-L67"><code>api.auth.login</code></a>:</p>
 <pre class="block">request&lt;LoginResponse&gt;('POST', '/api/auth/login', { username, password })</pre>
 
 <h3>Step 2: the JavaScript object becomes JSON text (browser)</h3>
-<p>In <a href="#f-frontend-src-api-http-ts-L59"><code>request()</code></a>, the body is an ordinary JavaScript object:</p>
+<p>In <a href="#f-frontend-src-api-http-ts-L83"><code>request()</code></a>, the body is an ordinary JavaScript object:</p>
 <pre class="block">{ username: "student", password: "Edumate@2026" }        ← a JavaScript object in memory</pre>
-<p><a href="#f-frontend-src-api-http-ts-L66"><code>JSON.stringify(body)</code></a> turns it into text that can travel
+<p><a href="#f-frontend-src-api-http-ts-L90"><code>JSON.stringify(body)</code></a> turns it into text that can travel
 over the network:</p>
 <pre class="block">{"username":"student","password":"Edumate@2026"}         ← a string of 49 characters</pre>
 <p>and the headers are set: <code>Content-Type: application/json</code> ("the body is JSON") and
@@ -23,7 +24,7 @@ over the network:</p>
 <code>Authorization</code> header.</p>
 
 <h3>Step 3: fetch sends it (browser → port 5173)</h3>
-<p><a href="#f-frontend-src-api-http-ts-L75"><code>fetch('/api/auth/login', { method: 'POST', headers, body })</code></a>.
+<p><a href="#f-frontend-src-api-http-ts-L101"><code>fetch('/api/auth/login', { method: 'POST', headers, body })</code></a>.
 The address has no host, so it goes to the page's own origin: <code>http://localhost:5173</code>. On the wire:</p>
 <pre class="block">POST /api/auth/login HTTP/1.1
 Host: localhost:5173
@@ -94,7 +95,7 @@ Content-Type: application/json
  "user":{"id":12,"username":"student","fullName":"Aarav Sharma","role":"STUDENT","campusCode":"JGC","studentId":7}}</pre>
 
 <h3>Step 11: back in the browser</h3>
-<p>The response travels back through Vite. In <a href="#f-frontend-src-api-http-ts-L92"><code>handleResponse</code></a>,
+<p>The response travels back through Vite. In <a href="#f-frontend-src-api-http-ts-L111"><code>handleResponse</code></a>,
 the status is 200 and the type is JSON, so <code>response.json()</code> turns the text back into a JavaScript object.
 <code>AuthContext</code> saves the token in <code>sessionStorage</code> and remembers the user. React notices that the
 state changed and redraws. The login page sees a user and navigates to the dashboard.</p>
@@ -105,7 +106,7 @@ state changed and redraws. The login page sees a user and navigates to the dashb
 <thead><tr><th>#</th><th>Where</th><th>What happens</th></tr></thead>
 <tbody>
 <tr><td>1</td><td>browser</td><td>The student clicks "Fees" in the menu. React Router changes the address to <code>/fees</code> <strong>without</strong> asking the server for a page, and shows <a href="#f-frontend-src-pages-student-MyFeesPage-tsx"><code>MyFeesPage</code></a>.</td></tr>
-<tr><td>2</td><td>browser</td><td>The page's <a href="#f-frontend-src-pages-student-MyFeesPage-tsx-L24"><code>useLoad(() =&gt; api.fees.mine(), [])</code></a> starts; the screen shows "Loading…".</td></tr>
+<tr><td>2</td><td>browser</td><td>The page's <a href="#f-frontend-src-pages-student-MyFeesPage-tsx-L30"><code>useLoad(() =&gt; api.fees.mine(), [])</code></a> starts; the screen shows "Loading…".</td></tr>
 <tr><td>3</td><td>browser</td><td><a href="#f-frontend-src-api-endpoints-ts-L119"><code>api.fees.mine()</code></a> calls <code>request('GET', '/api/fees/me')</code>. A GET has no body; the token is added: <code>Authorization: Bearer eyJ…</code>.</td></tr>
 <tr><td>4</td><td>Vite → Tomcat</td><td>Forwarded to port 8080, as before.</td></tr>
 <tr><td>5</td><td>security</td><td>The resource-server filter reads the <code>Bearer</code> token, <strong>checks its signature and expiry</strong> with the secret key, and turns the claim <code>role: STUDENT</code> into the authority <code>ROLE_STUDENT</code>.</td></tr>
@@ -143,7 +144,7 @@ state changed and redraws. The login page sees a user and navigates to the dashb
 }</pre>
 <p>Defined by <a href="#f-backend-src-main-java-com-edumate-common-ApiError-java"><code>ApiError</code></a>, produced by
 <a href="#f-backend-src-main-java-com-edumate-common-GlobalExceptionHandler-java"><code>GlobalExceptionHandler</code></a>,
-read by <a href="#f-frontend-src-api-http-ts-L99"><code>toApiError</code></a>. Because every error has a machine-readable
+read by <a href="#f-frontend-src-api-http-ts-L128"><code>toApiError</code></a>. Because every error has a machine-readable
 <code>code</code> <em>and</em> a human <code>message</code>, the screens can show the message directly, and tests can
 check the code.</p>
 

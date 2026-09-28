@@ -698,6 +698,49 @@ TS_NAMES: dict[str, str] = {
     "describe": "Vitest: a group of tests",
     "it": "Vitest: one test",
     "expect": "Vitest: a check – the test fails if it is false",
+    # ---- React extras
+    "useLayoutEffect": "like useEffect, but runs before the screen is painted (no flicker)",
+    "useSyncExternalStore": "React's safe way to read a value that lives outside React and redraw when it changes",
+    "useId": "React: a unique id for this component, stable between redraws",
+    "lazy": "React: load a component's code only when it is first needed (code splitting)",
+    "Suspense": "React: what to show while lazily loaded code or data is still on its way",
+    "Fragment": "React: a group of elements without an extra box around them",
+    "ComponentType": "the type \"any React component\"",
+    "CSSProperties": "the type of an inline style object",
+    "ReactElement": "the type \"one React element\"",
+    "PointerEvent": "the type of a mouse / pen / finger movement event",
+    "KeyboardEvent": "the type of a key press event",
+    "MouseEvent": "the type of a mouse click event",
+    "createPortal": "React DOM: draw an element somewhere else in the page (here: straight into <body>)",
+    "flushSync": "React DOM: apply a change to the screen immediately instead of later",
+    "useOutlet": "React Router: the element for the current child page (like <Outlet />, but as a value)",
+    # ---- motion (animation library)
+    "motion": "motion: HTML and SVG tags that can animate (motion.div, motion.span, motion.circle …)",
+    "AnimatePresence": "motion: lets elements animate OUT before they are removed",
+    "MotionConfig": "motion: settings for every animation inside it (here: respect reduced motion)",
+    "useScroll": "motion: how far the page (or an element) has been scrolled, as live values",
+    "useSpring": "motion: a value that follows another one with a springy delay",
+    "useTransform": "motion: turns one live value into another (e.g. scroll 0→1 into a tilt 26°→0°)",
+    "useMotionValue": "motion: a live value that changes without redrawing React",
+    "useMotionValueEvent": "motion: run a function whenever a live value changes",
+    "useInView": "motion: true while an element is visible in the window",
+    "useReducedMotion": "motion: true if the person asked their computer for less motion",
+    "animate": "motion: animate any number or value from code",
+    "Transition": "motion: the type of a timing recipe (duration, easing, spring)",
+    "Variants": "motion: the type of a set of named poses (hidden, show …)",
+    "MotionValue": "motion: the type of a live, animatable value",
+    # ---- other libraries
+    "ReactLenis": "Lenis: the smooth-scrolling engine as a React component",
+    "useLenis": "Lenis: the smooth-scrolling engine, to scroll or stop it from code",
+    "Toaster": "Sonner: the corner area where toasts appear",
+    "toast": "Sonner: the function that shows a toast",
+    "Command": "cmdk: the searchable command-menu building blocks",
+    "AlertDialog": "Radix UI: an accessible \"are you sure?\" dialog",
+    "Dialog": "Radix UI: an accessible pop-up window",
+    "DropdownMenu": "Radix UI: an accessible drop-down menu",
+    "Tooltip": "Radix UI: an accessible tooltip (a label that appears on hover or focus)",
+    "confetti": "canvas-confetti: draws bursts of confetti on a canvas",
+    "LucideIcon": "Lucide: the type \"one icon component\"",
 }
 
 
@@ -705,7 +748,11 @@ def ts_import(ctx: Context, line: str) -> str | None:
     s = line.strip()
     m = re.match(r"^import\s+'([^']+)';$", s)
     if m:
-        return f"Loads the stylesheet <code>{esc(m.group(1))}</code> so its styles apply to the whole app."
+        src = m.group(1)
+        if src.startswith("@fontsource"):
+            return (f"Loads a font from the <code>{esc(src)}</code> package. The font files are bundled with the app, "
+                    "so no request goes to Google Fonts and the page's Content-Security-Policy stays strict.")
+        return f"Loads the stylesheet <code>{esc(src)}</code> so its styles apply to the whole app."
     m = re.match(r"^import\s+(type\s+)?(.+?)\s+from\s+'([^']+)';$", s)
     if not m:
         return None
@@ -718,6 +765,9 @@ def ts_import(ctx: Context, line: str) -> str | None:
         where = f'<a href="#{target}">{esc(source)}</a>' if target else f"<code>{esc(source)}</code>"
         kind = "the types (shapes of data) " if is_type else ""
         return f"Brings in {kind}{', '.join('<code>' + esc(n) + '</code>' for n in names)} from our own file {where}."
+    if source == "lucide-react":
+        return ("Brings in icons (small line drawings, each one a React component) from the Lucide icon set: "
+                + ", ".join("<code>" + esc(n) + "</code>" for n in names) + ".")
     explained = []
     for name in names:
         meaning = TS_NAMES.get(name)
@@ -773,9 +823,19 @@ def ts_line(ctx: Context, n: int, line: str):
         if s.endswith("{"):
             return "Starts a list of names brought in from another file (the list continues on the next lines)."
     # inside a multi-line import list
-    if re.match(r"^[A-Z]\w*,?$", s) and in_import_block(ctx, n):
-        target = ctx.index.get("src/api/types")
-        return f"…including the type <code>{esc(s.rstrip(','))}</code> (defined in <a href=\"#{target}\">api/types.ts</a>)."
+    m = re.match(r"^(type\s+)?([A-Za-z]\w*),?$", s)
+    if m and in_import_block(ctx, n):
+        name = m.group(2)
+        source = import_block_source(ctx, n)
+        if source.endswith("api/types"):
+            target = ctx.index.get("src/api/types")
+            return f"…including the type <code>{esc(name)}</code> (defined in <a href=\"#{target}\">api/types.ts</a>)."
+        if source == "lucide-react":
+            if m.group(1):
+                return f"…and the type <code>{esc(name)}</code> (\"one icon component\")."
+            return f"…the icon <code>{esc(name)}</code>."
+        meaning = TS_NAMES.get(name)
+        return f"…and <code>{esc(name)}</code>" + (f" ({esc(meaning)})" if meaning else "") + "."
     if re.match(r"^\}\s+from\s+'[^']+';$", s):
         src = re.search(r"'([^']+)'", s).group(1)
         return f"Ends the list of names; they all come from <code>{esc(src)}</code>."
@@ -907,9 +967,18 @@ def in_import_block(ctx: Context, n: int) -> bool:
         t = ctx.lines[k].strip()
         if t.startswith("import ") and t.endswith("{"):
             return True
-        if not re.match(r"^[A-Z]\w*,?$", t):
+        if not re.match(r"^(type\s+)?[A-Za-z]\w*,?$", t):
             return False
     return False
+
+
+def import_block_source(ctx: Context, n: int) -> str:
+    """The library or file named on the closing line of a multi-line import list."""
+    for k in range(n, min(len(ctx.lines), n + 80)):
+        m = re.match(r"^\}\s+from\s+'([^']+)';$", ctx.lines[k].strip())
+        if m:
+            return m.group(1)
+    return ""
 
 
 def types_line(s: str):
@@ -967,13 +1036,15 @@ def message_entries(lines: list[str]) -> list[tuple[str, int, str]]:
         if m:
             stack.append(m.group(1).strip("'"))
             continue
-        if re.match(r"^\}(\s*satisfies\s+[^,]+)?,?$", s) and stack:
+        if re.match(r"^\}(\s*satisfies\s+.+?)?,?$", s) and stack:
             stack.pop()
             continue
-        m = re.match(r"^(['\w.-]+|'[^']+'):\s*(.+?),?$", s)
+        m = re.match(r"^(['\w.-]+|'[^']+'):\s*(.*?),?$", s)
         if m and stack:
             key = m.group(1).strip("'")
             value = m.group(2)
+            if not value and n < len(lines):
+                value = lines[n].strip().rstrip(",")  # Prettier put the text on the next line
             if value.startswith("'") or value.startswith('"'):
                 text = value.strip(",").strip()[1:-1]
             elif value.startswith("["):
@@ -1019,6 +1090,10 @@ def messages_line(ctx: Context, n: int, line: str):
             return f"<code>t.{esc(path)}</code> is a list of texts; position 1 is used for 1, position 2 for 2, and so on."
         if value.startswith("{"):
             return f"<code>t.{esc(path)}</code>: a small group of texts on one line, one per status/kind."
+    m = re.match(r"^(['\w.-]+|'[^']+'):$", s)
+    if m and stack:
+        path = ".".join(stack + [m.group(1).strip("'")])
+        return f"<code>t.{esc(path)}</code> = the text on the next line (it was too long to fit on this one)."
     if s.startswith("`") or s.startswith("'") or s.startswith("("):
         return "(continues the sentence from the line above)"
     return None
@@ -1031,7 +1106,7 @@ def messages_stack(lines: list[str], n: int) -> list[str]:
         m = re.match(r"^(['\w.-]+|'[^']+'):\s*\{$", s)
         if m:
             stack.append(m.group(1).strip("'"))
-        elif re.match(r"^\}(\s*satisfies\s+[^,]+)?,?$", s) and stack:
+        elif re.match(r"^\}(\s*satisfies\s+.+?)?,?$", s) and stack:
             stack.pop()
     return stack
 
@@ -1088,6 +1163,78 @@ CSS_PROPS: dict[str, str] = {
     "transform": "rotate / move / scale the element",
     "box-sizing": "border-box = width includes padding and border (much easier to reason about)",
     "list-style": "the bullets of a list",
+    "backdrop-filter": "blurs whatever is BEHIND the element (the frosted-glass effect)",
+    "-webkit-backdrop-filter": "the same frosted-glass blur, for Safari",
+    "filter": "a visual effect on the element itself (blur, brightness …)",
+    "animation-timeline": "what drives the animation: <code>view()</code> = how far the element has scrolled into view, instead of the clock",
+    "animation-range": "which part of the scroll journey the animation happens in",
+    "animation-delay": "wait this long before the animation starts",
+    "animation-direction": "play the animation forwards or backwards",
+    "animation-duration": "how long one run of the animation takes",
+    "animation-play-state": "pause or play the animation",
+    "mask-image": "a stencil: where it is black the element shows, where transparent it fades away",
+    "-webkit-mask-image": "the same stencil, for Safari",
+    "mask": "a stencil that hides parts of the element",
+    "-webkit-mask": "the same stencil, for Safari",
+    "-webkit-mask-composite": "how two stencils combine, for Safari",
+    "transform-origin": "the point the element turns or grows around",
+    "translate": "moves the element (x, y) without affecting the layout around it",
+    "rotate": "turns the element",
+    "scale": "makes the element bigger or smaller",
+    "isolation": "isolate = its own layer, so its children's z-index cannot leak out",
+    "aspect-ratio": "keeps width and height in this proportion (1 = a square)",
+    "inset": "distance from all four edges (0 = cover the whole parent)",
+    "left": "distance from the left edge", "top": "distance from the top edge",
+    "grid-template-columns": "the columns of a grid layout and how wide each is",
+    "grid-column": "how many grid columns the element spans",
+    "justify-items": "how grid items line up horizontally in their cell",
+    "place-content": "centres the content of a grid both ways",
+    "flex": "how much a flex item grows or shrinks (none = keep its own size)",
+    "text-wrap": "balance = even line lengths for headings; pretty = no lonely last word",
+    "text-transform": "uppercase = shown in capital letters",
+    "text-decoration-thickness": "how thick an underline is",
+    "text-underline-offset": "how far below the letters the underline sits",
+    "text-overflow": "ellipsis = cut long text off with …",
+    "overflow-wrap": "anywhere = long words may break onto the next line",
+    "user-select": "none = the text cannot be highlighted by dragging",
+    "pointer-events": "none = clicks pass straight through the element",
+    "scrollbar-width": "thin = a slimmer scrollbar",
+    "scrollbar-color": "colours of the scrollbar's handle and track",
+    "scrollbar-gutter": "stable = always keep room for the scrollbar, so the page never jumps sideways",
+    "overscroll-behavior": "contain = scrolling inside stops at the edge instead of scrolling the page behind",
+    "scroll-snap-type": "makes a scrolling row settle neatly on an item",
+    "scroll-snap-align": "which edge of the item the row settles on",
+    "touch-action": "which finger gestures the browser handles itself",
+    "will-change": "a hint that this will animate, so the browser can prepare",
+    "accent-color": "the colour of checkboxes and radio buttons",
+    "appearance": "none = remove the browser's own look (so we can draw our own)",
+    "background-image": "a picture or gradient behind the element",
+    "background-size": "how big the background picture is",
+    "background-position": "where the background picture sits",
+    "background-repeat": "whether the background picture repeats",
+    "background-clip": "text = the background shows only through the letters (gradient text)",
+    "-webkit-background-clip": "the same, for Safari",
+    "mix-blend-mode": "how the element's colours mix with what is behind it",
+    "color-scheme": "which themes (light, dark) the page supports; decides which half of light-dark() is used",
+    "resize": "whether the person can drag the box bigger",
+    "vertical-align": "where content sits vertically",
+    "font-feature-settings": "switches on optional letter shapes built into the font",
+    "font-style": "italic = slanted letters",
+    "-webkit-font-smoothing": "smoother-looking letters on Mac screens",
+    "-moz-osx-font-smoothing": "the same, for Firefox on Mac",
+    "-webkit-text-size-adjust": "stops phones from enlarging text on their own",
+    "text-size-adjust": "stops phones from enlarging text on their own",
+    "clip-path": "cuts the element to a shape; inset(50%) cuts it to nothing (hidden but readable by screen readers)",
+    "transition-behavior": "lets properties like display take part in transitions",
+    "transition-property": "which properties animate when they change",
+    "transition-duration": "how long a change takes to animate",
+    "content": "the text or picture of a ::before / ::after helper (\"\" = an empty decorative box)",
+    "stroke": "the colour of an SVG line", "stroke-width": "how thick an SVG line is",
+    "stroke-dasharray": "draws an SVG line as dashes", "fill": "the colour inside an SVG shape",
+    "fill-opacity": "how see-through the inside of an SVG shape is",
+    "syntax": "the kind of value a registered custom property holds",
+    "initial-value": "the starting value of a registered custom property",
+    "inherits": "whether children get the value too",
 }
 
 
@@ -1100,8 +1247,33 @@ def css_value(value: str) -> str:
     return f"<code>{esc(value)}</code>{note}"
 
 
+def css_value_continues(ctx: Context, n: int) -> bool:
+    """True if line n is the 2nd, 3rd … line of a property whose value was split over several lines."""
+    for k in range(n - 2, -1, -1):
+        prev = ctx.lines[k].strip()
+        if not prev or prev.startswith("/*"):
+            continue
+        if re.match(r"^[a-z-]+:\s*$", prev):
+            return True
+        if prev.endswith(",") and not prev.endswith("{"):
+            continue
+        return False
+    return False
+
+
 def css_line(ctx: Context, n: int, line: str):
     s = line.strip()
+    m = re.match(r"^@keyframes\s+([\w-]+)\s*\{(.*)\}$", s)
+    if m:
+        return (f"<b>@keyframes {esc(m.group(1))}</b>: a one-line animation. <code>{esc(m.group(2).strip())}</code> "
+                "lists the poses; the browser moves smoothly between them.")
+    m = re.match(r"^([a-z-]+):\s*$", s)
+    if m:
+        meaning = CSS_PROPS.get(m.group(1))
+        return (f"<code>{m.group(1)}</code>" + (f": {meaning}" if meaning else "")
+                + ". Its value is long, so it continues on the next lines.")
+    if css_value_continues(ctx, n):
+        return f"…part of that value: <code>{esc(s.rstrip(';,'))}</code>" + (" (the last part)." if s.endswith(";") else ", and…")
     m = re.match(r"^(--[\w-]+):\s*(.+);(\s*/\*\s*(.*?)\s*\*/)?$", s)
     if m:
         meaning = f" – {esc(m.group(4))}" if m.group(4) else ""
@@ -1121,8 +1293,16 @@ def css_line(ctx: Context, n: int, line: str):
         sel = s[:-1].strip()
         if sel.startswith("@media (prefers-color-scheme: dark)"):
             return "<b>@media (prefers-color-scheme: dark)</b>: the rules inside apply only when the computer/phone is set to dark mode."
+        if "prefers-reduced-motion" in sel:
+            return "<b>" + esc(sel) + "</b>: applies according to the person's \"reduce motion\" setting in their operating system."
+        if sel.startswith("@media print"):
+            return "<b>@media print</b>: these rules apply only when the page is printed."
         if sel.startswith("@media"):
             return f"<b>{esc(sel)}</b>: the rules inside apply only on screens matching this condition (here: narrow screens such as phones)."
+        if sel.startswith("@supports"):
+            return f"<b>{esc(sel)}</b>: the rules inside apply only in browsers that understand this feature; older browsers simply skip them."
+        if sel.startswith("@property"):
+            return f"<b>{esc(sel)}</b>: registers the custom property <code>{esc(sel.split()[1])}</code> with a type, so the browser can animate it smoothly."
         if sel.startswith("@keyframes"):
             return f"<b>{esc(sel)}</b>: defines an animation named <code>{esc(sel.split()[1])}</code>."
         if sel == ":root":

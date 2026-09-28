@@ -1,42 +1,144 @@
 === FILE README.md
 >>> SUMMARY
-The **front page** of the project. GitHub shows it automatically below the file list at https://github.com/Anubhav104401/Edumate. It is written in **Markdown**, a simple way to format text: `#` makes a heading, `**bold**` makes bold text, `|` builds tables, and text between three back-ticks is shown as code.
+The **front page** of the project. GitHub shows it automatically below the file list at https://github.com/Anubhav104401/Edumate. It is written in **Markdown**, a simple way to format text: `#` makes a heading, `**bold**` makes bold text, `|` builds tables, and text between three back-ticks is shown as code. Markdown may also contain plain **HTML** tags (`<div>`, `<table>`, `<img>`, `<details>`), which this file uses for the centred header, the picture grids and the sections that fold open.
 
-It answers the questions a newcomer (or an examiner) asks first: what is this, how is it built, how do I run it, which accounts can I try, how is it tested, where is each SQA finding fixed, and what is **not** done.
+It answers the questions a newcomer (or an examiner) asks first: what is this, what does it look like, how is it built, how do I run it, which accounts can I try, how is it tested, where is each SQA finding fixed, and what is **not** done. The pictures come from the `screenshots/` folder (not explained in this guide, because they are images, not code).
 >>> 1
+`<div align="center">` centres everything up to the matching `</div>` (line 34). The blank lines around HTML tags matter: they tell GitHub to read the lines in between as Markdown again.
+>>> 3
+The logo: the same `favicon.svg` the browser shows in its tab, 88 pixels wide. `alt` is the text read aloud by screen readers, or shown if the picture cannot load.
+>>> 5
 The title. One `#` is the biggest heading.
->>> 3-7
+>>> 7
+The tagline, as a smaller (`###`) heading. It is the same sentence as the welcome page's headline.
+>>> 9-10
+The modules in one line, then the promise of the project. `<br/>` breaks the line inside the centred block.
+>>> 12-19
+**Badges**: small pictures made on the fly by the free service shields.io from the address itself: `badge/Java-21-ED8B00` means the label "Java", the value "21" and the colour ED8B00; `logo=openjdk` adds that project's logo. They show the main technologies and their versions at a glance.
+>>> 21-24
+A second row of flatter badges: the number of automated tests (64 backend + 34 frontend = 98), the two themes, phone support and accessibility. In a badge address `_` is a space, `%7C` is `|` and `%2B` is `+`.
+>>> 26-30
+Quick links to sections further down. GitHub gives every heading an address made of its words in lower case with spaces turned into `-`; an emoji at the start disappears but leaves its `-`, hence `#-quick-start`.
+>>> 32
+The big picture: the student dashboard, cut diagonally into the light theme and the dark theme, inside a browser window.
+>>> 34
+End of the centred block.
+>>> 36
+The first section heading. Two `#` make a section heading with a line under it.
+>>> 38-42
 What EduMate is, and its link to the SQA report (course 23CSE701). The report calls the system **EduAutomate**; the code is called **EduMate**.
->>> 9-11
-A quote box (`>`) pointing beginners to this guide, and how to regenerate it after changing code.
->>> 13
-`---` draws a horizontal line.
->>> 15-27
-Section 1: a text drawing of the architecture. The browser talks only to the frontend; the frontend sends JSON to the backend's `/api/...` URLs; the backend uses the database, the cache, the object store and the two gateways.
->>> 29-37
-A table matching each technology the report names to where it lives in the code.
->>> 39-46
-Section 2: running it on Windows needs only a JDK and Node.js. The helper script starts both halves in one command.
->>> 48-53
-The same by hand, in two terminals: the backend on port 8080, and the frontend on port 5173 (the one to open in the browser).
->>> 55-56
-The in-memory database is recreated with demo data on every backend start. It can be browsed with the H2 console.
->>> 58-73
-The demo accounts table: every username, who it is, and which test case or finding it demonstrates. All share the password `Edumate@2026`.
->>> 75-82
-Section 3: the Docker way, which starts PostgreSQL, Redis, the backend and nginx with one command, then opens port 3000.
->>> 84-89
-Section 4: the test commands and how many tests each part has.
->>> 91-113
-Section 5: **traceability**. Each finding of the report (requirement review RR-…, design review DR-…, test defects DEF-…, OWASP security findings A0…, and recommendation 1) is listed with the code that fixes it and the test that proves the fix. An examiner can check any claim in a minute.
->>> 115-125
-Section 6: the **known limitations**, stated honestly: the code is smaller than the 48,600 lines the report describes; the report's TC-013 number is wrong (8.63, not 8.25); ERP and DigiLocker are not implemented; the audit log and outbox are not split by campus; and the gateways are simulated.
+>>> 44
+The highlights section.
+>>> 46-47
+An HTML table (`<table>`) with rows (`<tr>`); here it is used as a grid of six cards, three per row.
+>>> 48, 55, 62
+Each card is a cell (`<td>`). `width="33%"` gives the three columns the same width and `valign="top"` lines their text up at the top.
+>>> 50-52
+Card 1, students and parents: attendance rings that say how many classes can still be missed, hall-ticket eligibility with reasons, the grade trend chart, online payment and the parent portal. `<b>` is HTML for bold.
+>>> 54, 61, 68, 77, 84, 91
+`</td>` closes a card.
+>>> 57-59
+Card 2, faculty: the attendance register where everyone starts present, protected by optimistic locking (finding DR-01), and audited marks amendments.
+>>> 64-66
+Card 3, examinations: compute, two different approvers, publish; published results are frozen, and a double publication is impossible (finding DEF-027).
+>>> 69-70
+`</tr>` ends the first row of cards and `<tr>` starts the second.
+>>> 71, 78, 85
+The cells of the second row; they take their widths from the first row.
+>>> 73-75
+Card 4, admissions: uploads checked and fingerprinted with SHA-256, the guardian's OTP consent for minors (RR-02) and the merit list with its seat matrix.
+>>> 80-82
+Card 5, administration: the timetable generator, the audit log with old and new values (DR-04), the outbox, the deny-by-default role matrix (DR-06) and campus separation.
+>>> 87-89
+Card 6, security: bcrypt, signed JWTs, account lockout (A07), replay-safe payment callbacks (DR-02), the Content-Security-Policy (DEF-036) and hidden stack traces (A05).
+>>> 92-93
+End of the second row and of the grid.
+>>> 95
+The screenshots section.
+>>> 97
+A bold line used as a small title for the first group of pictures.
+>>> 99
+The welcome page at full width (`width="100%"`).
+>>> 101-110
+A two-column grid of pictures: the scroll-driven "student journey", the gallery of roles in dark mode, the sign-in page with its demo accounts, and the command palette. Under each picture, `<sub>` writes a small caption.
+>>> 112
+Title of the second group.
+>>> 114-123
+The students' pages: attendance, results with the trend chart, the hall ticket in dark mode, and the demo payment page after a replayed callback was ignored.
+>>> 125
+Title of the third group.
 >>> 127-140
-Section 7: the folder layout, with the two files beginners most need to know: `messages.ts` (every on-screen text) and `theme.css` (every colour).
+The staff pages: the faculty attendance register, the results workflow, the timetable in dark mode, the merit list, one admission application, and the administrator's dashboard.
+>>> 142
+Title of the last group.
+>>> 144
+Four phone screens side by side: the welcome page, the dashboard in dark mode, attendance, and the menu drawer.
+>>> 146
+The architecture section.
+>>> 148
+A code block marked `mermaid`. GitHub does not show it as text: it draws it as a diagram.
+>>> 149
+`flowchart LR`: a diagram whose boxes flow from left to right.
+>>> 150-151
+The browser talks to the frontend; the frontend sends JSON to the backend's `/api/...` addresses with the JWT in each request. `-->` is an arrow, `-- "text" -->` an arrow with a label, and `<br/>` breaks a line inside a box.
+>>> 152-154
+The backend's own stores: the database, the cache and the object store for scanned documents. `[( … )]` draws a cylinder, the usual symbol for stored data.
+>>> 155-156
+The two outside services, drawn with dotted arrows (`-. … .->`) because the backend talks to them indirectly: signed callbacks from the payment gateway, and messages sent from the outbox.
+>>> 157
+End of the diagram.
+>>> 159-167
+A table matching each technology the report names to where it lives in the code.
+>>> 169
+The tech stack section.
+>>> 171-180
+Every layer and its tools: the frontend, the design system, the motion libraries, the interface components, the backend's Spring Boot modules, the databases, the test tools and the delivery (Docker, nginx). Links go to each library's website.
+>>> 182
+The quick-start section.
+>>> 184-185
+The only two things to install: a JDK and Node.js.
+>>> 187-191
+On Windows, the helper script starts both halves in one command.
+>>> 193-198
+The same by hand, in two terminals: the backend on port 8080, and the frontend on port 5173 (the one to open in the browser).
+>>> 200-203
+The in-memory database is recreated with demo data on every backend start and can be browsed with the H2 console. Signed out, the app opens on the welcome page; the login page lists the demo accounts; Ctrl K opens the command palette.
+>>> 205-212
+The Docker way, which starts PostgreSQL, Redis, the backend and nginx with one command, then opens port 3000.
+>>> 214-217
+The demo accounts section: the shared password, and four accounts to try first.
+>>> 219-221
+`<details>` makes a section that is folded until clicked; `<summary>` is the line that is always visible. `<br/>` adds a little space before the table.
+>>> 223-236
+The demo accounts table: every username, who it is, and which test case or finding it demonstrates.
+>>> 238
+End of the folded section.
+>>> 240-245
+The tests section: the two test commands and how many tests each part has.
+>>> 247-249
+The traceability section and what its table shows.
+>>> 251-253
+The table is folded, like the demo accounts, because it is long.
+>>> 255-275
+**Traceability**. Each finding of the report (requirement review RR-…, design review DR-…, test defects DEF-…, OWASP security findings A0…, and recommendation 1) is listed with the code that fixes it and the test that proves the fix. An examiner can check any claim in a minute.
+>>> 277
+End of the folded table.
+>>> 279-284
+The two guides: this one (for readers new to programming) and the Spring Boot course (for readers who know Java but not Spring).
+>>> 286-288
+Both guides are single HTML files to open in a browser (GitHub shows HTML files as source code), and the commands that rebuild them after the code changes.
+>>> 290-304
+The folder layout, with the files beginners most need to know: `messages.ts` (every on-screen text), `theme.css` (every colour, size and animation curve), the `motion/` folder, and the `screenshots/` folder with the README's pictures.
+>>> 306-316
+The **known limitations**, stated honestly: the code is smaller than the 48,600 lines the report describes; the report's TC-013 number is wrong (8.63, not 8.25); ERP and DigiLocker are not implemented; the audit log and outbox are not split by campus; and the gateways are simulated.
+>>> 318
+`---` draws a horizontal line.
+>>> 320-325
+A centred footer: who built the project and for which course; `<sub>` writes the last line in small letters.
 
 === FILE scripts/dev-start.ps1
 >>> SUMMARY
-A **PowerShell script** that starts EduMate for development on Windows with one command. It opens two new windows: the backend (port 8080) and the frontend (port 5173). The first time, it also installs the frontend's packages.
+A **PowerShell script** that starts EduMate for development on Windows with one command. It opens two new windows: the backend (port 8080) and the frontend (port 5173). On the first run, and again whenever the list of frontend packages has changed (for example after a `git pull`), it also installs the frontend's packages.
 
 Run it from the project folder:
 <pre class="block">powershell -ExecutionPolicy Bypass -File scripts\dev-start.ps1</pre>
@@ -45,11 +147,17 @@ Run it from the project folder:
 `$PSScriptRoot` is the folder holding this script (`scripts`); `Split-Path -Parent` goes one folder up, to the project root.
 >>> 9-10
 Prints a message, then opens a **new** PowerShell window (`Start-Process`) that goes into `backend` and runs `mvnw.cmd spring-boot:run`. `-NoExit` keeps the window open so its log stays visible.
->>> 12-17
-If `frontend\node_modules` does not exist yet (first run), go into `frontend`, run `npm install`, and come back (`Push-Location` / `Pop-Location`).
->>> 19-20
+>>> 12-13
+Why the next check exists: `npm install` must run not only the first time, but also after a `git pull` that added or upgraded packages; otherwise the frontend would start with old packages and fail with "Failed to resolve import".
+>>> 14
+The file npm writes inside `node_modules` at the end of every install: its date is "when the packages were last installed".
+>>> 15
+Install if that file does not exist (never installed), **or** if `package-lock.json` (the list of exact package versions, updated by `git pull`) is newer than the last install. `-or` stops at the first true part, so the dates are only compared when the file exists.
+>>> 16-20
+Then go into `frontend`, run `npm install`, and come back (`Push-Location` / `Pop-Location`).
+>>> 22-23
 Opens a second window running `npm run dev` in `frontend` (the Vite development server).
->>> 22-24
+>>> 25-27
 Tells the user which address to open and the demo password.
 
 === FILE backend/.mvn/wrapper/maven-wrapper.properties

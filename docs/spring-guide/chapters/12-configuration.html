@@ -1,0 +1,138 @@
+<!-- level: 1 -->
+<h1>Configuration: settings, profiles and typed properties</h1>
+
+<p class="lead">The same jar runs on a laptop with an in-memory database and in production with PostgreSQL, Redis and
+real secrets. Nothing is recompiled; only <em>settings</em> change. This chapter shows where settings come from, how
+profiles switch whole groups of them, and how to read them safely in Java.</p>
+
+<h2>Where settings live</h2>
+<p>Spring Boot reads settings (called <em>properties</em>) from many places and merges them into one
+<code>Environment</code>. The most common place is <code>src/main/resources/application.yml</code> (or
+<code>application.properties</code>; same content, different syntax):</p>
+<pre class="code" data-src="backend/src/main/resources/application.yml" data-lines="7-29" data-expect="open-in-view: false"></pre>
+<p>YAML uses indentation for nesting, so <code>spring:</code> → <code>jpa:</code> → <code>open-in-view: false</code> is
+the property <code>spring.jpa.open-in-view</code>. The same line in <code>.properties</code> syntax would be
+<code>spring.jpa.open-in-view=false</code>. Settings under <code>server.*</code>, <code>spring.*</code> and
+<code>management.*</code> belong to Spring Boot; each one is documented in the "Common Application Properties"
+appendix of the Spring Boot reference, and your editor completes them for you.</p>
+<p>A few worth knowing from this file:</p>
+<table>
+<thead><tr><th>Property</th><th>EduMate's value</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>server.port</code></td><td><code>${PORT:8080}</code></td><td>the port Tomcat listens on</td></tr>
+<tr><td><code>server.error.include-stacktrace</code></td><td><code>never</code></td><td>Java stack traces never reach the client (a security rule, OWASP A05)</td></tr>
+<tr><td><code>spring.profiles.default</code></td><td><code>dev</code></td><td>the profile used when none is chosen</td></tr>
+<tr><td><code>spring.jpa.open-in-view</code></td><td><code>false</code></td><td>database sessions do not stay open while JSON is written (Level 2 explains why)</td></tr>
+<tr><td><code>spring.jpa.hibernate.ddl-auto</code></td><td><code>none</code></td><td>Hibernate never creates or alters tables; Flyway does</td></tr>
+<tr><td><code>spring.servlet.multipart.max-file-size</code></td><td><code>5MB</code></td><td>uploads larger than this are refused before any EduMate code runs</td></tr>
+</tbody></table>
+
+<h2>Placeholders and environment variables</h2>
+<p><code>${PORT:8080}</code> is a <strong>placeholder</strong>: "the value of the property or environment variable
+<code>PORT</code>, or 8080 if there is none". This is how secrets stay out of the code:</p>
+<pre class="code" data-src="backend/src/main/resources/application.yml" data-lines="58-72" data-expect="jwt-secret: ${JWT_SECRET:"></pre>
+<p>On a laptop the harmless development defaults are used. In Docker, <code>docker-compose.yml</code> sets
+<code>JWT_SECRET</code> and <code>PAYMENT_GATEWAY_SECRET</code> from the <code>.env</code> file, and the placeholders pick
+them up.</p>
+<div class="callout deep"><strong>Relaxed binding: one setting, many spellings</strong>
+Spring Boot matches names loosely. The YAML key <code>edumate.security.jwt-secret</code> can also be set as the
+environment variable <code>EDUMATE_SECURITY_JWTSECRET</code> (upper case, dots and dashes become underscores or
+disappear) or the command-line argument <code>--edumate.security.jwt-secret=…</code>, and it is read in Java as
+<code>jwtSecret</code>. The canonical form to write in files is lower case with dashes ("kebab case").</div>
+
+<h2>Which value wins?</h2>
+<p>When the same property is set in several places, the more specific source wins. Simplified, from strongest to
+weakest:</p>
+<ol class="steps-list">
+<li>Command-line arguments: <code>java -jar app.jar --server.port=9090</code></li>
+<li>Java system properties: <code>-Dserver.port=9090</code></li>
+<li>Operating-system environment variables: <code>SERVER_PORT=9090</code></li>
+<li>Profile-specific files: <code>application-docker.yml</code> when the <code>docker</code> profile is active</li>
+<li>The plain file: <code>application.yml</code></li>
+<li>Defaults written in code</li>
+</ol>
+<p>Files outside the jar (for example <code>./config/application.yml</code> next to it) beat the ones inside it, so
+operations staff can override settings without rebuilding.</p>
+
+<h2>Profiles: switching whole environments</h2>
+<p>A <strong>profile</strong> is a named set of extra settings (and optionally beans). EduMate has two:</p>
+<table>
+<thead><tr><th></th><th><code>dev</code> (<code>application-dev.yml</code>)</th><th><code>docker</code> (<code>application-docker.yml</code>)</th></tr></thead>
+<tbody>
+<tr><td>Database</td><td>H2 in memory, wiped on restart</td><td>PostgreSQL from <code>DB_URL</code>, <code>DB_USER</code>, <code>DB_PASSWORD</code></td></tr>
+<tr><td>Cache</td><td>simple in-memory maps</td><td>Redis, entries expire after 10 minutes</td></tr>
+<tr><td>H2 web console</td><td>on</td><td>off</td></tr>
+<tr><td>Demo data, visible OTPs</td><td>on</td><td>from <code>.env</code></td></tr>
+<tr><td>Log level of <code>com.edumate</code></td><td>DEBUG</td><td>INFO</td></tr>
+</tbody></table>
+<pre class="code" data-src="backend/src/main/resources/application-dev.yml" data-lines="5-24" data-expect="jdbc:h2:mem:edumate"></pre>
+<p>Choose a profile with <code>--spring.profiles.active=docker</code> or the environment variable
+<code>SPRING_PROFILES_ACTIVE=docker</code> (the backend's <code>Dockerfile</code> sets it). Several can be active at
+once, separated by commas.</p>
+<div class="callout tip"><strong>Keep profiles about environments, not features</strong>
+Profiles such as <code>dev</code>, <code>test</code>, <code>docker</code>, <code>prod</code> age well. For switching a
+<em>feature</em> on or off, use a normal property and a condition, as EduMate does for demo data:
+<code>@ConditionalOnProperty(prefix = "edumate.demo", name = "seed", havingValue = "true")</code> on
+<code>DemoDataSeeder</code>. The same profile can then run with or without demo data.</div>
+
+<h2>Reading settings in Java: typed properties</h2>
+<p>EduMate keeps all of its own settings under one prefix, <code>edumate:</code>, and reads them into a
+<strong>record</strong>:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/config/AppProperties.java" data-lines="9-32" data-expect="@ConfigurationProperties(prefix = &quot;edumate&quot;)"></pre>
+<p>At start-up Spring Boot creates an <code>AppProperties</code> bean and fills it from the YAML:
+<code>edumate.academic.attendance-threshold-percent: 75</code> becomes
+<code>properties.academic().attendanceThresholdPercent()</code>. The YAML list of campuses becomes a
+<code>List&lt;Tenant&gt;</code>, the map of reserved seat shares a <code>Map&lt;String, BigDecimal&gt;</code>. Values are
+converted to the right type (<code>int</code>, <code>boolean</code>, <code>BigDecimal</code>, <code>Duration</code> from
+text like <code>10m</code>…), and a value that cannot be converted stops start-up with a clear error.</p>
+<p>Two things make it work: <code>@ConfigurationProperties(prefix = "edumate")</code> on the record, and
+<code>@ConfigurationPropertiesScan</code> on the main class, which finds it. Any bean can then simply ask for it:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/attendance/EligibilityEvaluator.java" data-lines="45-49" data-expect="properties.academic().attendanceThresholdPercent()"></pre>
+
+<h3>The alternative: <code>@Value</code></h3>
+<pre class="code" data-lang="java">@Service
+public class LibraryService {
+    public LibraryService(@Value("${edumate.library.loan-days}") int loanDays) { … }
+}</pre>
+<p><code>@Value</code> injects one property. It is fine for a single value, but for anything larger typed properties
+win: one place lists every setting with its type, typos in names are found at start-up instead of silently giving
+<code>null</code>, the editor offers completion, and tests can build the record by hand (<code>TestFixtures</code>
+does).</p>
+
+<div class="callout tip"><strong>Validate your settings</strong>
+Add <code>@Validated</code> to a properties class and Bean Validation annotations to its fields
+(<code>@Min(1) int tokenValidityHours</code>, <code>@NotBlank String jwtSecret</code>). A wrong setting then stops the
+application at start-up, with the property's name, instead of misbehaving later. EduMate does its most important check
+(the JWT secret's length) in <code>SecurityConfig.jwtSigningKey</code>.</div>
+
+<h2>Configuration as a whole: the rules of thumb</h2>
+<ul>
+<li><strong>No secrets in the repository.</strong> Only harmless development defaults; real values come from the
+environment (<code>.env</code>, Docker or Kubernetes secrets, a vault).</li>
+<li><strong>Everything that differs between environments is a setting</strong>; everything else is code. This is the
+"config" rule of the <em>Twelve-Factor App</em> method.</li>
+<li><strong>Business rules that the university may change are settings too</strong>: EduMate's attendance threshold,
+loan days, fines, merit weights and campuses are in YAML, so changing them needs no new release.</li>
+<li><strong>One prefix per application</strong> (<code>edumate.*</code>) keeps your settings apart from the framework's.</li>
+</ul>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Start the backend with <code>--edumate.academic.attendance-threshold-percent=80</code>, log in as the demo
+student, and call <code>GET /api/attendance/me</code>: courses between 75 % and 80 % are now "SHORTFALL".</li>
+<li>Set the environment variable <code>EDUMATE_LIBRARY_LOANDAYS=7</code>, restart, issue a book as the librarian, and
+check the due date.</li>
+<li>Misspell a value's type (<code>token-validity-hours: eight</code>) and read the start-up error.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary><code>server.port</code> is 8080 in <code>application.yml</code>, <code>SERVER_PORT=9000</code> is set in the environment, and the app is started with <code>--server.port=7000</code>. Which port is used?</summary>
+<div>7000: command-line arguments beat environment variables, which beat the files.</div></details>
+<details class="quiz"><summary>What does <code>${JWT_SECRET:dev-only…}</code> mean?</summary>
+<div>Use the property or environment variable <code>JWT_SECRET</code> if it exists, otherwise the text after the colon.</div></details>
+<details class="quiz"><summary>Why does EduMate use a record with <code>@ConfigurationProperties</code> rather than many <code>@Value</code> annotations?</summary>
+<div>Type safety and one overview of all settings, errors at start-up for unconvertible values, editor completion, and
+easy construction in tests.</div></details>
+<details class="quiz"><summary>When would you use <code>@ConditionalOnProperty</code> instead of a profile?</summary>
+<div>For a feature switch that is independent of the environment, like EduMate's demo data: any profile can run with
+or without it.</div></details>

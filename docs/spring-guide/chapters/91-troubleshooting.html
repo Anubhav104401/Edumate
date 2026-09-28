@@ -1,0 +1,55 @@
+<!-- level: 5 -->
+<h1>Troubleshooting: the errors everyone meets</h1>
+
+<p class="lead">Spring's error messages are long but precise. Find the <strong>last "Caused by:"</strong> in a stack trace,
+or the <strong>APPLICATION FAILED TO START</strong> box, and look it up here.</p>
+
+<h2>Start-up failures</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Message (shortened)</th><th>Meaning</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>Parameter 0 of constructor in X required a bean of type 'Y' that could not be found.</code></td><td>nothing creates a <code>Y</code></td><td>Is <code>Y</code> annotated (<code>@Service</code>…)? Is it under the main class's package? Is it conditional (profile, property) and switched off? Is the starter that provides it missing?</td></tr>
+<tr><td><code>… required a single bean, but 2 were found</code></td><td>ambiguous injection</td><td><code>@Primary</code>, <code>@Qualifier</code>, or create only one (profiles/conditions)</td></tr>
+<tr><td><code>The dependencies of some of the beans in the application context form a cycle</code></td><td>A needs B needs A</td><td>extract the shared part into a third bean, or use events; <code>@Lazy</code> only as a last resort</td></tr>
+<tr><td><code>Failed to configure a DataSource: 'url' attribute is not specified</code></td><td>JPA/JDBC is on the classpath but no database is configured</td><td>add <code>spring.datasource.url</code> (or an embedded database like H2), or remove the starter</td></tr>
+<tr><td><code>Web server failed to start. Port 8080 was already in use.</code></td><td>another process (often an earlier run) holds the port</td><td>stop it, or <code>--server.port=8081</code></td></tr>
+<tr><td><code>Validate failed: Migration checksum mismatch for migration version 1</code></td><td>an applied Flyway file was edited</td><td>undo the edit and write a new <code>V2__…</code>; on a throw-away development database, recreate it</td></tr>
+<tr><td><code>Schema-validation: missing column [x] in table [y]</code></td><td>an entity field without a column (with <code>ddl-auto: validate</code>)</td><td>add a migration for the column</td></tr>
+<tr><td><code>Failed to bind properties under 'edumate.security' … Failed to convert</code></td><td>a setting has the wrong type</td><td>fix the value; the message names the property</td></tr>
+<tr><td><code>No property 'usnn' found for type 'Student'</code></td><td>a derived query names a field that does not exist</td><td>fix the method name (field names, not column names)</td></tr>
+<tr><td><code>Validation failed for query for method …</code></td><td>a JPQL syntax or name error in <code>@Query</code></td><td>JPQL uses entity and field names; check the query in the message</td></tr>
+<tr><td><code>edumate.security.jwt-secret must be at least 32 bytes long</code></td><td>EduMate's own start-up check</td><td>set a longer <code>JWT_SECRET</code></td></tr>
+</tbody></table></div>
+
+<h2>Errors while running</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><strong>401</strong> on every request</td><td>no <code>Authorization: Bearer …</code> header, an expired token, or a token signed with another secret (after changing <code>JWT_SECRET</code>)</td><td>log in again; check the header's exact spelling</td></tr>
+<tr><td><strong>403</strong> for an endpoint you just wrote</td><td>deny-by-default: no RoleMatrix rule, or the rule has another method/path</td><td>add the rule; <code>RoleMatrixCoverageTest</code> lists missing ones</td></tr>
+<tr><td><strong>404</strong> "There is nothing at this address"</td><td>wrong path, wrong HTTP method, or the controller is outside the scanned package</td><td>compare with <code>@RequestMapping</code> + method mapping; <code>/actuator/mappings</code> lists every mapping</td></tr>
+<tr><td><strong>400</strong> <code>MALFORMED_JSON</code></td><td>the body is not valid JSON or a field has the wrong type</td><td>check quotes, commas, number vs text, date formats (<code>"2026-09-28"</code>)</td></tr>
+<tr><td><strong>415</strong> Unsupported Media Type</td><td>missing <code>Content-Type: application/json</code></td><td>add the header</td></tr>
+<tr><td><code>LazyInitializationException: could not initialize proxy - no Session</code></td><td>a lazy relationship was accessed after the transaction ended (open-in-view is off)</td><td>load what you need inside the service (fetch join, a projection, or a <code>@Transactional</code> method)</td></tr>
+<tr><td>Changes to an entity are not saved</td><td>the entity is detached (loaded in another transaction) or the method is not transactional (self-invocation, private method)</td><td>modify it inside a <code>@Transactional</code> service method called from another bean</td></tr>
+<tr><td><code>@Transactional</code> / <code>@Cacheable</code> seems ignored</td><td>self-invocation, a non-public or final method, or an object created with <code>new</code></td><td>call through another bean; make it public; let Spring create it</td></tr>
+<tr><td><code>UnexpectedRollbackException</code></td><td>an inner transactional call failed and marked the shared transaction rollback-only; the outer code caught the exception</td><td>let the exception propagate, or use <code>REQUIRES_NEW</code> for the inner work if it is truly independent</td></tr>
+<tr><td><code>ObjectOptimisticLockingFailureException</code> / 409 <code>STALE_UPDATE</code></td><td>someone else changed the row since you read it</td><td>expected behaviour: reload and retry (the user interface explains it)</td></tr>
+<tr><td><code>DataIntegrityViolationException</code> / 409</td><td>a UNIQUE, NOT NULL, foreign-key or CHECK rule refused the write</td><td>the server log has the constraint name; check the data or add a validation that explains it earlier</td></tr>
+<tr><td>Requests hang under load</td><td>the connection pool is exhausted (long transactions, remote calls inside transactions) or a remote service has no timeout</td><td>metric <code>hikaricp.connections.pending</code>; shorten transactions; add timeouts</td></tr>
+<tr><td>A "Whitelabel Error Page" in the browser</td><td>Spring Boot's fallback error page for a request no handler answered</td><td>it appears for non-API paths; for the API, the JSON handler answers</td></tr>
+</tbody></table></div>
+
+<h2>A debugging routine that always works</h2>
+<ol class="steps-list">
+<li><strong>Read the whole message</strong>, then the last "Caused by:". Spring usually says exactly what is wrong.</li>
+<li><strong>Turn up the logs</strong> for the suspected area: <code>logging.level.org.springframework.web=DEBUG</code> (request
+mapping), <code>org.springframework.security=TRACE</code> (the filter chain), <code>org.hibernate.SQL=DEBUG</code> (queries),
+<code>org.springframework.transaction=TRACE</code> (transaction boundaries).</li>
+<li><strong>Ask the application about itself</strong>: <code>--debug</code> for the conditions report; Actuator's
+<code>beans</code>, <code>mappings</code>, <code>configprops</code>, <code>env</code> in development.</li>
+<li><strong>Reproduce it in a test</strong> (MockMvc makes this quick), then fix it and keep the test.</li>
+<li><strong>Set a breakpoint in the framework</strong>: <code>DispatcherServlet.doDispatch</code>,
+<code>TransactionInterceptor.invoke</code>, <code>FilterChainProxy.doFilter</code>. Stepping through Spring's code is how
+experts learn it.</li>
+</ol>

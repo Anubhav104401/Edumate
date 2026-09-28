@@ -1,0 +1,175 @@
+<!-- level: 4 -->
+<h1>Inside the container: the bean lifecycle, proxies and AOP</h1>
+
+<p class="lead">Transactions, caching, security annotations, retries and repositories all work the same way: the
+container creates your object, then may wrap it in a proxy that adds behaviour around your methods. Knowing exactly when
+and how that happens is what lets you debug the hard cases and extend the framework yourself.</p>
+
+<h2>How the application context starts ("refresh")</h2>
+<ol class="steps-list">
+<li><strong>Collect bean definitions.</strong> Component scanning, <code>@Configuration</code> classes,
+<code>@Bean</code> methods, <code>@Import</code>s and the auto-configuration list are turned into
+<code>BeanDefinition</code>s: recipes, not objects yet. (This is done by a special post-processor,
+<code>ConfigurationClassPostProcessor</code>.)</li>
+<li><strong>Run <code>BeanFactoryPostProcessor</code>s</strong>, which may change the recipes before any bean exists
+(resolving <code>${…}</code> placeholders, adding definitions).</li>
+<li><strong>Register <code>BeanPostProcessor</code>s</strong>, the hooks that will see every bean as it is created.</li>
+<li><strong>Create every non-lazy singleton</strong>, each after its dependencies (next section).</li>
+<li><strong>Publish <code>ContextRefreshedEvent</code></strong> and start <code>SmartLifecycle</code> beans (the web server,
+schedulers).</li>
+<li>Spring Boot then runs the <code>ApplicationRunner</code>s and publishes <code>ApplicationReadyEvent</code>.</li>
+</ol>
+
+<h2>The life of one bean</h2>
+<pre class="diagram">BeanDefinition "localFileObjectStore"
+   │
+   ├─ 1. instantiate          new LocalFileObjectStore(appProperties)      ← constructor injection happens here
+   ├─ 2. populate             @Autowired fields / setters (none in EduMate's main code)
+   ├─ 3. Aware callbacks      setBeanName(…), setApplicationContext(…)  (if the class implements *Aware)
+   ├─ 4. BeanPostProcessors   postProcessBeforeInitialization(bean)
+   ├─ 5. initialise           @PostConstruct method → InitializingBean.afterPropertiesSet() → init method
+   ├─ 6. BeanPostProcessors   postProcessAfterInitialization(bean)   ← PROXIES ARE CREATED HERE
+   │                           (the object other beans receive may now be a proxy, not your instance)
+   ├─ … in use …
+   └─ 7. destroy (shutdown)   @PreDestroy → DisposableBean.destroy() → AutoCloseable.close()</pre>
+<p>EduMate's beans do their set-up in constructors, which is enough when the work only needs the constructor's
+parameters:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/documents/LocalFileObjectStore.java" data-lines="19-26" data-expect="public LocalFileObjectStore(AppProperties properties)"></pre>
+<p>Use <code>@PostConstruct</code> when set-up needs the bean fully wired (field injection) or must be overridable in
+subclasses; use <code>@PreDestroy</code> to release resources (close a client, stop a thread). Keep both fast: they run
+during start-up and shutdown of the whole application.</p>
+
+<h2>Proxies: behaviour around your methods</h2>
+<p>A <code>BeanPostProcessor</code> may return a <em>different</em> object from the one it was given. Spring's
+auto-proxy creator does this for every bean that has something to add (a <code>@Transactional</code> method, a
+<code>@Cacheable</code> method, an aspect that matches…): it returns a <strong>proxy</strong> that holds your real object
+and a chain of <em>interceptors</em>.</p>
+<pre class="code" data-lang="java">// What the proxy for ResultPublicationService does, in spirit:
+class ResultPublicationService$$SpringCGLIB$$0 extends ResultPublicationService {
+    ResultPublicationService target;                      // your real object
+    List&lt;MethodInterceptor&gt; chain;                         // e.g. cache eviction, transaction
+
+    @Override
+    public ResultSetView publish(Long id, CurrentUser me) {
+        // e.g. CacheInterceptor → TransactionInterceptor → target.publish(id, me)
+        //   TransactionInterceptor: begin; call; commit (or roll back on RuntimeException)
+        //   CacheInterceptor:        after success, evict "publishedResults"
+        return invokeChain(chain, () -&gt; target.publish(id, me));
+    }
+}</pre>
+<table>
+<thead><tr><th>Proxy kind</th><th>How</th><th>Limits</th></tr></thead>
+<tbody>
+<tr><td><strong>CGLIB subclass</strong> (Spring Boot's default)</td><td>a generated subclass of your class overrides its methods</td><td>cannot proxy <code>final</code> classes or <code>final</code>/<code>private</code>/<code>static</code> methods</td></tr>
+<tr><td><strong>JDK dynamic proxy</strong></td><td>a generated class implementing your interfaces</td><td>only interface methods; injecting the concrete class fails</td></tr>
+</tbody></table>
+<p>Spring Data repositories are JDK proxies of your repository interfaces, backed by a generic implementation class.
+Ask Spring what a bean really is with <code>AopUtils.isAopProxy(bean)</code> or look at its class name in the debugger:
+<code>ResultPublicationService$$SpringCGLIB$$0</code>.</p>
+<p>Everything that works through proxies shares the same rules:</p>
+<ul>
+<li>Only calls <strong>from outside</strong> the bean go through the proxy (the self-invocation trap).</li>
+<li>Only <strong>public</strong>, non-<code>final</code> methods of Spring-managed beans are intercepted; objects you create
+with <code>new</code> are never proxied.</li>
+<li>Several features on one method become a chain of interceptors, and the order can matter (should the cache be
+checked before a transaction is opened?). Both default to the lowest precedence; when it matters, set it explicitly with
+<code>@EnableCaching(order = …)</code> and <code>@EnableTransactionManagement(order = …)</code>.</li>
+</ul>
+<p>Proxy-based features: <code>@Transactional</code>, <code>@Cacheable</code>/<code>@CacheEvict</code>, <code>@Async</code>,
+<code>@PreAuthorize</code>/<code>@Secured</code>, method validation (<code>@Validated</code> on a class), resilience
+annotations (<code>@Retryable</code>, <code>@ConcurrencyLimit</code> in Spring Framework 7), <code>@Observed</code>, and your
+own aspects.</p>
+
+<h2>Aspect-oriented programming (AOP): write your own interceptor</h2>
+<p><strong>Cross-cutting concerns</strong> are things many classes need but none is about: timing, logging, auditing,
+retries. AOP lets you write them once and apply them by rule.</p>
+<table>
+<thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>Join point</td><td>a place where extra behaviour can run; in Spring AOP always a method execution</td></tr>
+<tr><td>Pointcut</td><td>an expression selecting join points: "every public method of a <code>@Service</code> class"</td></tr>
+<tr><td>Advice</td><td>the code to run: <code>@Before</code>, <code>@AfterReturning</code>, <code>@AfterThrowing</code>, <code>@After</code>, <code>@Around</code></td></tr>
+<tr><td>Aspect</td><td>a class that bundles pointcuts and advice</td></tr>
+<tr><td>Weaving</td><td>attaching aspects to code; Spring AOP does it at run time with proxies (full AspectJ can also weave at compile or load time, even into <code>new</code>ed objects)</td></tr>
+</tbody></table>
+<p>An aspect that warns about slow service methods in EduMate (add the AspectJ starter,
+<code>spring-boot-starter-aspectj</code>; it was called <code>spring-boot-starter-aop</code> before Boot 4):</p>
+<pre class="code" data-lang="java">@Aspect
+@Component
+public class SlowServiceAspect {
+
+    private static final Logger log = LoggerFactory.getLogger(SlowServiceAspect.class);
+
+    // every public method of every class annotated @Service in EduMate's packages
+    @Around("within(com.edumate..*) &amp;&amp; @within(org.springframework.stereotype.Service)")
+    public Object time(ProceedingJoinPoint call) throws Throwable {
+        long start = System.nanoTime();
+        try {
+            return call.proceed();                              // run the real method (and the rest of the chain)
+        } finally {
+            long ms = (System.nanoTime() - start) / 1_000_000;
+            if (ms &gt; 500) {
+                log.warn("Slow service call {} took {} ms", call.getSignature().toShortString(), ms);
+            }
+        }
+    }
+}</pre>
+<div class="callout warn"><strong>Use AOP sparingly</strong>
+Behaviour that is invisible at the call site is hard to follow. Good uses are truly cross-cutting and boring (timing,
+metrics, tracing). Business rules, such as "only the course's teacher may take its attendance", belong in plain code
+where readers expect them, which is why EduMate writes <code>courseAccess.requireTaughtBy(...)</code> explicitly.</div>
+
+<h2>Writing a <code>BeanPostProcessor</code></h2>
+<p>The lowest-level hook: see (and replace) every bean. For example, verifying at start-up that no singleton service
+has a mutable, non-final field (the thread-safety rule of the beans chapter):</p>
+<pre class="code" data-lang="java">@Component
+class StatelessServiceGuard implements BeanPostProcessor {
+    @Override
+    public Object postProcessAfterInitialization(Object bean, String name) {
+        Class&lt;?&gt; type = AopUtils.getTargetClass(bean);
+        if (type.getPackageName().startsWith("com.edumate") &amp;&amp; type.isAnnotationPresent(Service.class)) {
+            for (Field field : type.getDeclaredFields()) {
+                if (!Modifier.isFinal(field.getModifiers()) &amp;&amp; !Modifier.isStatic(field.getModifiers())) {
+                    throw new IllegalStateException(name + " has a mutable field '" + field.getName()
+                            + "'; singleton services must be stateless");
+                }
+            }
+        }
+        return bean;
+    }
+}</pre>
+<p>Spring itself is built from such processors: <code>@Autowired</code> fields, <code>@PostConstruct</code>,
+<code>@Scheduled</code>, <code>@Async</code> and proxy creation are each implemented by one.</p>
+
+<h2>Circular dependencies, lazy beans and scopes revisited</h2>
+<ul>
+<li>With constructor injection a cycle (A needs B needs A) cannot be built, and Spring Boot stops with a diagram of the
+cycle. That is a feature: redesign (extract the shared logic into a third bean, or communicate through events).
+<code>@Lazy</code> on one constructor parameter injects a proxy that resolves later; use it only as a last resort.</li>
+<li><code>spring.main.lazy-initialization=true</code> creates beans on first use: faster start-up in development, but
+configuration errors appear later, at the first request instead of at start-up.</li>
+<li>A request- or session-scoped bean injected into a singleton is injected as a <em>scoped proxy</em> that finds the
+right instance for the current request each time.</li>
+</ul>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>In a debugger, stop inside <code>ResultPublicationService.publish</code> during
+<code>ResultPublicationIntegrationTest</code> and read the call stack from the test down: find
+<code>CglibAopProxy</code>, <code>CacheInterceptor</code> and <code>TransactionInterceptor</code>.</li>
+<li>Add the slow-service aspect above with a 5 ms threshold and watch which EduMate services appear in the log.</li>
+<li>Make a field of a service non-final and mutable, add <code>StatelessServiceGuard</code>, and start the application.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>At which step of a bean's life are proxies created?</summary>
+<div>In <code>postProcessAfterInitialization</code>, after the bean is constructed, injected and initialised; other beans
+then receive the proxy.</div></details>
+<details class="quiz"><summary>Why can Spring not add a transaction to a <code>final</code> method?</summary>
+<div>Spring Boot's default proxies are generated subclasses; a <code>final</code> method cannot be overridden, so the proxy
+cannot intercept it.</div></details>
+<details class="quiz"><summary>What is the difference between a pointcut and advice?</summary>
+<div>The pointcut selects where (which method executions); the advice is what runs there (before, after, or around).</div></details>
+<details class="quiz"><summary>Name four Spring features that are implemented with proxies.</summary>
+<div>Transactions, caching, method security, <code>@Async</code> (also method validation, retries, Spring Data
+repositories, observations).</div></details>

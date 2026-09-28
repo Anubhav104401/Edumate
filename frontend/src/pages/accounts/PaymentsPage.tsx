@@ -1,12 +1,13 @@
 /*
  * The accounts office: recent gateway payments, and any student's fee account by USN.
  */
+import { CreditCard, Search, Wallet } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/http';
 import type { FeeAccount } from '../../api/types';
 import { useToast } from '../../components/Toast';
-import { Badge, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
+import { Avatar, Badge, EmptyState, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
 import { formatDateTime, formatMoney } from '../../utils/format';
@@ -36,21 +37,31 @@ export function PaymentsPage() {
 
       <form className="card toolbar" onSubmit={lookup}>
         <Field id="usn" label={t.payments.lookupTitle}>
-          <input id="usn" value={usn} placeholder={t.payments.lookupPlaceholder} onChange={(e) => setUsn(e.target.value)} />
+          <div className="input-icon">
+            <Search size={16} />
+            <input id="usn" value={usn} placeholder={t.payments.lookupPlaceholder} onChange={(e) => setUsn(e.target.value)} />
+          </div>
         </Field>
         <button type="submit" className="btn">
-          {t.payments.lookup}
+          <Wallet size={16} /> {t.payments.lookup}
         </button>
       </form>
 
       {account && (
         <div className="card table-wrap">
-          <h2>
-            {account.fullName} <span className="mono muted">{account.usn}</span>
-          </h2>
-          <p>
-            {t.fees.outstanding}: <strong>{formatMoney(Math.max(0, account.outstanding))}</strong>
-          </p>
+          <div className="card-header">
+            <div className="btn-row" style={{ flexWrap: 'nowrap' }}>
+              <Avatar name={account.fullName} size="lg" />
+              <div>
+                <h2 style={{ margin: 0 }}>{account.fullName}</h2>
+                <span className="mono muted small">{account.usn}</span>
+              </div>
+            </div>
+            <div className="gpa-tile">
+              <span>{t.fees.outstanding}</span>
+              <strong>{formatMoney(Math.max(0, account.outstanding))}</strong>
+            </div>
+          </div>
           <table>
             <thead>
               <tr>
@@ -65,7 +76,9 @@ export function PaymentsPage() {
               {account.ledger.map((line, i) => (
                 <tr key={i}>
                   <td>{formatDateTime(line.at)}</td>
-                  <td>{t.fees.ledgerType[line.type]}</td>
+                  <td>
+                    <Badge tone={line.type === 'CREDIT' ? 'good' : 'warn'}>{t.fees.ledgerType[line.type]}</Badge>
+                  </td>
                   <td>{line.description}</td>
                   <td className="num">{formatMoney(line.amount)}</td>
                   <td className="mono small">{line.reference}</td>
@@ -77,10 +90,13 @@ export function PaymentsPage() {
       )}
 
       <div className="card table-wrap">
-        <h2>{t.payments.recentTitle}</h2>
-        {recent.loading && <Loading />}
+        <h2 className="card-title">
+          <CreditCard size={18} /> {t.payments.recentTitle}
+        </h2>
+        {recent.loading && <Loading inline />}
         {recent.error && <ErrorBanner message={recent.error} onRetry={recent.reload} />}
-        {recent.data && (
+        {recent.data && recent.data.length === 0 && <EmptyState icon={CreditCard} />}
+        {recent.data && recent.data.length > 0 && (
           <table>
             <thead>
               <tr>
@@ -97,7 +113,9 @@ export function PaymentsPage() {
                 <tr key={p.id}>
                   <td>{formatDateTime(p.updatedAt)}</td>
                   <td className="mono small">{p.orderId}</td>
-                  <td className="num">{formatMoney(p.amount)}</td>
+                  <td className="num">
+                    <strong>{formatMoney(p.amount)}</strong>
+                  </td>
                   <td>
                     <Badge tone={TONE[p.status]}>{t.fees.paymentStatus[p.status]}</Badge>
                   </td>

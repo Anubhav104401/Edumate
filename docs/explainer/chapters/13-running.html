@@ -22,8 +22,13 @@ Terminal 2:   cd frontend
               npm install                       (first time only)
               npm run dev
               … open http://localhost:5173</pre>
-<p>Log in with any demo account; the password for all is <code>Edumate@2026</code>. The login page lists them in
-development builds.</p>
+<p>Opening <strong>http://localhost:5173</strong> while signed out shows the public <strong>welcome page</strong>
+(<code>/welcome</code>): scroll down to see the scroll effects, then press <strong>Sign in</strong>. Log in with any demo
+account; the password for all is <code>Edumate@2026</code>. In development builds the login page lists every demo
+account as a searchable grid: <strong>click</strong> one to fill in the form, <strong>double-click</strong> to sign in
+straight away.</p>
+<p>Once inside: <strong>Ctrl K</strong> (⌘K on a Mac) opens the command palette to jump to any page; the sun/moon
+button switches between light and dark; the arrow at the bottom of the sidebar collapses it to icons.</p>
 
 <h2>Way 3: Docker (production-like)</h2>
 <pre class="block">copy .env.example .env        (Linux/macOS: cp .env.example .env) — then edit the secrets
@@ -34,7 +39,8 @@ docker compose up --build
 
 <h2>Suggested demonstration (about 15 minutes)</h2>
 <ol>
-<li><strong>student</strong>: dashboard cards; My results (four published semesters); My fees → Pay now → choose "2 times (replay test)" → Approve payment → PROCESSED + DUPLICATE_IGNORED; the statement shows one credit (TC-005/006).</li>
+<li><strong>(signed out)</strong>: the welcome page: the headline rising word by word, the product preview straightening as you scroll, the pinned "How it works" story, the sideways roles gallery.</li>
+<li><strong>student</strong>: dashboard cards (numbers count up); My attendance (Operating Systems at exactly 75.00 %, still "On track"); Hall ticket (the stamp, Print); My results (the SGPA/CGPA chart: hover it, or Tab to it and use ← →); My fees → Pay now → choose "2 times (replay test)" → Approve payment → the check mark and confetti, PROCESSED + DUPLICATE_IGNORED; the statement shows one credit (TC-005/006).</li>
 <li><strong>sneha.kulkarni</strong>: Marks entry → course SQA, exam session 2026-ODD → Kiran Joshi (23BTRCS015) has an empty internal mark → enter 31 with a reason → Save.</li>
 <li><strong>examsup</strong>: Results workflow → Compute (60 results) → Approve; try Approve again → "A second, different exam superintendent must approve."</li>
 <li><strong>examsup2</strong>: Approve → Publish → confirm. The Outbox fills with result e-mails.</li>

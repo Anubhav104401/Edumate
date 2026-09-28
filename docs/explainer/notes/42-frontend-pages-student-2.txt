@@ -1,49 +1,141 @@
-=== FILE frontend/src/pages/student/MyResultsPage.tsx
+=== FILE frontend/src/pages/student/MockGatewayPage.tsx
 >>> SUMMARY
-**"My results"**: every **published** semester, newest first. Each semester card shows the SGPA, CGPA, credits earned / registered, PASS or FAIL, when it was published, and a table of courses with marks, grade and grade points.
+**The pretend bank page** at `/pay/<orderId>`. In real life this page belongs to the payment gateway (Razorpay, PayU…), and the student would enter card or UPI details there, **never on EduMate**. Here it is simulated, because a real gateway needs a merchant account.
 
-Only **published** results ever reach this page; the backend's query filters on PUBLISHED. On results morning thousands of students open this page at once, so the backend serves it from the **cache** (`@Cacheable("publishedResults")`, Redis in Docker) instead of asking the database each time.
->>> 13
-The backend sends semesters oldest first; `[...data].reverse()` makes a **copy** and reverses it, so the newest comes first. The original data is left unchanged, because React state must never be changed in place.
->>> 15-20
-The drawing: the title, loading, error, and "No results have been published yet." if the list is empty.
->>> 21-22
-One card per semester.
->>> 23-26
-The card's header: "Semester 5" and the exam session's name.
->>> 28-29
-"Credits earned: 16 of 16 · 28 Sept 2026, 10:15 am".
->>> 32-34
-The SGPA, always with two decimals (`toFixed(2)`: 8.6 → "8.60").
->>> 36-37
-The CGPA, the same way.
->>> 42
-Older history semesters (from the demo data) have no course details …
->>> 44-48
-… otherwise a table of courses and its header row.
->>> 57-59
-One row per course.
->>> 64
-The grade cell: a red badge for F, green for anything else.
+It shows a **checkout card**: a bank icon, a "Secured with a signed (HMAC) callback" chip, the amount in large numbers, the order number and status, and two buttons, **Approve payment** and **Decline payment**. The interesting part is the **"Send the bank’s confirmation"** choice ("once (normal)", "2 times (replay test)", "3 times (replay test)"). Real gateways sometimes send the same "payment succeeded" message more than once, which caused defect DEF-014 in the report (the student was credited twice). Choosing 2 or 3 lets you **watch the fix working**: the first delivery says PROCESSED with a receipt, and the others say DUPLICATE_IGNORED. The ledger is credited once.
 
-=== FILE frontend/src/pages/student/MyLibraryPage.tsx
->>> SUMMARY
-**"My library"**: the books a student has borrowed, with issue and due dates, days late, the fine so far, and a status badge: "On loan" (blue), "Overdue" (red) or "Returned 12 Oct 2026" (green). The subtitle states the fine policy: "Fine: Rs 2 per day late, at most Rs 200."
->>> 14-19
-The drawing: the title with the fine policy, loading, error, and "No books borrowed." if the list is empty.
->>> 20-24
-If there are loans: a card with a table and its header row.
->>> 33-36
-One row per loan, starting with the title (bold) and the author.
->>> 44-45
-The status cell: for a book still out, "Overdue" if late, otherwise "On loan" …
+**After approving**, a green circle **draws itself** and a tick draws inside it (SVG `pathLength` animation), **confetti** bursts from both lower corners, and the list of deliveries slides in one line at a time. After declining, a red cross appears instead, and no confetti.
+
+**Behind the buttons:** `POST /api/payments/gateway/mock/<orderId>/complete {"success": true, "deliveries": 2}`. The backend's `MockPaymentGateway` then builds the callback exactly as a real gateway would, **HMAC-signs** it with the shared secret, and delivers it to the real callback endpoint the chosen number of times.
+
+**Confetti and the security policy.** The confetti library normally draws in a background **Web Worker** created from a `blob:` address. EduMate's Content-Security-Policy (in `nginx.conf`) does not allow workers from `blob:`, so the confetti is drawn on the page's own `<canvas>` with `useWorker: false`. It also honours "reduce motion": no confetti at all for those visitors (`disableForReducedMotion`).
+>>> 35-42
+`complete(success)`: busy; asks the simulated gateway to finish the payment (approve or decline) with the chosen number of deliveries; shows the outcomes and reloads the order; shows any error as a toast; and is no longer busy.
+>>> 46
+The first delivery's result, the one that counts (it holds the receipt number or the failure reason).
 >>> 47
-… and for a returned book, "Returned <date>".
+`paid`: true when that first delivery produced a receipt. `Boolean(…)` turns "a receipt number or nothing" into true/false.
+>>> 49-51
+The drawing: the title, subtitle and an eyebrow saying "Finance" (this page is not in the menu, so it names its section itself).
+>>> 52-53
+Loading and error.
+>>> 54-55
+The checkout card.
+>>> 56-59
+Before paying: the card's head row, with a bank icon tile…
+>>> 60-61
+…and a chip with a shield: "Secured with a signed (HMAC) callback".
+>>> 64-65
+"Amount to pay" and the amount in large numbers.
+>>> 66-69
+The order number (fixed-width font)…
+>>> 71
+…and the current status…
+>>> 73
+…as a badge. If the status has no translation, the raw value is shown (`?? data.status`).
+>>> 76
+The "deliveries" choice. (The inline `style` adds some space below it.)
+>>> 78-80
+A drop-down with 1, 2 and 3. `Number(e.target.value)` turns the chosen text into a number.
+>>> 87-90
+The "Approve payment" button, in green, large. While busy it shows a spinner and "Contacting EduMate…".
+>>> 92
+"Decline payment", in the quieter secondary style.
+>>> 99-103
+After paying: the result area slides up into view.
+>>> 105
+Approved → the self-drawing green check mark (`SuccessMark` below). Declined → a large red crossed circle.
+>>> 106
+Approved → confetti.
+>>> 107
+"Payment successful" or "Payment declined", centred.
+>>> 108
+"What EduMate did with each confirmation".
+>>> 109-115
+One numbered line per delivery, each sliding in from the left, 0.12 s after the previous one (starting at 0.3 s, once the check mark is under way).
+>>> 117
+Its outcome badge (green PROCESSED, blue DUPLICATE_IGNORED) and an explanation ("Duplicate recognised and ignored: no second credit").
+>>> 121-124
+A green "Receipt number: RCPT-…" box, or a red "Payment failed: …" box, and a button back to "My fees".
+>>> 136-139
+`draw(delay)`: a recipe for "draw this line like a pen". `pathLength` is motion's way to animate how much of an SVG line is drawn: 0 = nothing, 1 = all of it.
+>>> 141-142
+An 80 × 80 drawing, hidden from screen readers (the heading under it says "Payment successful" in words).
+>>> 143-151
+The circle: centred, radius 34, no fill, a 4 px green outline with rounded ends, drawn first.
+>>> 153-160
+The tick: a path that starts at (26, 41), goes 10 right and 10 down (`l10 10`), then 19 right and 21 up (`l19 -21`). It is drawn 0.45 s later, as the circle finishes.
+>>> 168
+A ref to the `<canvas>` the confetti is drawn on.
+>>> 170-171
+Once the canvas exists (after the first drawing):
+>>> 172
+Create a confetti "cannon" that draws on **our** canvas, resizing it with the window, **without** a background worker (see the summary for why).
+>>> 173
+The brand colours for the paper pieces.
+>>> 174
+The settings both bursts share: 90 pieces, a 70° spread, a strong upward speed, those colours, and nothing at all for people who asked for reduced motion.
+>>> 175-176
+Two bursts: from the bottom-left corner aiming up and right (60°), and from the bottom-right aiming up and left (120°). `void` = "start it, no need to wait for the returned promise".
+>>> 177
+When the component goes away, clear any pieces still falling.
+>>> 178
+Run this once.
+>>> 180
+The canvas is **portalled** into `<body>` (`createPortal`): it is drawn at the end of the page's HTML instead of inside the card. `.confetti-canvas` in `app.css` makes it cover the whole window (`position: fixed; inset: 0`), float above everything, and let clicks pass through (`pointer-events: none`). Inside the card, it would be clipped to the card and moved by the page's transition.
 
 === FILE frontend/src/pages/student/MyTimetablePage.tsx
 >>> SUMMARY
-**"My timetable"**: the published week. For a student or guardian it shows the student's section; for a teacher, their own lectures, with the section shown in each cell (a teacher teaches several sections).
->>> 16-21
-The drawing: title, loading, error, and "No timetable has been published yet." if empty.
->>> 22-24
-Otherwise, the week grid in a card, with section letters only for faculty.
+**"My timetable"**: the published week. For a student or guardian it shows the student's section; for a teacher, their own lectures, with the section shown in each cell (a teacher teaches several sections). Data: `GET /api/timetable/me`.
+
+Two cards:
+1. **"Today"**: today's lectures in order, as a row of coloured cards (period and time, course, room, and the teacher, or for a teacher the section). The lecture running right now glows. On a day without lectures: "No lectures today. Enjoy the break."
+2. **"The whole week"**: the whole week as a grid (`TimetableGrid`), with today's row highlighted.
+>>> 20
+Today's day number and the period running now (from `TimetableGrid.tsx`).
+>>> 22
+Today's lectures: those whose day is today, sorted by period. `(data ?? [])` uses an empty list while loading. `.sort((a, b) => a.period - b.period)` sorts numbers from small to large (a negative result puts `a` first).
+>>> 24-29
+The drawing: title, loading, error, and "No timetable has been published yet." with a calendar icon if empty.
+>>> 30-32
+Otherwise: the "Today" card.
+>>> 34-35
+No lectures today: one line of grey text.
+>>> 38-41
+Otherwise a row of lecture cards, appearing one after another.
+>>> 42-44
+A lecture card, in the same style as the grid's (the course's own colour via `--hue`), glowing when it is running now.
+>>> 46-47
+A clock icon with "P2 · 10:00".
+>>> 49
+The course code in bold and its name.
+>>> 50-51
+A pin icon with the room, then the teacher's name, or, for a teacher looking at their own timetable, the section.
+>>> 59-61
+The "The whole week" card with the full grid; section letters only for faculty.
+
+=== FILE frontend/src/pages/student/MyLibraryPage.tsx
+>>> SUMMARY
+**"My library"**: the books a student has borrowed. Data: `GET /api/library/loans/me`. The subtitle states the fine policy: "Fine: Rs 2 per day late, at most Rs 200."
+
+Each loan is a **card with a little book cover**: a coloured rectangle with the title's first letter, its colour worked out from the title (`hueFor`), so every book has its own, always the same, colour. Next to it: the title, the author, issue and due dates, days late, the fine so far, and a badge: "On loan" (blue), "Overdue" (red) or "Returned 12 Oct 2026" (green).
+>>> 20-25
+The drawing: the title with the fine policy, loading, error, and "No books borrowed." with a book icon if the list is empty.
+>>> 26-29
+Otherwise, a grid of cards appearing one after another, one per loan.
+>>> 30-32
+The card and its "cover": the colour comes from the title, and the first letter is printed on it. The cover is decoration (the title is written next to it), so it is hidden from screen readers.
+>>> 34
+The text part: the title and the author in grey.
+>>> 37-38
+A small definition list (`<dl>`: pairs of a term `<dt>` and its value `<dd>`), laid out as a grid of facts: issued on…
+>>> 42
+…due on…
+>>> 46
+…days late…
+>>> 50
+…and the fine so far, as money.
+>>> 55-58
+The status badge. For a loan still open: red "Overdue" if it is late, otherwise blue "On loan"…
+>>> 60
+…and for a returned book, green "Returned 12 Oct 2026".

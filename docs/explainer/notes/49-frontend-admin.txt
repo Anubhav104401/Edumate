@@ -8,61 +8,79 @@ Examples of lines:
 - `ACCESS_DENIED` by `student2`: GET /api/reports/consolidated-marks (TC-017);
 - `DOCUMENT_VIEWED` by `admissions`: an applicant's ID_PROOF.
 
+**The look of a diff.** Like a code review tool, the "before" value is shown **struck through on a red background** and the "after" value **on a green background** (`.diff-old` / `.diff-new` in `app.css`), so a change can be read at a glance. Each person gets an avatar in their own colour, so one actor's entries stand out down the list.
+
 The newest entries come first. The filters narrow the list to one record, for example type `Mark` and id `412`. Both must be filled for the filter to apply.
->>> 18-20
+>>> 20-22
 Pressing Search: filter only if **both** a type and an id were typed; otherwise show everything. Changing `filter` triggers a reload.
->>> 23-26
+>>> 25-28
 The drawing: title and subtitle, then a form-card with the filters.
->>> 27-28
-The record-type box (e.g. `Mark`, `AdmissionApplication`, `Payment`) …
->>> 30-31
-… the record-id box …
->>> 33
-… the Search button …
->>> 36
-… and Refresh, which reloads without changing the filter.
->>> 40-46
-Loading, error, then the table and its header row.
->>> 55-57
+>>> 29-30
+The record-type box (e.g. `Mark`, `AdmissionApplication`, `Payment`)…
+>>> 32-33
+…the record-id box…
+>>> 35-36
+…the Search button (with a funnel icon)…
+>>> 38-39
+…and Refresh, which reloads without changing the filter.
+>>> 42-44
+Loading, error, and an empty state with a scroll icon.
+>>> 45-49
+The table and its header row: when, who, action, record, before, after.
+>>> 58-60
 One row per audit entry, starting with its time. `nowrap` keeps the date on one line.
->>> 61-62
+>>> 62-64
+Who: an avatar coloured from the username, and the username.
+>>> 68
+The action (e.g. `MARK_AMENDED`) as a fixed-width chip.
+>>> 71-72
 The record, e.g. "Mark #412".
 
 === FILE frontend/src/pages/admin/OutboxPage.tsx
 >>> SUMMARY
-**Every e-mail and SMS EduMate has queued**, newest first, with its status: amber PENDING (waiting for the dispatcher, which runs every 5 seconds), green SENT, red FAILED (after 3 failed tries). "Refresh" reloads, so you can watch PENDING messages turn into SENT a few seconds after, say, publishing results or requesting a consent code.
+**Every e-mail and SMS EduMate has queued**, newest first, with its status: amber PENDING (waiting for the dispatcher, which runs every 5 seconds), green SENT, red FAILED (after 3 failed tries). "Refresh" reloads, so you can watch PENDING messages turn into SENT a few seconds after, say, publishing results or requesting a consent code. Each message shows its channel as a small icon tile (an envelope for e-mail, a speech bubble for SMS), the recipient, and the subject with the body under it.
 
 This page is the visible side of the DR-08 fix: business actions only **queue** messages, and a separate dispatcher sends them.
->>> 11
+>>> 12
 Badge colours: pending amber, sent green, failed red.
->>> 16-22
+>>> 17-24
 The drawing: the title, subtitle, and a Refresh button on the right.
->>> 27-33
-Loading, error, then the table and its header row.
->>> 41-43
+>>> 28-30
+Loading, error, and an empty state with an envelope icon.
+>>> 31-35
+The table and its header row: created, channel, to, subject, status.
+>>> 43-45
 One row per message.
->>> 47-48
-The subject, with the message text underneath in small grey type.
->>> 51
+>>> 47-52
+The channel: an envelope in blue for e-mail, a speech bubble in violet for SMS…
+>>> 58
+The subject in bold, with the body in grey under it.
+>>> 62
 The status badge.
 
 === FILE frontend/src/pages/admin/RoleMatrixPage.tsx
 >>> SUMMARY
 **The backend's RoleMatrix as a table**: every web address pattern, which HTTP method (or "any"), and exactly who may call it:
 - a list of role badges (for example "Examination superintendent", "Administrator");
-- **Public** (amber): no login needed; only the login endpoint and the payment gateway's signed callback;
+- **Anyone (no login)** (amber): only the login endpoint and the payment gateway's signed callback;
 - **Any logged-in user** (blue).
+
+Each HTTP method is a small coloured label, like in API documentation tools: GET green, POST blue, PUT amber, DELETE red (`.method-…` in `app.css`).
 
 Anything **not** in this table is refused for everyone (deny by default, the fix for DR-06 / DEF-031). The data comes from the same object Spring Security enforces, so this page can never show a rule that differs from the real one.
 
 (This is the page that once went blank because Spring 7 sent HTTP methods as `{}`; see `AdminController` and `ErrorBoundary`.)
->>> 13-15
+>>> 15-17
 The drawing: title and subtitle.
->>> 16-22
-Loading, error, then the table and its header row.
->>> 28-30
-One row per rule, in the order they are checked.
->>> 33-36
-The "who" cell. For a role rule, one badge per role, with each role's display name from `messages.ts` …
->>> 40
-… otherwise a single badge: amber "Public" or blue "Any logged-in user".
+>>> 18-20
+Loading, error, and an empty state with a shield icon.
+>>> 21-25
+The table and its header: method, path, access.
+>>> 31-33
+One row per rule (the rules have no id, so their position is the key; the list is fixed).
+>>> 34
+The method label. A rule for every method has `method: null`; it gets the class `method-ANY` (grey) and the text "ANY".
+>>> 38-43
+Access for a list of roles: one quiet badge per role, wrapping onto several lines if needed.
+>>> 47
+Otherwise, "Anyone (no login)" in amber (worth noticing: these addresses need no login) or "Any logged-in user" in blue.

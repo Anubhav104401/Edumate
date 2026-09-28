@@ -1,0 +1,131 @@
+<!-- level: 3 -->
+<h1>Testing a Spring Boot application</h1>
+
+<p class="lead">Tests are how you know the rules hold today and will still hold after the next change. Spring Boot
+makes it easy to test at every level: plain Java for logic, the whole application for behaviour, a real database for
+compatibility, and even the framework's own configuration. EduMate has 64 backend tests; this chapter shows each kind.</p>
+
+<h2>The test pyramid</h2>
+<pre class="diagram">                ▲  few, slower, most realistic
+               ╱ ╲     PostgreSQL compatibility (a real database server)
+              ╱   ╲    integration tests: whole app + MockMvc + H2 (security, concurrency, workflows)
+             ╱     ╲   slice tests: one layer (@WebMvcTest, @DataJpaTest)      ← not needed by EduMate yet
+            ╱_______╲  unit tests: plain Java, no Spring (maths, rules, state machines)
+                ▼  many, milliseconds each</pre>
+<p><code>spring-boot-starter-test</code> brings JUnit 5 (<code>@Test</code>, <code>@ParameterizedTest</code>), AssertJ
+(<code>assertThat(...)</code>), Mockito (test doubles), JsonPath and Spring's test support. <code>./mvnw test</code> runs
+them all.</p>
+
+<h2>Unit tests: no Spring at all</h2>
+<p>Business rules written as plain classes are tested as plain classes, in milliseconds:</p>
+<pre class="code" data-src="backend/src/test/java/com/edumate/attendance/AttendanceMathTest.java" data-lines="9-32" data-expect="class AttendanceMathTest"></pre>
+<p>Parameterised tests turn the SQA report's test-case tables into code, one row per case:</p>
+<pre class="code" data-src="backend/src/test/java/com/edumate/attendance/EligibilityEvaluatorTest.java" data-lines="24-34" data-expect="TC-009 at boundary (DEF-019)"></pre>
+<div class="callout tip"><strong>Design for unit tests</strong>
+Constructor injection, a <code>Clock</code> bean instead of <code>LocalDate.now()</code>, settings in a record, and pure
+functions for calculations (<code>AttendanceMath</code>, <code>SgpaCalculator</code>, <code>FineCalculator</code>,
+<code>TimetableSolver</code>) are what make these tests possible. If a class is hard to unit-test, that is usually a
+design message.</div>
+
+<h2>Integration tests: the whole application</h2>
+<pre class="code" data-src="backend/src/test/java/com/edumate/IntegrationTestBase.java" data-lines="20-41" data-expect="@SpringBootTest"></pre>
+<table>
+<thead><tr><th>Piece</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>@SpringBootTest</code></td><td>start the complete application context: every bean, Flyway, the demo data, security</td></tr>
+<tr><td><code>@AutoConfigureMockMvc</code></td><td>provide a <code>MockMvc</code>: send HTTP requests through the real filter chain and controllers without opening a network port</td></tr>
+<tr><td><code>@TestPropertySource</code></td><td>override settings for the tests (uploaded files go to <code>target/</code>)</td></tr>
+<tr><td><code>bearer(username)</code></td><td>logs in for real and returns the <code>Authorization</code> header value</td></tr>
+</tbody></table>
+<div class="callout deep"><strong>The context cache: why the second test class starts instantly</strong>
+Starting the application takes seconds. Spring's test framework caches application contexts and reuses one for every
+test class with the same configuration. All EduMate integration tests extend the same base class with the same
+annotations, so the application starts <em>once</em> per test run. Each different combination of
+<code>@TestPropertySource</code>, <code>@MockitoBean</code>, profiles… creates (and caches) another context; keep them few.
+Because the context and its database are shared, each test uses its own users and records so tests do not disturb one
+another.</div>
+
+<h3>A test that proves a concurrency fix</h3>
+<pre class="code" data-src="backend/src/test/java/com/edumate/attendance/AttendanceConcurrencyIntegrationTest.java" data-lines="22-54" data-expect="jsonPath(&quot;$.code&quot;).value(&quot;STALE_UPDATE&quot;)"></pre>
+<p>Read it as a story: open a register, save version 0, save again (now version 1), then save something still based on
+version 0 and expect <strong>409 STALE_UPDATE</strong>. MockMvc's fluent API reads naturally:
+<code>perform(request)</code>, <code>andExpect(status().isConflict())</code>, <code>andExpect(jsonPath("$.code").value(...))</code>.</p>
+
+<h3>Real threads, real race</h3>
+<p>Some bugs only appear when two things happen at once. <code>ResultPublicationIntegrationTest</code> calls the publish
+service from two threads released at the same instant by a latch, and checks that exactly one wins:</p>
+<pre class="code" data-src="backend/src/test/java/com/edumate/exam/ResultPublicationIntegrationTest.java" data-lines="92-112" data-expect="containsExactlyInAnyOrder(&quot;PUBLISHED&quot;, &quot;ALREADY_PUBLISHED&quot;)"></pre>
+<p>Integration test classes can <code>@Autowired</code> any bean (here the <code>publication</code> service) and call it
+directly, not only through HTTP.</p>
+
+<h2>A real database in the test run</h2>
+<p>H2 imitates PostgreSQL, but not perfectly. <code>PostgresCompatibilityTest</code> starts a real PostgreSQL 17 server
+inside the test and points the application at it <em>before</em> the context starts:</p>
+<pre class="code" data-src="backend/src/test/java/com/edumate/PostgresCompatibilityTest.java" data-lines="26-49" data-expect="@DynamicPropertySource"></pre>
+<p><code>@DynamicPropertySource</code> supplies settings whose values are only known at run time (the server's random
+port). The most common way to do this in the industry is <strong>Testcontainers</strong>, which starts PostgreSQL (or
+Redis, Kafka…) in Docker; Spring Boot even connects it automatically with <code>@ServiceConnection</code>. EduMate uses
+<code>embedded-postgres</code> instead, so the test also runs on machines without Docker.</p>
+
+<h2>Testing the configuration itself</h2>
+<p>The most "Spring-aware" test in EduMate asks Spring MVC for every endpoint it registered and checks each one against
+the security matrix:</p>
+<pre class="code" data-src="backend/src/test/java/com/edumate/security/RoleMatrixCoverageTest.java" data-lines="28-66" data-expect="mappings.getHandlerMethods()"></pre>
+<p>A developer who adds an endpoint and forgets the security rule gets a failing build that names the endpoint, instead
+of a data leak in production. This kind of <em>architecture test</em> (a rule about the code itself, checked
+automatically) scales much better than code review alone; ArchUnit and Spring Modulith offer more of them.</p>
+
+<h2>Slices and mocks</h2>
+<p>EduMate does not need them yet, but you will meet them:</p>
+<table>
+<thead><tr><th>Tool</th><th>Starts</th><th>Use for</th></tr></thead>
+<tbody>
+<tr><td><code>@WebMvcTest(AttendanceController.class)</code></td><td>only the MVC layer for that controller (plus security)</td><td>request mapping, validation and JSON, with the service replaced by a mock</td></tr>
+<tr><td><code>@DataJpaTest</code></td><td>only JPA: entities, repositories, an embedded database, a rollback after each test</td><td>custom queries</td></tr>
+<tr><td><code>@MockitoBean</code></td><td>replaces a bean in the context with a Mockito mock</td><td>isolating a slow or external collaborator (a real SMS gateway)</td></tr>
+<tr><td><code>@WithMockUser</code>, <code>jwt()</code></td><td>(spring-security-test) a fake logged-in user</td><td>security rules without a login round-trip</td></tr>
+<tr><td><code>RestTestClient</code> / <code>MockMvcTester</code></td><td>newer, fluent clients for tests (Spring Framework 7 / AssertJ-style)</td><td>the same job as MockMvc, with nicer assertions</td></tr>
+</tbody></table>
+<pre class="code" data-lang="java">@WebMvcTest(AttendanceController.class)
+class AttendanceControllerSliceTest {
+    @Autowired MockMvc mvc;
+    @MockitoBean AttendanceCaptureService capture;         // the real service is not started
+    @MockitoBean AttendanceSummaryService summary;
+    @MockitoBean ShortfallNotifier notifier;
+    @MockitoBean CourseAccess courseAccess;
+
+    @Test
+    void rejectsAPeriodOutsideOneToSix() throws Exception {
+        mvc.perform(put("/api/attendance/sessions").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_FACULTY")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"courseId\":1,\"section\":\"A\",\"date\":\"2026-09-28\",\"period\":9,\"marks\":[]}"))
+           .andExpect(status().isBadRequest());
+    }
+}</pre>
+<div class="callout warn"><strong>Do not mock what you do not own, and do not mock everything</strong>
+A test full of mocks tests the mocks. EduMate's approach, real application and in-memory database, catches the bugs
+that matter (wrong queries, missing security rules, transaction mistakes) that mocked tests miss. Mock only the edges:
+external services, clocks, randomness.</div>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Run <code>./mvnw test</code> and find in the output how long the first integration test class took compared with
+the next ones (the context cache at work).</li>
+<li>Write a test in <code>SecurityIntegrationTest</code> checking that a GUARDIAN gets 403 for
+<code>GET /api/exams/marks</code>.</li>
+<li>Break <code>AttendanceMath.meetsThreshold</code> (use <code>&gt;</code> instead of <code>&gt;=</code>) and see which
+tests fail and how their names explain why.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>What does <code>@SpringBootTest</code> start, and what does <code>@AutoConfigureMockMvc</code> add?</summary>
+<div>The whole application context (all beans, database migrations, security). MockMvc adds a way to send HTTP
+requests through the real filters and controllers without a network port.</div></details>
+<details class="quiz"><summary>Why do EduMate's integration tests share one base class?</summary>
+<div>So they share one cached application context: the application starts once per test run, not once per class.</div></details>
+<details class="quiz"><summary>What is <code>@DynamicPropertySource</code> for?</summary>
+<div>Supplying settings whose values are known only at run time (like the URL of a database started by the test)
+before the application context starts.</div></details>
+<details class="quiz"><summary>Why is <code>RoleMatrixCoverageTest</code> valuable even though every endpoint "works"?</summary>
+<div>It enforces a rule about the code itself (every endpoint has a security rule), so a forgotten rule fails the build
+instead of becoming a data leak.</div></details>

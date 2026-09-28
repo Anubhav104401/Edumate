@@ -9,6 +9,7 @@ explanation.</p>
 <pre class="block">Edumate/
 ├── README.md, docker-compose.yml, .env.example, .gitignore, .gitattributes
 ├── scripts/dev-start.ps1                       start both halves on Windows
+├── screenshots/                                the pictures shown in README.md (not explained here)
 ├── backend/                                    the Java server
 │   ├── pom.xml, mvnw, mvnw.cmd, .mvn/          build instructions and the Maven wrapper
 │   ├── Dockerfile
@@ -19,18 +20,21 @@ explanation.</p>
 ├── frontend/                                   the browser app
 │   ├── package.json, package-lock.json, tsconfig.json, vite.config.ts, index.html
 │   ├── Dockerfile, nginx.conf
-│   ├── public/favicon.svg
+│   ├── public/favicon.svg, public/theme-init.js    the icon; the theme set before the first paint
 │   └── src/
-│       ├── main.tsx, App.tsx, config.ts, navigation.ts
+│       ├── main.tsx, App.tsx, config.ts, navigation.ts (+ its test)
 │       ├── api/          talking to the backend
 │       ├── auth/         login state and page guards
-│       ├── components/   shared screen pieces
-│       ├── hooks/        useLoad
+│       ├── components/   the shell (Layout, Sidebar, Topbar, CommandPalette, TopLoader, ScrollExtras)
+│       │                 and shared pieces (ui, StatCard, charts, TimetableGrid, DocumentUpload, Toast, ConfirmDialog)
+│       ├── hooks/        useLoad, useStoredFlag
 │       ├── i18n/         messages.ts: every on-screen text
-│       ├── pages/        one file per screen
-│       ├── styles/       theme.css (colours, sizes) and app.css (layout)
-│       └── utils/        formatting, file checks, form checks (+ their tests)
-└── docs/                                       this guide and the program that builds it</pre>
+│       ├── motion/       presets, smooth scrolling, page transitions, reveals, count-up, parallax
+│       ├── pages/        one file per screen (LandingPage is the public welcome page)
+│       ├── styles/       theme.css (the tokens), app.css (components), landing.css (welcome and login)
+│       ├── theme/        ThemeContext: light, dark or system
+│       └── utils/        formatting, file checks, form checks, visuals (+ their tests)
+└── docs/                                       this guide, the Spring Boot guide, and the program that builds this one</pre>
 
 <h2>Every file</h2>
 {{FILE_TABLE}}

@@ -1,0 +1,59 @@
+<!-- level: 4 -->
+<h1>Becoming a pioneer: capstone projects and a learning path</h1>
+
+<p class="lead">Reading makes things familiar; building makes them yours. These projects extend EduMate in realistic ways,
+each touching several chapters. They are graded from a few hours to a few days. Do them on a branch, with tests.</p>
+
+<h2>Level 1 and 2 projects: foundations and data</h2>
+<table>
+<thead><tr><th>#</th><th>Project</th><th>You practise</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>Book details and reservations.</strong> <code>GET /api/library/books/{id}</code>; <code>POST /api/library/books/{id}/reservations</code> for students (at most one per book, only when no copy is available); a Flyway migration for the <code>book_reservation</code> table.</td><td>controllers, validation, error codes, entities, derived queries, migrations, RoleMatrix</td></tr>
+<tr><td>2</td><td><strong>Medical exemption requests.</strong> Students upload a request; exam superintendents approve or reject it; approved ones change hall-ticket eligibility (rule R2).</td><td>a small workflow on an entity, <code>@Transactional</code>, object-level security, integration tests</td></tr>
+<tr><td>3</td><td><strong>A paged, filtered audit search</strong> with <code>Page&lt;T&gt;</code>, sorting and date ranges.</td><td><code>Pageable</code>, JPQL with optional filters, DTO projections</td></tr>
+<tr><td>4</td><td><strong>Timetable room capacities.</strong> A <code>capacity</code> column for rooms and a clash when a section is larger than the room.</td><td>expand/contract migrations, domain rules, updating a solver with tests</td></tr>
+</tbody></table>
+
+<h2>Level 3 projects: production</h2>
+<table>
+<thead><tr><th>#</th><th>Project</th><th>You practise</th></tr></thead>
+<tbody>
+<tr><td>5</td><td><strong>Overdue-book reminders.</strong> Every morning at 7:00, queue one e-mail per overdue loan (at most one per day per loan).</td><td><code>@Scheduled(cron)</code>, the outbox, deduplication keys, a fixed <code>Clock</code> in tests</td></tr>
+<tr><td>6</td><td><strong>Refresh tokens.</strong> Short-lived access tokens (15 minutes) plus a refresh endpoint and server-side revocation of refresh tokens.</td><td>Spring Security, JWT claims, a token store, security tests</td></tr>
+<tr><td>7</td><td><strong>Metrics that matter.</strong> Expose Prometheus metrics; add counters for payments (succeeded, failed, duplicates ignored) and a timer for result computation; build a Grafana dashboard.</td><td>Actuator, Micrometer, the Observation API, securing management endpoints</td></tr>
+<tr><td>8</td><td><strong>Testcontainers.</strong> Add a PostgreSQL + Redis Testcontainers set-up with <code>@ServiceConnection</code> and run the cache tests against real Redis.</td><td>integration testing with real infrastructure</td></tr>
+<tr><td>9</td><td><strong>ProblemDetail errors.</strong> Migrate the error format to RFC 9457 behind a setting, keeping the old format for the current frontend.</td><td><code>@RestControllerAdvice</code>, content negotiation, backward compatibility</td></tr>
+</tbody></table>
+
+<h2>Level 4 projects: pioneer</h2>
+<table>
+<thead><tr><th>#</th><th>Project</th><th>You practise</th></tr></thead>
+<tbody>
+<tr><td>10</td><td><strong>An audit starter.</strong> Extract EduMate's audit log into <code>edumate-audit-spring-boot-starter</code> with properties, back-off, configuration metadata and <code>ApplicationContextRunner</code> tests; use it from EduMate.</td><td>auto-configuration internals</td></tr>
+<tr><td>11</td><td><strong>Events and Modulith.</strong> Replace direct cross-module calls (attendance → notifications, results → notifications) with events; add Spring Modulith, fix the two module cycles, make <code>verify()</code> pass, and generate the module diagrams.</td><td>events, transactional listeners, module boundaries</td></tr>
+<tr><td>12</td><td><strong>A real SMS gateway</strong> behind the <code>NotificationGateway</code> interface, using an HTTP interface client with timeouts, retries and a concurrency limit, tested with WireMock.</td><td>HTTP clients, resilience, conditional beans</td></tr>
+<tr><td>13</td><td><strong>Virtual threads under load.</strong> Write a k6 or Gatling test for "results morning"; compare platform and virtual threads, with and without the cache; explain the results with metrics.</td><td>performance engineering</td></tr>
+<tr><td>14</td><td><strong>A native payment-callback service.</strong> Split the payment callback into a tiny Spring Boot application, build it as a GraalVM native image, and add the runtime hints it needs.</td><td>AOT, native images, service boundaries</td></tr>
+<tr><td>15</td><td><strong>Your own <code>BeanPostProcessor</code> or aspect</strong> that enforces a rule of your choice (stateless services, no controller calls a repository directly) and fails start-up or a test when it is broken.</td><td>the container's extension points, architecture tests</td></tr>
+</tbody></table>
+
+<h2>How to keep learning</h2>
+<ul>
+<li><strong>Read the reference documentation</strong> of Spring Framework and Spring Boot. It is long, precise and
+excellent; read a section after each chapter of this course.</li>
+<li><strong>Read the source.</strong> In your IDE, jump into <code>DataSourceAutoConfiguration</code>,
+<code>TransactionInterceptor</code>, <code>JpaRepository</code>'s implementation <code>SimpleJpaRepository</code>, or
+<code>DispatcherServlet.doDispatch</code>. The framework's code is readable and well commented; debugging into it is the
+fastest way to go from user to expert.</li>
+<li><strong>Follow the releases</strong>: the Spring blog, the "This Week in Spring" posts, and the release notes of each
+minor version.</li>
+<li><strong>Certify, if useful for you</strong>: the Broadcom/VMware Spring Certified Professional exam covers the container,
+AOP, data, transactions, MVC, security, Boot and testing: the first four levels of this course.</li>
+<li><strong>Contribute</strong>: documentation fixes and issues with small reproducible examples are welcome in the
+Spring projects, and are how many Spring experts started.</li>
+</ul>
+
+<div class="callout note"><strong>What "pioneer" means</strong>
+Not knowing every annotation, but being able to answer any "why does Spring do this?" by reasoning from a few ideas:
+beans and dependency injection, conditions and auto-configuration, proxies and interceptors, the persistence context, the
+filter chain, and transactions. Everything else in the framework is built from those.</div>

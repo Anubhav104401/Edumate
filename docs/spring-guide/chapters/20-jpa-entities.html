@@ -1,0 +1,155 @@
+<!-- level: 2 -->
+<h1>Databases with JPA: entities and the persistence context</h1>
+
+<p class="lead">Your objects live in memory; your data must live in a database that survives restarts and is shared by
+every server. This chapter explains the layers between the two, how a Java class becomes a table row, and the one
+concept that explains most JPA surprises: the persistence context.</p>
+
+<h2>Four layers, from the database up</h2>
+<table>
+<thead><tr><th>Layer</th><th>What it is</th><th>You write</th></tr></thead>
+<tbody>
+<tr><td><strong>JDBC</strong></td><td>Java's standard API to send SQL and read rows</td><td>SQL strings, loops over <code>ResultSet</code>, closing connections</td></tr>
+<tr><td><strong>JPA</strong> (Jakarta Persistence)</td><td>a standard for mapping classes to tables (<code>@Entity</code>, <code>EntityManager</code>, JPQL)</td><td>annotated classes; queries in terms of classes</td></tr>
+<tr><td><strong>Hibernate</strong></td><td>the most used JPA implementation; generates the SQL</td><td>(nothing, it is configured by Boot)</td></tr>
+<tr><td><strong>Spring Data JPA</strong></td><td>repositories: interfaces whose queries are generated from method names or annotations</td><td>interfaces (next chapter)</td></tr>
+</tbody></table>
+<p>With <code>spring-boot-starter-data-jpa</code> and a JDBC driver on the classpath, Spring Boot creates for you: a
+<strong><code>DataSource</code></strong> (a HikariCP connection pool, configured from <code>spring.datasource.*</code>),
+an <strong><code>EntityManagerFactory</code></strong> (Hibernate, scanning your <code>@Entity</code> classes), a
+<strong>transaction manager</strong>, and an implementation for every repository interface.</p>
+<div class="callout note"><strong>A connection pool is a taxi rank</strong>
+Opening a database connection is slow (network, login, set-up). A pool opens a few connections once and lends them
+out: a request takes one, uses it, and gives it back. HikariCP's default is 10 connections. More is not faster: a
+database works best with few busy connections, not hundreds of idle ones.</div>
+
+<h2>An entity: a class that maps to a table</h2>
+<pre class="code" data-src="backend/src/main/java/com/edumate/exam/ResultSet.java" data-lines="15-72" data-expect="@Table(name = &quot;result_set&quot;)"></pre>
+<table>
+<thead><tr><th>Annotation</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>@Entity</code></td><td>instances of this class are stored in the database</td></tr>
+<tr><td><code>@Table(name = "result_set")</code></td><td>the table's name (by default derived from the class name)</td></tr>
+<tr><td><code>@Id</code></td><td>the primary key</td></tr>
+<tr><td><code>@GeneratedValue(strategy = IDENTITY)</code></td><td>the database assigns the id (an identity column) when the row is inserted</td></tr>
+<tr><td><code>@Column(name = "exam_session_id", nullable = false)</code></td><td>the column's name and whether it may be empty. Spring Boot would derive <code>exam_session_id</code> from <code>examSessionId</code> by itself (camelCase → snake_case); EduMate writes names out so the mapping is visible</td></tr>
+<tr><td><code>@Enumerated(EnumType.STRING)</code></td><td>store the enum as its name (<code>'PUBLISHED'</code>)</td></tr>
+<tr><td><code>@Version</code></td><td>optimistic locking: see the transactions chapter</td></tr>
+</tbody></table>
+<div class="callout warn"><strong>Always <code>EnumType.STRING</code></strong>
+The default, <code>ORDINAL</code>, stores the enum's position (0, 1, 2…). Insert a new status in the middle of the enum
+and every stored row silently changes meaning. <code>STRING</code> stores the name and survives reordering.</div>
+<p>Three more details of the class matter:</p>
+<ul>
+<li><strong>A no-argument constructor</strong>, here <code>protected</code>: Hibernate needs it to create objects when
+it reads rows. <code>protected</code> keeps your own code from using it by accident.</li>
+<li><strong>A real constructor</strong> for the fields a new result set must have.</li>
+<li><strong>Behaviour on the entity</strong>: <code>markComputed</code>, <code>recordFirstApproval</code>,
+<code>invalidate</code> change the state in meaningful steps (computing again clears old approvals, so approvers always
+see the numbers they approve). Services call these methods instead of setting fields one by one, which keeps the rules
+in one place. There are getters but no public setters for most fields.</li>
+</ul>
+<div class="callout tip"><strong>Entities are not records</strong>
+Java records are immutable and have no no-argument constructor, so they cannot be JPA entities. Use records for
+requests, responses and query results (EduMate does, everywhere), and ordinary classes for entities.</div>
+
+<h2>The persistence context: the key to understanding JPA</h2>
+<p>Inside a transaction, Hibernate keeps a <strong>persistence context</strong>: a map of every entity it has loaded or
+saved, by type and id. It is short-lived (usually one request's transaction) and it changes how your code behaves:</p>
+<ol class="steps-list">
+<li><strong>Identity</strong>: loading the same row twice in one transaction returns the <em>same object</em>, and
+the second time without a query (the "first-level cache").</li>
+<li><strong>Dirty checking</strong>: Hibernate remembers what each entity looked like when it was loaded. At the end of
+the transaction (or at a <em>flush</em>), it compares, and writes an <code>UPDATE</code> for every entity that changed.
+You never call <code>save</code> for a loaded entity.</li>
+<li><strong>Write-behind</strong>: <code>INSERT</code>s and <code>UPDATE</code>s are collected and sent at flush time,
+not the instant you call <code>save</code> or change a field.</li>
+</ol>
+<p>This is why EduMate's attendance correction works like this, with no "save" call for changed marks:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/attendance/AttendanceCaptureService.java" data-lines="111-122" data-expect="record.setPresent(mark.present());" data-hl="9,12"></pre>
+<p><code>record.setPresent(...)</code> only changes the Java object. Because the record was loaded in this transaction,
+Hibernate notices the change and writes the <code>UPDATE</code> itself. New records are passed to
+<code>records.save(...)</code>, which makes them <em>managed</em>. The explicit <code>sessions.flush()</code> forces the
+pending SQL out <em>now</em>, so a version conflict is detected inside the request and answered with 409.</p>
+
+<h3>The four states of an entity</h3>
+<pre class="diagram">  new ResultSet(...)          repository.save(x) / loaded by a query
+        │                                  │
+   ┌────▼─────┐        persist        ┌────▼─────┐     transaction ends      ┌──────────┐
+   │ TRANSIENT │ ───────────────────► │ MANAGED  │ ────────────────────────► │ DETACHED │
+   │ (just an  │                      │ (tracked:│      (context closed)     │ (a plain │
+   │  object)  │                      │  changes │ ◄──────────────────────── │  object) │
+   └───────────┘                      │  saved)  │   merge / load again       └──────────┘
+                                      └────┬─────┘
+                                           │ repository.delete(x)
+                                      ┌────▼─────┐
+                                      │ REMOVED  │  (DELETE at flush)
+                                      └──────────┘</pre>
+<p>Changes to a <em>detached</em> entity (after its transaction ended) are <strong>not</strong> saved. That is a
+frequent surprise: modify objects inside the service method that runs in a transaction, not in the controller.</p>
+
+<h2>Relationships, and why EduMate mostly avoids them</h2>
+<p>JPA can map links between tables to object references:</p>
+<pre class="code" data-lang="java">@Entity
+class BookLoan {
+    @ManyToOne(fetch = FetchType.LAZY)            // many loans → one book
+    @JoinColumn(name = "book_id")
+    private Book book;
+}
+@Entity
+class Book {
+    @OneToMany(mappedBy = "book")                 // one book → many loans
+    private List&lt;BookLoan&gt; loans;
+}</pre>
+<p>Convenient (<code>loan.getBook().getTitle()</code>), but with costs: each reference is either loaded
+<strong>eagerly</strong> (always, even when not needed) or <strong>lazily</strong> (on first access, by a hidden query).
+Lazy loading in a loop causes the <strong>N+1 query problem</strong> (1 query for 60 students, then 60 more for their
+marks), and accessing a lazy reference after the transaction has ended throws
+<code>LazyInitializationException</code>.</p>
+<p>EduMate deliberately stores <strong>ids</strong> instead (<code>private Long bookId;</code>,
+<code>private Long examSessionId;</code>) and loads what it needs with explicit queries, often one grouped query for a
+whole class (next chapter). Every database access is visible in the code. Both styles are legitimate; for a
+report-heavy application, explicit queries keep performance predictable.</p>
+<div class="callout deep"><strong>Why <code>spring.jpa.open-in-view: false</code></strong>
+By default Spring Boot keeps the persistence context open until the HTTP response has been written ("Open Session in
+View"), so lazy references work even while Jackson writes JSON in the controller. It hides N+1 problems and holds a
+database connection for the whole request. EduMate switches it off: all database work happens inside service methods,
+and controllers only receive plain records. Boot logs a warning when you leave it on without deciding; that is a hint
+worth following.</div>
+
+<h2>Seeing the SQL</h2>
+<pre class="code" data-lang="yaml">logging:
+  level:
+    org.hibernate.SQL: debug                          # every SQL statement
+    org.hibernate.orm.jdbc.bind: trace                # the values bound to its ? placeholders</pre>
+<p>Turn this on while learning. Reading the SQL that Hibernate generates is the fastest way to understand (and to
+catch) what your code really does to the database.</p>
+
+<h2>H2 in development, PostgreSQL in production</h2>
+<p>EduMate's <code>dev</code> profile uses an in-memory H2 database with <code>MODE=PostgreSQL</code>, so nothing needs to
+be installed; the <code>docker</code> profile points the same code at PostgreSQL 17. Because H2 only imitates
+PostgreSQL, a test (<code>PostgresCompatibilityTest</code>) starts a real PostgreSQL and runs the important queries on
+it. Spring Boot picks the driver and Hibernate's SQL dialect from the JDBC URL automatically.</p>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Switch on SQL logging, restart, save an attendance register twice (first save, then a correction of one
+student), and compare the SQL: <code>insert</code>s the first time, one <code>update … where id=? and version=?</code>
+the second.</li>
+<li>Open the H2 console and run <code>select * from result_set</code>: find the <code>status</code> stored as text and
+the <code>version</code> column.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>You load an entity in a transactional service method, change a field, and never call <code>save</code>. Is the change stored?</summary>
+<div>Yes: the entity is managed, and dirty checking writes an <code>UPDATE</code> when the transaction is flushed at
+commit.</div></details>
+<details class="quiz"><summary>Why does an entity need a no-argument constructor?</summary>
+<div>Hibernate creates the object first and then fills its fields from the row; it needs a constructor it can call
+without knowing the values.</div></details>
+<details class="quiz"><summary>What is the danger of <code>EnumType.ORDINAL</code>?</summary>
+<div>It stores the position of the constant; reordering or inserting constants changes the meaning of existing rows
+without any error.</div></details>
+<details class="quiz"><summary>What is the N+1 query problem?</summary>
+<div>One query loads N parents, then accessing a lazy relationship on each parent runs one more query per parent: N+1
+queries where one or two would do.</div></details>

@@ -1,0 +1,408 @@
+/*
+ * ============================================================
+ *  PUBLIC PAGES: the welcome page (/welcome) and the sign-in page (/login).
+ *  These are the "shop window", so they use bigger type, more colour and
+ *  the scroll-driven effects. Colours still come from theme.css.
+ * ============================================================
+ */
+
+/* ---------- Shared decoration ---------- */
+
+/* Film grain: a faint noise texture that makes flat gradients look rich instead of plastic. */
+.noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* A pill whose border is a slowly turning rainbow of brand colours. @property lets the angle animate. */
+@property --spin {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.glow-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 14px 6px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: 550;
+  color: var(--color-text);
+  background: var(--color-glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  isolation: isolate;
+}
+
+.glow-pill::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--spin), var(--color-primary), var(--color-accent), var(--color-accent-2), var(--color-accent-3), var(--color-primary));
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  animation: spin-border 6s linear infinite;
+}
+
+.glow-pill .dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--gradient-brand); color: #fff; }
+
+@keyframes spin-border { to { --spin: 360deg; } }
+
+/* ============================================================
+   The welcome page
+   ============================================================ */
+.landing { position: relative; overflow-x: clip; background: var(--color-page); }
+
+.l-nav {
+  position: fixed;
+  left: 50%;
+  top: var(--space-4);
+  z-index: var(--z-topbar);
+  translate: -50% 0;
+  width: min(1120px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 8px 8px 8px 18px;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  transition: background-color var(--duration) ease, border-color var(--duration) ease, box-shadow var(--duration) ease;
+}
+
+.l-nav[data-scrolled="true"] {
+  background: var(--color-glass);
+  border-color: var(--color-border);
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  box-shadow: var(--shadow-lg);
+}
+
+.l-nav .sidebar-brand { padding: 0; font-size: var(--text-md); }
+.l-nav .brand-mark { width: 32px; height: 32px; border-radius: 10px; }
+.l-links { display: flex; gap: var(--space-1); margin: 0 auto; }
+.l-links a { padding: 6px 12px; border-radius: var(--radius-full); color: var(--color-text-muted); text-decoration: none; font-size: var(--text-sm); font-weight: 500; transition: color var(--duration-fast) ease, background-color var(--duration-fast) ease; }
+.l-links a:hover { color: var(--color-text); background: color-mix(in oklab, var(--color-text) 6%, transparent); }
+.l-nav-actions { display: flex; align-items: center; gap: var(--space-2); }
+
+/* ---------- Hero ---------- */
+.l-hero {
+  position: relative;
+  isolation: isolate;
+  padding: 150px var(--space-4) 0;
+  text-align: center;
+  overflow: hidden;
+}
+
+.l-hero .aurora span { width: 52vw; filter: blur(90px); opacity: 0.4; }
+.l-hero .aurora span:nth-child(1) { top: -30%; left: -10%; right: auto; }
+.l-hero .aurora span:nth-child(2) { top: -20%; right: -10%; }
+.l-hero .aurora span:nth-child(3) { top: 30%; left: 25%; bottom: auto; }
+.l-hero .grid-lines { mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black, transparent 80%); -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black, transparent 80%); background-size: 56px 56px; }
+
+.l-title {
+  max-width: 15ch;
+  margin: var(--space-5) auto var(--space-5);
+  font-size: var(--text-display);
+  font-weight: 650;
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.l-title .serif { font-size: 1.1em; letter-spacing: -0.02em; padding-right: 0.06em; }
+
+/* Each word sits in a clipped box and slides up into view. */
+.word { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 0.08em; margin-bottom: -0.08em; }
+.word > span { display: inline-block; }
+
+.l-lead { max-width: 60ch; margin: 0 auto var(--space-6); font-size: clamp(16px, 1.6vw, 19px); color: var(--color-text-muted); }
+.l-ctas { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; }
+
+/* The tilted product preview that straightens as you scroll. */
+.l-stage { position: relative; perspective: 1400px; margin: var(--space-8) auto 0; width: min(1080px, 100%); }
+
+.mock {
+  position: relative;
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  min-height: 420px;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  border: 1px solid var(--color-border);
+  border-bottom: 0;
+  background: var(--color-surface);
+  box-shadow: 0 40px 120px -30px color-mix(in oklab, var(--color-primary) 45%, transparent), var(--shadow-lg);
+  overflow: hidden;
+  text-align: left;
+  transform-origin: 50% 0;
+}
+
+.mock-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-bottom: 1px solid var(--color-border); background: var(--color-surface-muted); }
+.mock-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--color-border-strong); }
+.mock-bar i:nth-child(1) { background: oklch(0.7 0.18 25); }
+.mock-bar i:nth-child(2) { background: oklch(0.82 0.15 85); }
+.mock-bar i:nth-child(3) { background: oklch(0.75 0.16 150); }
+.mock-side { padding: var(--space-4) var(--space-3); border-right: 1px solid var(--color-border); background: var(--color-sidebar); display: grid; gap: 6px; align-content: start; }
+.mock-side .nav-link { height: 32px; font-size: 12px; }
+.mock-main { padding: var(--space-5); display: grid; gap: var(--space-4); align-content: start; }
+.mock-main .grid { margin: 0; grid-template-columns: repeat(3, 1fr); }
+.mock-main .stat { min-height: 116px; padding: var(--space-4); }
+.mock-main .stat-value { font-size: 24px; }
+.mock-main .hero { min-height: 0; padding: var(--space-5); margin: 0; }
+.mock-main .hero h1 { font-size: 26px; }
+
+/* Glass cards that float around the preview and drift with the mouse. */
+.float-card {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.float-card > div > strong { display: block; font-size: var(--text-md); }
+.float-card > div > span { color: var(--color-text-muted); font-size: var(--text-xs); }
+
+.scroll-hint { display: inline-flex; flex-direction: column; align-items: center; gap: 8px; margin-top: var(--space-6); font-size: var(--text-xs); color: var(--color-text-faint); letter-spacing: 0.08em; text-transform: uppercase; }
+.mouse { width: 22px; height: 34px; border-radius: 12px; border: 1.5px solid var(--color-border-strong); position: relative; }
+.mouse::after { content: ""; position: absolute; left: 50%; top: 7px; width: 3px; height: 7px; margin-left: -1.5px; border-radius: 2px; background: var(--color-primary); animation: wheel 1.8s var(--ease-out) infinite; }
+@keyframes wheel { 0% { opacity: 0; transform: translateY(-3px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(10px); } }
+
+/* ---------- Marquee: two rows of module names gliding in opposite directions ---------- */
+.marquee {
+  position: relative;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6) 0;
+  border-block: 1px solid var(--color-border);
+  background: var(--color-surface);
+  mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+}
+
+.marquee-row { display: flex; width: max-content; gap: var(--space-3); animation: marquee 40s linear infinite; }
+.marquee-row.reverse { animation-direction: reverse; animation-duration: 46s; }
+.marquee:hover .marquee-row { animation-play-state: paused; }
+.marquee .chip { font-size: var(--text-sm); padding: 8px 16px; background: var(--color-surface-muted); color: var(--color-text); }
+.marquee .chip svg { color: var(--color-primary); }
+@keyframes marquee { to { transform: translateX(-50%); } }
+
+/* ---------- Sections ---------- */
+.l-section { position: relative; padding: clamp(80px, 12vw, 160px) var(--space-4); }
+.l-container { width: min(1120px, 100%); margin: 0 auto; }
+.l-head { max-width: 720px; margin: 0 auto var(--space-7); text-align: center; }
+.l-head h2 { font-size: clamp(32px, 4.6vw, 56px); font-weight: 650; letter-spacing: -0.045em; line-height: 1.04; margin: var(--space-3) 0 var(--space-4); }
+.l-head p { color: var(--color-text-muted); font-size: clamp(15px, 1.4vw, 18px); margin: 0; }
+.l-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-xs); font-weight: 650; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-primary); }
+.l-eyebrow::before { content: ""; width: 18px; height: 2px; border-radius: 2px; background: var(--gradient-brand); }
+
+/* Big numbers that count up. */
+.l-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-5); }
+.l-stat { text-align: center; padding: var(--space-5); border-radius: var(--radius-lg); }
+.l-stat strong { display: block; font-size: clamp(48px, 6vw, 76px); font-weight: 650; letter-spacing: -0.05em; line-height: 1; font-variant-numeric: tabular-nums; }
+.l-stat > span { color: var(--color-text-muted); font-size: var(--text-sm); }
+
+/* Bento grid: tiles of different sizes, like a lunch box. */
+.bento { display: grid; gap: var(--space-4); grid-template-columns: repeat(3, 1fr); }
+.bento .stat { min-height: 220px; padding: var(--space-6); justify-content: flex-start; gap: var(--space-3); }
+.bento .stat h3 { font-size: var(--text-lg); margin: var(--space-3) 0 0; }
+.bento .stat p { color: var(--color-text-muted); margin: 0; font-size: var(--text-sm); line-height: 1.6; }
+.bento > :first-child { grid-column: span 2; }
+.bento > :first-child .stat { min-height: 100%; }
+.bento > :last-child { grid-column: span 2; }
+.bento-item { height: 100%; }
+.bento-item > .stat { height: 100%; }
+
+/* ---------- Journey: sticky picture on the left, steps scroll past on the right ---------- */
+.journey { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(32px, 6vw, 96px); }
+.journey-sticky { position: sticky; top: 18vh; height: 64vh; display: grid; place-items: center; }
+
+.journey-orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(420px, 100%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, color-mix(in oklab, var(--color-accent-2) 28%, transparent), transparent 60%), radial-gradient(circle at 70% 75%, color-mix(in oklab, var(--color-accent) 30%, transparent), transparent 60%), var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg), inset 0 0 80px color-mix(in oklab, var(--color-primary) 12%, transparent);
+}
+
+.journey-orb .ring { position: absolute; inset: 7%; width: auto !important; height: auto !important; }
+.journey-orb .ring svg { width: 100%; height: 100%; }
+.journey-num { font-size: clamp(90px, 13vw, 170px); font-weight: 700; letter-spacing: -0.07em; line-height: 1; }
+.journey-icon { position: absolute; top: 22%; }
+.journey-steps { display: grid; gap: 34vh; padding: 20vh 0 26vh; }
+.journey-step { max-width: 460px; }
+.journey-step h3 { font-size: clamp(28px, 3.4vw, 42px); letter-spacing: -0.04em; margin: var(--space-3) 0; }
+.journey-step p { color: var(--color-text-muted); font-size: var(--text-lg); line-height: 1.6; margin: 0; }
+.journey-step .step-index { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-primary); }
+
+/* ---------- Roles: a row of cards that slides sideways while you scroll down ---------- */
+.h-scroll { position: relative; height: 320vh; }
+.h-sticky { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+.h-sticky .l-head { margin-bottom: var(--space-6); }
+.h-track { display: flex; gap: var(--space-4); padding: 0 max(var(--space-4), calc((100vw - 1120px) / 2)); width: max-content; will-change: transform; }
+
+.role-card {
+  flex: none;
+  width: 320px;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card), var(--highlight-top);
+}
+
+.role-card h3 { font-size: var(--text-lg); margin: var(--space-3) 0 0; }
+.role-card p { color: var(--color-text-muted); margin: 0; font-size: var(--text-sm); line-height: 1.6; }
+.role-card .role-num { margin-top: auto; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-faint); }
+
+/* ---------- Quality grid ---------- */
+.quality { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-4); }
+.quality .stat { min-height: 0; padding: var(--space-5); }
+.quality h3 { margin: var(--space-3) 0 var(--space-1); font-size: var(--text-md); }
+.quality p { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.6; }
+
+/* ---------- Final call to action ---------- */
+.l-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  text-align: center;
+  padding: clamp(64px, 10vw, 120px) var(--space-5);
+  border-radius: 36px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.l-cta h2 { font-size: clamp(40px, 7vw, 96px); letter-spacing: -0.06em; line-height: 1; margin: 0 0 var(--space-4); }
+.l-cta p { color: var(--color-text-muted); max-width: 52ch; margin: 0 auto var(--space-6); }
+.l-footer { padding: var(--space-6) var(--space-4) var(--space-7); text-align: center; color: var(--color-text-faint); font-size: var(--text-sm); }
+
+/* ============================================================
+   The sign-in page
+   ============================================================ */
+.auth { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(420px, 1fr); min-height: 100dvh; }
+
+.auth-visual {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--space-6);
+  background: light-dark(oklch(0.97 0.012 264), oklch(0.16 0.02 264));
+  border-right: 1px solid var(--color-border);
+}
+
+.auth-visual .aurora span { width: 70%; filter: blur(80px); opacity: 0.5; }
+.auth-visual .grid-lines { mask-image: radial-gradient(ellipse at 40% 40%, black, transparent 75%); -webkit-mask-image: radial-gradient(ellipse at 40% 40%, black, transparent 75%); }
+.auth-copy { max-width: 540px; }
+.auth-copy h1 { font-size: clamp(36px, 4.4vw, 60px); font-weight: 650; letter-spacing: -0.05em; line-height: 1.02; margin: var(--space-4) 0; }
+.auth-copy h1 .serif { display: block; font-size: 1.08em; }
+.auth-copy p { color: var(--color-text-muted); font-size: var(--text-lg); max-width: 44ch; margin: 0; }
+.auth-cards { position: relative; height: 260px; margin: var(--space-5) 0; }
+.auth-secure { display: flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-sm); }
+
+.auth-panel { display: flex; flex-direction: column; padding: var(--space-5) clamp(20px, 5vw, 72px); }
+.auth-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.auth-back { display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-muted); text-decoration: none; font-size: var(--text-sm); font-weight: 500; }
+.auth-back:hover { color: var(--color-text); }
+.auth-form-wrap { width: min(440px, 100%); margin: auto; padding: var(--space-7) 0; }
+.auth-form-wrap h1 { font-size: var(--text-2xl); letter-spacing: -0.035em; margin: var(--space-3) 0 var(--space-2); }
+.auth-form-wrap > p { color: var(--color-text-muted); margin: 0 0 var(--space-5); }
+.auth-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.auth-form input { min-height: 46px; font-size: var(--text-md); }
+.caps { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--color-warn); font-weight: 550; }
+
+/* Demo accounts: a searchable grid of little cards (development builds only). */
+.demo { margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px dashed var(--color-border-strong); }
+.demo-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-2); }
+.demo-head strong { font-size: var(--text-sm); }
+.demo > p { font-size: var(--text-xs); color: var(--color-text-muted); margin: 0 0 var(--space-3); }
+.demo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--space-2); margin-top: var(--space-3); max-height: 360px; overflow: auto; padding: 2px; }
+
+.demo-account {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) ease, transform var(--duration) var(--ease-spring), box-shadow var(--duration) ease;
+}
+
+.demo-account:hover { border-color: color-mix(in oklab, var(--color-primary) 45%, var(--color-border)); transform: translateY(-2px); box-shadow: var(--shadow-card); }
+.demo-account[aria-pressed="true"] { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-soft); }
+.demo-account > div { min-width: 0; }
+.demo-account > div > strong { display: block; font-family: var(--font-mono); font-size: 12px; }
+.demo-account > div > span { display: block; font-size: 11px; color: var(--color-text-muted); line-height: 1.35; margin-top: 2px; }
+
+/* ---------- Smaller screens ---------- */
+@media (max-width: 960px) {
+  .auth { grid-template-columns: minmax(0, 1fr); }
+  .auth-visual { display: none; }
+  .l-links { display: none; }
+  .l-nav-actions { margin-left: auto; }
+  .mock { grid-template-columns: 1fr; min-height: 320px; }
+  .mock-side { display: none; }
+  .float-card { display: none; }
+  .bento { grid-template-columns: 1fr; }
+  .bento > :first-child,
+  .bento > :last-child { grid-column: auto; }
+  .journey { grid-template-columns: 1fr; }
+  .journey-sticky { display: none; }
+  .journey-steps { gap: var(--space-7); padding: 0; }
+}
+
+@media (max-width: 760px) {
+  .mock-main .grid { grid-template-columns: 1fr 1fr; }
+  .mock-main .grid > :nth-child(3) { display: none; }
+}
+
+/* On phones, and for anyone asking for less motion, the sideways role gallery becomes a normal
+   row you can swipe, instead of being driven by vertical scrolling. */
+@media (max-width: 760px), (prefers-reduced-motion: reduce) {
+  .h-scroll { height: auto; }
+  .h-sticky { position: static; height: auto; padding: clamp(80px, 12vw, 160px) 0; }
+  .h-track { transform: none !important; overflow-x: auto; width: auto; scroll-snap-type: x mandatory; padding-bottom: var(--space-4); }
+  .role-card { scroll-snap-align: center; width: 280px; }
+  .marquee-row { animation: none; }
+}

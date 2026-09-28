@@ -1,0 +1,173 @@
+=== FILE frontend/src/motion/presets.ts
+>>> SUMMARY
+**The shared "vocabulary of movement".** Every animation in EduMate takes its timing from these few recipes, so the whole product moves with one personality: quick to respond, soft to settle, a little springy. A designer would call this the product's **motion language**.
+
+Two ideas from the `motion` library appear here:
+- a **transition** says *how* something moves: how long, and along which curve (or as a spring with a stiffness and a damping, like a real spring);
+- a **variant** is a named pose, for example `hidden = { opacity: 0, y: 18 }` (invisible and 18 pixels lower) and `show = { opacity: 1, y: 0 }`. An element given these variants animates from one pose to the other when told to.
+>>> 12
+`EASE_OUT`: a **cubic Bézier curve**, the four numbers that describe how speed changes over time. This one starts fast and glides to a gentle stop, which feels responsive and calm. It is the same curve as `--ease-out` in `theme.css`, so CSS and JavaScript animations match.
+>>> 15
+`SPRING`: a spring instead of a fixed duration. `stiffness` is how strongly it pulls towards the target (higher = snappier), `damping` how quickly the bouncing dies down, `mass` how heavy the moving thing feels. Springs are used for small things that should feel physical: the sliding menu highlight, dialogs popping in, the segmented switch.
+>>> 18-20
+`fadeUp`: start invisible and 18 px lower, end visible in place, over 0.6 s with `EASE_OUT`. Used by every list that appears item by item.
+>>> 25-27
+`staggerChildren(gap, delay)`: a parent that has no pose of its own but tells its children to start their `show` animation one after another, `gap` seconds apart, after an initial `delay`. This cascade is what makes the dashboard tiles appear left to right instead of all at once.
+>>> 35-36
+`pageVariants`: how a whole page arrives and leaves. It starts slightly lower, transparent and blurred…
+>>> 37-41
+…and **enters** by rising 14 px, fading in and sharpening, in 0.45 s.
+>>> 43
+Afterwards the blur filter is removed completely. A leftover `filter` (even `blur(0px)`) would quietly break any `position: fixed` element inside the page, such as the confetti canvas.
+>>> 45
+It **exits** in only 0.14 s (up a little, fading, blurring), so a click on the menu feels instant.
+
+=== FILE frontend/src/motion/SmoothScroll.tsx
+>>> SUMMARY
+**Smooth scrolling**, using the Lenis library.
+
+Normally one click of a mouse wheel moves the page about 100 pixels in a single jump. Lenis catches each wheel movement and **glides** the page to the same place over a few frames. That feels calmer, and it lets scroll-linked effects (the reading-progress line, the tilting preview on the welcome page, the pinned sections) move fluidly instead of in steps.
+
+Lenis still uses the browser's **real** scrolling underneath: the scrollbar, the keyboard (Page Down, Space), "find in page" and screen readers keep working. It switches itself off for people who ask their computer for reduced motion, and it leaves touch screens with their native feel.
+
+This file also gives two small helpers: `useScrollLock` (freeze the page while a dialog is open) and `useScrollToTop` (jump to the top when a new page opens).
+>>> 16-18
+`<ReactLenis root>`: one Lenis engine for the whole window (`root`), wrapped around the entire app.
+>>> 19-20
+Its settings. `lerp` (from `config.ts`): each frame the page moves 10% of the remaining distance, so it slows down smoothly as it arrives.
+>>> 21
+Lenis runs its own animation loop (`requestAnimationFrame`, the browser's once-per-screen-refresh timer).
+>>> 22
+Clicking a link to `#modules` on the welcome page glides there too.
+>>> 23
+Boxes that scroll by themselves (a wide table, the command menu's list) keep scrolling normally instead of moving the page.
+>>> 24
+Clicking a link stops any glide still in progress, so the new page never inherits leftover movement.
+>>> 27
+Everything inside is drawn as normal.
+>>> 34
+The Lenis engine (or `undefined` if there is none, for example in tests).
+>>> 35-39
+While `active` is true (a dialog, the command menu or the phone drawer is open), stop Lenis so the page behind cannot scroll; the returned function starts it again when the dialog closes.
+>>> 44
+The Lenis engine, again.
+>>> 45-47
+The function given back: jump to the top at once (`immediate`, and `force` even if Lenis is stopped), or use the browser's own `scrollTo` when there is no Lenis.
+
+=== FILE frontend/src/motion/PageTransition.tsx
+>>> SUMMARY
+**The animated page area.** It does the job of React Router's `<Outlet />` (draw the current page inside the layout), but animates every change of page: the old page fades out quickly, the window jumps to the top, and the new page rises into place (the recipes are `pageVariants` in `presets.ts`).
+
+**The tricky part.** `AnimatePresence` keeps the *old* page on screen for its short exit animation after the address has already changed. During those 140 milliseconds React Router already thinks the *new* page is current, so if the old page asked "what should I draw?" it would draw the new page twice. The `Frozen` helper solves this: each page remembers the element it was first given and keeps drawing exactly that.
+
+The page is also wrapped in the `ErrorBoundary` (a crash shows a friendly message, not a blank screen) and a `Suspense` boundary (while a lazily loaded page's code is still downloading, a skeleton shows instead).
+>>> 19
+`useOutlet()`: the element of the current child page, as a value we can keep.
+>>> 20
+The "jump to the top" function from `SmoothScroll.tsx`.
+>>> 22-23
+`AnimatePresence mode="wait"`: when the page changes, finish the old page's exit animation **before** starting the new one's entrance. `onExitComplete` runs in between, so the new page starts at the top of the window, while the old one leaves from wherever the person had scrolled to.
+>>> 24
+The animated box. `key={location.pathname}` is the important part: a different address means a different key, and React treats a different key as a different element, which is what triggers the exit of the old box and the entrance of the new one. `variants`, `initial`, `animate` and `exit` name the poses from `pageVariants`.
+>>> 25
+The safety net, reset for every address.
+>>> 27
+The skeleton while a page's code downloads.
+>>> 38-39
+`Frozen`: `useState(children)` stores the first `children` it receives and ignores later ones (the setter is not even taken), so this page keeps drawing its own content until it has left.
+
+=== FILE frontend/src/motion/Reveal.tsx
+>>> SUMMARY
+Three building blocks that make things **appear with motion**:
+- `<Reveal>`: fades and rises into place when it is scrolled into view (used on the welcome page);
+- `<Stagger>` + `<StaggerItem>`: a list whose items appear one after another, either as soon as they are drawn (the dashboard tiles) or when scrolled into view (the welcome page's module tiles).
+
+People who ask their computer for reduced motion see the same things simply appear, because `App.tsx` wraps everything in `<MotionConfig reducedMotion="user">`.
+
+**Two kinds of reveal in EduMate.** Cards inside the signed-in app reveal themselves with **pure CSS** (`animation-timeline: view()` in `app.css`), which costs no JavaScript at all. The components here are used where the extra control of the motion library is worth it: staggered lists, and the public welcome page.
+>>> 14-19
+The settings of `<Reveal>`: what to show, an optional CSS class, an optional delay in seconds, and how far below its place (`y`, in pixels) it starts.
+>>> 23-25
+A `motion.div`: a normal `<div>` that can animate.
+>>> 26
+Its starting pose: invisible and `y` pixels lower.
+>>> 27
+`whileInView`: the pose to take while it is visible in the window.
+>>> 28
+`once: true`: animate only the first time (scrolling back up does not hide it again). The negative bottom margin (`-12%`) means "only when it is 12% of the window height inside the view", so it does not start while still hidden at the very bottom edge.
+>>> 29
+0.8 seconds, with the house curve, after the optional delay.
+>>> 31
+Whatever was placed inside `<Reveal>…</Reveal>`.
+>>> 36-42
+The settings of `<Stagger>`: children, a class, the time between items (`gap`), a delay before the first one, and `inView` to choose when it starts.
+>>> 46
+Choose the trigger: either "when scrolled into view, once", or "right away" (`animate`).
+>>> 47-49
+The parent: it starts `hidden`, then switches to `show`, which (thanks to `staggerChildren`) starts each child in turn.
+>>> 55-57
+`<StaggerItem>`: one item, with the `fadeUp` poses. It does not need its own trigger: when the parent switches to `show`, the item follows.
+
+=== FILE frontend/src/motion/CountUp.tsx
+>>> SUMMARY
+Shows a value such as `75.00%` or `Rs 62500.00` by **counting the number up from zero**, keeping the words around it. It is used on the dashboard tiles, the current CGPA and the numbers on the welcome page. Text without exactly one number (`Not yet`, `Eligible`) is shown as it is.
+
+**Accessibility.** Screen readers are given the final value straight away in a visually hidden copy (`sr-only`); the moving copy is hidden from them (`aria-hidden`), so nobody hears "0, 1.5, 3.2, …".
+
+**Performance.** The changing number is written directly into the page (`node.textContent = …`) about 60 times a second, **without** going through React. Asking React to redraw 60 times a second would work, but it is far more work for the same result.
+>>> 12
+`ref`: a handle on the moving `<span>`, so the code can write into it.
+>>> 13
+`inView`: becomes true the first time the number is visible, so counting starts when the person can actually see it.
+>>> 14
+`reduce`: true if the person asked for reduced motion; then the final value is shown immediately.
+>>> 15
+Split the text into prefix, number, decimals and suffix (see `utils/visuals.ts`); `null` if it has no single number.
+>>> 18
+`useLayoutEffect` runs after React has updated the page but **before** the screen is painted, so the final number never flashes up before the counting starts.
+>>> 19-20
+Nothing to animate if the span is missing, the text has no number, or motion is reduced: the final text (already written by React) stays.
+>>> 21-22
+`write(n)`: puts "prefix + n with the right number of decimals + suffix" into the span; `toFixed(2)` writes 62500 as `62500.00`.
+>>> 24-26
+Not visible yet: show the zero version and wait.
+>>> 28
+Visible: `animate` counts from 0 to the real value over `duration` seconds on the house curve, calling `write` on every frame.
+>>> 29
+If the component disappears (or the value changes) mid-count, stop the old animation.
+>>> 31
+Run this again when the value, visibility, motion setting or duration changes.
+>>> 33-34
+Two spans, side by side inside an invisible wrapper:
+>>> 36-37
+the moving copy, hidden from screen readers. It starts with the final text, which is what search engines, printing and anyone without JavaScript would see.
+
+=== FILE frontend/src/motion/Parallax.tsx
+>>> SUMMARY
+**Pointer parallax**: layers that drift with the mouse by different amounts. Near things move more than far things (like looking out of a train window), so the eye reads the difference as **depth**. The floating glass cards on the welcome and sign-in pages use it.
+
+How it works: `usePointer()` tracks where the mouse is inside an area, as two numbers from −0.5 (left/top edge) to +0.5 (right/bottom edge). Each `<Float depth={30}>` multiplies those numbers by its depth and moves by that many pixels. A **spring** sits between the mouse and the layers, so the layers glide after the mouse with a little lag instead of jerking with every pixel.
+
+All of this uses **motion values**: numbers that change many times a second **without** making React redraw. Only the few moving elements are updated, directly.
+>>> 17-22
+What `usePointer()` gives back: the smoothed `x` and `y`, and the two event handlers to put on the area that should report the mouse.
+>>> 26-27
+The raw pointer position, updated on every mouse movement.
+>>> 28-29
+The smoothed versions: springs that follow the raw values. A low `stiffness` (70) makes them lazy and floaty.
+>>> 30
+Whether the person asked for reduced motion.
+>>> 32-34
+Give back the smoothed values…
+>>> 35-36
+…and the mouse-move handler, which does nothing when motion is reduced.
+>>> 37-39
+Where is the mouse inside the area? `getBoundingClientRect()` gives the area's position and size. (mouse x − area's left edge) ÷ area's width is 0 at the left edge and 1 at the right; subtracting 0.5 makes the middle 0.
+>>> 41-43
+When the mouse leaves, drift back to the middle.
+>>> 49-60
+The settings of `<Float>`: the pointer from `usePointer()`, the depth in pixels (negative = move the opposite way, which reads as "behind"), and the usual class, style and children.
+>>> 61-62
+`useTransform` makes new motion values from the pointer: its position times the depth.
+>>> 63-65
+A `motion.div` whose `x` and `y` are those values, added to any style it was given. motion moves it with a GPU-friendly `transform`, not by changing its layout.

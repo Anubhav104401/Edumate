@@ -1,0 +1,153 @@
+<!-- level: 3 -->
+<h1>Spring Security: tokens, roles and deny-by-default</h1>
+
+<p class="lead">Security answers two questions on every request: <em>who are you?</em> (authentication) and <em>may you do
+this?</em> (authorisation). Spring Security answers both in a chain of filters before your controller runs. This chapter
+builds EduMate's security from its parts: password hashing, login, signed tokens, a role matrix that refuses everything
+it does not know, and checks on individual records.</p>
+
+<h2>The big picture</h2>
+<pre class="diagram">① Login   POST /api/auth/login {"username","password"}
+            → LoginAttemptService: bcrypt check, lockout after 5 failures
+            → JwtTokenService: a signed token {sub, role, campus, uid, sid, exp}
+            ← {"token": "eyJ…", "expiresAt": …, "user": {…}}
+
+② Every later request    Authorization: Bearer eyJ…
+   Security filter chain (before Spring MVC):
+     BearerTokenAuthenticationFilter   read the header, verify the signature and expiry with the JwtDecoder
+        → Authentication { name: "student", authorities: [ROLE_STUDENT] } in the SecurityContext
+     AuthorizationFilter               RoleMatrix: may ROLE_STUDENT call GET /api/attendance/me?  yes → continue
+     (no / bad token → 401 by the entry point;  wrong role → 403 by the access-denied handler)
+   → DispatcherServlet → controller → service: "may THIS teacher open THIS course?" (object-level check)</pre>
+<p>Because the token carries everything the server needs and is verified by its signature, the server stores
+<strong>no session</strong>: any copy of the backend can serve any request. That is what <em>stateless</em> means.</p>
+
+<h2>The filter chain, configured</h2>
+<p>Since Spring Security 5.7 you configure security by declaring a <code>SecurityFilterChain</code> bean (the old
+<code>WebSecurityConfigurerAdapter</code> is gone):</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/security/SecurityConfig.java" data-lines="35-63" data-expect="public SecurityFilterChain securityFilterChain("></pre>
+<table>
+<thead><tr><th>Line</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td><code>csrf.disable()</code></td><td>CSRF attacks trick a browser into sending its <em>cookies</em> to your site. EduMate's login is a header the browser never adds by itself, so there is nothing to forge. With cookie-based sessions you must keep CSRF protection on.</td></tr>
+<tr><td><code>SessionCreationPolicy.STATELESS</code></td><td>never create an HTTP session; every request brings its token</td></tr>
+<tr><td><code>authorizeHttpRequests(roleMatrix::applyTo)</code></td><td>the access rules, all in one class (below)</td></tr>
+<tr><td><code>oauth2ResourceServer(… jwt …)</code></td><td>"this server accepts JWT bearer tokens": adds the filter that reads and verifies them using the <code>JwtDecoder</code> bean</td></tr>
+<tr><td><code>authenticationEntryPoint</code> / <code>accessDeniedHandler</code></td><td>how to answer 401 and 403: EduMate's <code>RestAuthHandlers</code> writes the usual <code>ApiError</code> JSON (and audits refusals) instead of Spring's default</td></tr>
+</tbody></table>
+<div class="callout deep"><strong>Under the hood: filters and the SecurityContext</strong>
+Tomcat passes each request through a list of servlet filters. Spring Security registers one of them
+(<code>DelegatingFilterProxy</code> → <code>FilterChainProxy</code>), which runs the chain you configured: about a
+dozen small filters, each with one job. A successful authentication is stored in the
+<code>SecurityContextHolder</code>, a thread-local slot that later code (EduMate's <code>CurrentUserArgumentResolver</code>,
+method security) reads. Start the backend with <code>logging.level.org.springframework.security=TRACE</code> to see each
+filter handle a request.</div>
+
+<h2>From token claim to role</h2>
+<pre class="code" data-src="backend/src/main/java/com/edumate/security/SecurityConfig.java" data-lines="65-73" data-expect="authorities.setAuthorityPrefix(&quot;ROLE_&quot;);"></pre>
+<p>Spring Security represents permissions as <strong>authorities</strong> (strings). A <strong>role</strong> is simply an
+authority starting with <code>ROLE_</code>. The converter reads the token's <code>role</code> claim
+(<code>"FACULTY"</code>) and produces the authority <code>ROLE_FACULTY</code>; rules written as
+<code>hasRole("FACULTY")</code> or <code>hasAnyRole(...)</code> add the prefix when comparing.</p>
+
+<h2>Issuing tokens</h2>
+<pre class="code" data-src="backend/src/main/java/com/edumate/security/JwtTokenService.java" data-lines="34-53" data-expect="JwsHeader.with(MacAlgorithm.HS256)"></pre>
+<p>A JWT has three parts, each Base64url-encoded and joined by dots: a <strong>header</strong> (<code>{"alg":"HS256"}</code>),
+the <strong>claims</strong> (<code>sub</code> = username, <code>exp</code> = expiry, plus EduMate's <code>uid</code>,
+<code>role</code>, <code>campus</code>, <code>sid</code>) and a <strong>signature</strong>: an HMAC-SHA256 of the first two
+parts with the server's secret key. Anyone can <em>read</em> the claims (never put secrets in them), but changing a
+single character invalidates the signature, and the <code>JwtDecoder</code> refuses the token with 401.</p>
+<div class="callout tip"><strong>Symmetric versus asymmetric keys</strong>
+EduMate signs and verifies with one shared secret (HS256), which is right when the same application does both. When a
+separate identity provider issues tokens (Keycloak, Azure AD, the university's single sign-on), use asymmetric keys
+(RS256/ES256): configure only <code>spring.security.oauth2.resourceserver.jwt.issuer-uri</code>, and Spring Boot
+fetches the provider's public keys and builds the decoder for you.</div>
+
+<h2>Passwords: bcrypt and lockout</h2>
+<p>The <code>PasswordEncoder</code> bean is <code>new BCryptPasswordEncoder(12)</code>. Bcrypt adds a random
+<em>salt</em> to every password and is deliberately slow (cost 12 ≈ a quarter of a second): harmless for one login,
+crippling for an attacker trying millions of guesses from a stolen database. Never store passwords any other way, and
+never compare hashes with <code>equals</code>; use <code>passwordEncoder.matches(raw, hash)</code>.</p>
+<p><code>LoginAttemptService</code> (see the transactions chapter) counts failures and locks the account for 15 minutes
+after the fifth, answering <strong>423 Locked</strong>. Unknown usernames take as long as wrong passwords, and both get
+the same message, so the login form does not reveal which usernames exist.</p>
+
+<h2>Authorisation by address: the RoleMatrix</h2>
+<p>Many applications scatter access rules over controllers. EduMate keeps them in <strong>one</strong> list:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/security/RoleMatrix.java" data-lines="46-75" data-expect="open(POST, &quot;/api/auth/login&quot;);"></pre>
+<p>…and hands the list to Spring Security, ending with the most important line of the class:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/security/RoleMatrix.java" data-lines="138-151" data-expect="auth.anyRequest().denyAll();" data-hl="13"></pre>
+<p><strong>Deny by default.</strong> An address that nobody listed is refused for everyone, even administrators. In the
+original design two report endpoints were forgotten and fell back to "any logged-in user may call it"; a student could
+download every student's marks (defect DEF-031). With <code>denyAll()</code> a forgotten endpoint fails closed, and
+<code>RoleMatrixCoverageTest</code> fails the build if any controller mapping is missing from the list.</p>
+<p>Rules are checked in order and the first match wins, so specific patterns must come before general ones.
+<code>*</code> matches one path segment, <code>**</code> any number.</p>
+
+<h2>Authorisation by record: object-level checks</h2>
+<p>The matrix knows roles and addresses, not data. "A FACULTY member may call <code>GET /api/attendance/courses/{id}/summary</code>"
+is true, but <em>which</em> courses? Without a second check, a teacher could type another course's id into the address
+(an <em>insecure direct object reference</em>, OWASP's number one risk, "Broken Access Control"). EduMate's services
+check the record itself:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/academic/CourseAccess.java" data-lines="9-47" data-expect="public Course requireTaughtBy(Long courseId, CurrentUser me)"></pre>
+<p>The same idea appears everywhere a record belongs to someone: students only see their own fees (the student id comes
+from the token, never from the request), applicants only touch their own draft application, campus staff only their
+campus. For another person's record, EduMate often answers <strong>404</strong> rather than 403, so as not to confirm
+that the record exists.</p>
+
+<h2>Method security</h2>
+<p><code>@EnableMethodSecurity</code> (on <code>SecurityConfig</code>) switches on annotations such as:</p>
+<pre class="code" data-lang="java">@PreAuthorize("hasRole('ADMIN')")
+public void resetDemoData() { … }
+
+@PreAuthorize("hasRole('FACULTY') and #courseId == …")          // expressions can use parameters
+public AttendanceSheet loadSheet(Long courseId, …) { … }</pre>
+<p>They are applied by a proxy (like transactions) and throw <code>AccessDeniedException</code>, which EduMate's
+<code>GlobalExceptionHandler</code> turns into an audited 403. EduMate prefers the central matrix plus explicit service
+checks, which are easier to review in one place and to unit-test, but method security is a standard alternative and
+useful for services called from several entry points.</p>
+
+<h2>Other defences worth knowing</h2>
+<ul>
+<li><strong>CORS</strong>: browsers block JavaScript from calling another origin unless the server allows it. EduMate
+avoids the question entirely: the frontend and <code>/api</code> are served from the same origin (Vite's proxy in
+development, nginx in production). If you need it, configure <code>http.cors(...)</code> with a
+<code>CorsConfigurationSource</code>, never "allow everything".</li>
+<li><strong>Security headers</strong>: Spring Security adds <code>X-Content-Type-Options</code>,
+<code>X-Frame-Options: DENY</code>, cache-control headers and more by default. EduMate relaxes frame options only for
+the H2 console in development.</li>
+<li><strong>Secrets</strong>: the signing key comes from an environment variable and must be at least 32 bytes, or the
+application refuses to start.</li>
+<li><strong>Audit</strong>: logins, lockouts and refusals are written to the audit log.</li>
+</ul>
+
+<h2>Testing security</h2>
+<pre class="code" data-src="backend/src/test/java/com/edumate/security/SecurityIntegrationTest.java" data-lines="52-72" data-expect="unknownEndpointsAreDenied"></pre>
+<p>EduMate's integration tests log in for real (<code>bearer("admin")</code> sends the login request) and check the
+statuses: 401 without a token, 401 for a tampered token, 403 for the wrong role and for unknown endpoints, 423 after five
+wrong passwords, and no stack trace in any error body. For tests that do not need a real token,
+<code>spring-security-test</code> offers <code>@WithMockUser(roles = "ADMIN")</code> and MockMvc helpers such as
+<code>.with(jwt().authorities(...))</code>.</p>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Paste a token from the login response into a JWT decoder (for example jwt.io, only with demo tokens) and read its
+claims. Change the role to <code>ADMIN</code>, send it back, and read the 401.</li>
+<li>Remove the <code>RoleMatrix</code> line for <code>GET /api/library/loans/me</code> and run
+<code>./mvnw test -Dtest=RoleMatrixCoverageTest</code>.</li>
+<li>Log in as <code>meera.nair</code> and request another teacher's course summary. Which class refused it, and with
+which status?</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>What is the difference between a 401 and a 403?</summary>
+<div>401: the server does not know who you are (no token, or an invalid one). 403: it knows who you are, and you may not
+do this.</div></details>
+<details class="quiz"><summary>Why is it safe for EduMate to disable CSRF protection?</summary>
+<div>CSRF abuses credentials the browser sends automatically (cookies). EduMate's credential is a bearer token in a
+header that JavaScript adds explicitly; another site cannot make the browser send it.</div></details>
+<details class="quiz"><summary>The RoleMatrix allows FACULTY to call a course summary. Why is that not enough?</summary>
+<div>It only checks the role, not the record. The service must also check that this teacher teaches this course
+(object-level authorisation), or any teacher could read any course by changing the id.</div></details>
+<details class="quiz"><summary>What does <code>anyRequest().denyAll()</code> protect against?</summary>
+<div>Forgotten rules: a new or overlooked endpoint is refused for everyone instead of silently being open.</div></details>

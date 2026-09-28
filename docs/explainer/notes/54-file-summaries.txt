@@ -1,0 +1,111 @@
+=== FILE .env.example
+>>> SUMMARY
+**A template for the secrets file used by Docker Compose.** Copy it to `.env`, then change every value. `docker-compose.yml` reads `.env` automatically and passes the values to the containers.
+
+| Setting | What it is for |
+|---|---|
+| `DB_USER`, `DB_PASSWORD` | the PostgreSQL account the backend uses |
+| `JWT_SECRET` | the key that signs login tokens (at least 32 characters; anyone who knows it could forge a login) |
+| `PAYMENT_GATEWAY_SECRET` | the key shared with the payment gateway to sign payment callbacks (HMAC) |
+| `DEMO_SEED`, `DEMO_EXPOSE_OTP` | fill the database with demo data, and show guardian OTP codes on screen: `true` only for demonstrations |
+
+`.env` itself is listed in `.gitignore`, so the real secrets never end up in git; only this harmless template does.
+
+=== FILE .gitattributes
+>>> SUMMARY
+**Tells git how to treat line endings and binary files.** Windows ends lines with two invisible characters (CR LF), Linux and macOS with one (LF). Without this file, a Windows checkout could turn every line into a "change". Here every text file is stored with LF, except Windows scripts (`.cmd`, `.bat`, `.ps1`), which must keep CR LF or Windows misreads them, and pictures, PDFs and jars are marked **binary** so git never touches their bytes.
+
+=== FILE .gitignore
+>>> SUMMARY
+**The files git must never record**: build output (`backend/target/`, `frontend/dist/`), downloaded packages (`frontend/node_modules/`), Python caches of the explainer generator, runtime data (uploaded documents in `storage/`, local database files, logs), the real secrets file `.env` (but not `.env.example`, thanks to the `!` line), and editor settings. Keeping these out of the repository keeps it small and stops secrets and personal files from being published.
+
+=== FILE docker-compose.yml
+>>> SUMMARY
+**The whole EduMate system in one command**: `docker compose up --build`, then open http://localhost:3000. It starts four containers that talk to each other on a private network, each reachable by its service name (`postgres`, `redis`, `backend`):
+
+<pre class="block">browser ──► frontend (nginx, port 3000) ──/api──► backend (port 8080) ──► postgres (5432)
+                                                                     └──► redis    (6379)</pre>
+
+- **postgres**: PostgreSQL 17, its data kept in the volume `pgdata` so it survives restarts; a **health check** (`pg_isready`) tells Compose when it is really ready.
+- **redis**: the cache for published results; also health-checked.
+- **backend**: built from `backend/Dockerfile`, started with the `docker` profile, given its database, Redis and secrets through environment variables. `${JWT_SECRET:?…}` makes Compose **refuse to start** with a clear message if the secret is missing. It waits (`depends_on … service_healthy`) until both PostgreSQL and Redis are healthy. Uploaded documents go to the volume `uploads`.
+- **frontend**: built from `frontend/Dockerfile`; nginx serves the built React app and forwards `/api/...` to the backend.
+
+`${DB_USER:-edumate}` means "the value from `.env`, or `edumate` if none is set".
+
+=== FILE backend/Dockerfile
+>>> SUMMARY
+**Builds the backend into a small container image, in two stages** (a *multi-stage build*):
+1. **build**: a full Java 21 JDK image copies the Maven wrapper and `pom.xml` first and downloads every library (`dependency:go-offline`); only then does it copy the source code and package the jar. Docker caches each step, so as long as `pom.xml` is unchanged, a code change does not download the libraries again.
+2. **runtime**: a much smaller image with only a Java runtime (JRE) and the finished jar. The compiler, Maven and the source code are left behind.
+
+For safety the program runs as an ordinary user `edumate` (uid 10001), **never as root**, and may only write to `/app/storage`, where uploaded documents are kept. The `docker` profile is switched on by default.
+
+=== FILE frontend/Dockerfile
+>>> SUMMARY
+**Builds the React app and serves it with nginx**, in two stages:
+1. **build**: Node 22 installs the exact package versions from `package-lock.json` (`npm ci`) and runs `npm run build`, which type-checks the code and lets Vite produce plain HTML, CSS and JavaScript files in `dist/`.
+2. **runtime**: a small nginx web server with those files and `nginx.conf`, which serves the app, forwards `/api/...` to the backend, and adds the security headers (including the Content-Security-Policy that the redesign respects).
+
+Node is not in the final image at all: the browser only needs the built files.
+
+=== FILE backend/mvnw
+>>> SUMMARY
+**The Maven Wrapper for Linux and macOS** (a standard script from the Apache Maven project; nobody edits it by hand). Running `./mvnw spring-boot:run` or `./mvnw test` works on a machine **without Maven installed**: the script reads `.mvn/wrapper/maven-wrapper.properties`, downloads exactly that Maven version the first time, keeps it in `~/.m2/wrapper`, and then runs it. So every developer and the Docker build use the same Maven version.
+
+=== FILE backend/mvnw.cmd
+>>> SUMMARY
+**The Maven Wrapper for Windows** (`mvnw.cmd spring-boot:run`): the same job as `mvnw`, written as a Windows batch file with an embedded PowerShell part. It is also a standard file from the Apache Maven project and is not edited by hand. `.gitattributes` keeps its Windows line endings.
+
+=== FILE backend/pom.xml
+>>> SUMMARY
+**The backend's shopping list and build recipe** for Maven. POM stands for *Project Object Model*.
+
+- **The parent** `spring-boot-starter-parent` supplies tested, matching versions of hundreds of libraries, so the dependencies below mostly need no version number.
+- **Starters** are bundles of libraries for one job: `webmvc` (a web server and REST controllers), `validation` (`@NotBlank`, `@Size`…), `data-jpa` (Hibernate and Spring Data repositories), `flyway` (database migrations), `security` and `security-oauth2-resource-server` (login tokens), `cache` and `data-redis` (caching), `actuator` (health checks).
+- **Databases**: H2 (in memory, for development) and the PostgreSQL driver (production).
+- **Test libraries** (`<scope>test</scope>`, so they are not in the final jar): Spring Boot's test starters (JUnit 5, AssertJ, MockMvc…), Spring Security's test helpers, and `embedded-postgres`, which runs a real PostgreSQL inside the tests.
+- **The Spring Boot Maven plugin** packages everything into one runnable "fat" jar (`java -jar edumate-backend.jar`) and provides `mvn spring-boot:run`.
+
+The companion guide *Spring Boot, Zero to Pioneer* (`docs/Spring-Boot-Zero-to-Pioneer.html`) explains starters and auto-configuration in depth.
+
+=== FILE backend/src/main/resources/application.yml
+>>> SUMMARY
+**The backend's settings shared by every environment**, in YAML (indentation shows which setting belongs to which group). Spring Boot reads this file at start-up.
+
+- `${NAME:default}` means "read the environment variable NAME, or use the default". This is how Docker passes secrets in without writing them into the file.
+- **Profiles**: `dev` is the default; `application-dev.yml` or `application-docker.yml` is read **on top of** this file and overrides what it repeats.
+- **Safety settings**: no stack traces or internal messages in error answers (OWASP A05), `open-in-view: false` (database work only inside services), Hibernate never changes the schema (`ddl-auto: none`, Flyway owns it), uploads limited to 5 MB, and only the harmless `health` and `info` actuator endpoints exposed.
+- **EduMate's own settings** under `edumate:` (read by `config/AppProperties.java`): the token secret and lifetime, login lockout (5 failures → 15 minutes), the 75 % attendance threshold and 16-week semester, the payment gateway secret, the upload folder, library loan days and fines, the merit-score weights and reserved seat shares, the demo switches, and the list of campuses.
+
+=== FILE backend/src/main/resources/application-dev.yml
+>>> SUMMARY
+**The "dev" profile**: runs on a laptop with nothing else installed. The database is **H2 in memory** (`jdbc:h2:mem:edumate`), started inside the backend and wiped on every restart; `MODE=PostgreSQL` makes H2 imitate PostgreSQL so the same SQL works on both. The H2 console (a web page to browse the tables at http://localhost:8080/h2-console) is switched on, the demo data is seeded, guardian OTP codes are shown on screen, and EduMate's own log messages are more detailed (DEBUG).
+
+=== FILE backend/src/main/resources/application-docker.yml
+>>> SUMMARY
+**The "docker" profile**: the production-like setup started by `docker-compose.yml`. The database is **PostgreSQL** (address, user and password from environment variables), the cache is **Redis** (published results are kept for 10 minutes), and the Redis health check is switched on. Whether demo data is seeded and OTPs are shown comes from the `.env` file.
+
+=== FILE backend/src/main/resources/db/migration/V1__create_schema.sql
+>>> SUMMARY
+**The whole database schema, version 1**, as plain SQL. **Flyway** runs it exactly once on an empty database when the backend starts, and records that it did so in its own table (`flyway_schema_history`). A later change to the schema would be a new file, `V2__…sql`, never an edit of this one: every database that already ran V1 then only runs V2.
+
+It creates 24 tables, grouped by module: campuses; programmes, students, users, courses and exam sessions; attendance sessions, attendance records and medical exemptions; marks, result sets, student results and course grades; fee demands, payments and the fee ledger; admission applications, their documents and consent records; the audit log and the notification outbox; timetable entries; books and loans.
+
+Many business rules are enforced **by the database itself**, as a last line of defence even if the Java code had a bug: `NOT NULL`, foreign keys, a `CHECK` constraint (the available copies of a book can never be below 0 or above the total), and `UNIQUE` constraints (one attendance record per student per class, one ledger credit per bank reference, one outbox message per deduplication key…). The SQL is written to run unchanged on PostgreSQL and on H2.
+
+=== FILE frontend/package-lock.json
+>>> SUMMARY
+**The exact version of every package installed**, including the packages that packages depend on (hundreds of them), with a checksum for each download. It is written by npm, never by hand. `package.json` says "motion version 13 or a compatible newer one"; this file says "exactly 13.x.y, with this checksum". `npm ci` (used by the Dockerfile and CI) installs precisely what is listed here, so every machine gets the same code, and a tampered download is detected by its checksum.
+
+=== FILE frontend/src/api/endpoints.ts
+>>> SUMMARY
+**One small function per backend address.** Pages call `api.attendance.mine()` instead of writing `request('GET', '/api/attendance/me')` themselves, so if an address ever changes it is changed here only, and TypeScript knows what each call returns (`CourseAttendance[]`).
+
+The functions are grouped by module, like the backend's packages: `auth`, `academic`, `attendance`, `exams`, `reports`, `fees`, `admissions`, `consent`, `library`, `timetable`, `admin` and `dashboard`. Every one of them goes through `request()`, `download()` or `uploadWithProgress()` in `http.ts`, so the token, error handling and the top loading bar work the same everywhere.
+
+=== FILE frontend/src/api/types.ts
+>>> SUMMARY
+**The shape of every piece of JSON the backend sends or receives**, as TypeScript types. They do not run: they only let the editor and the compiler check that the code uses the right field names (`fullName`, not `fullname`) and handles values that may be missing (`string | null`).
+
+Each type mirrors a Java record of the backend with the same name, for example `CourseAttendance` ↔ `AttendanceSummaryService.CourseAttendance`. Fixed sets of words (a role, a status) are **union types** such as `'DRAFT' | 'SUBMITTED' | …`, so a misspelt status is a compile error instead of a silent bug. Dates travel as text (`"2026-09-28"`).

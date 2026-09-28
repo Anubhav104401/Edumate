@@ -1,0 +1,182 @@
+<!-- level: 4 -->
+<h1>How auto-configuration really works, and how to write your own starter</h1>
+
+<p class="lead">Spring Boot's "magic" is ordinary Spring configuration, written by the Boot team, guarded by conditions,
+and loaded from a list inside each jar. Once you can read a condition report you can explain every bean in your
+application, override any default with confidence, and package your own reusable configuration as a starter.</p>
+
+<h2>Step 1: <code>@EnableAutoConfiguration</code> reads a list</h2>
+<p><code>@SpringBootApplication</code> includes <code>@EnableAutoConfiguration</code>. At start-up it collects, from every
+jar on the classpath, the file</p>
+<pre class="code" data-lang="text">META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports</pre>
+<p>Each line of such a file names one auto-configuration class. Spring Boot's own modules list a few hundred of them
+(data source, JPA, Flyway, Jackson, MVC, security, cache, Redis, Actuator…). They are ordinary
+<code>@Configuration</code> classes, marked <code>@AutoConfiguration</code>, full of <code>@Bean</code> methods, like
+EduMate's <code>SecurityConfig</code>. The difference is the conditions on them.</p>
+
+<h2>Step 2: conditions decide what applies</h2>
+<p>A typical auto-configuration looks like this (simplified from the data-source one):</p>
+<pre class="code" data-lang="java">@AutoConfiguration(before = SqlInitializationAutoConfiguration.class)
+@ConditionalOnClass({ DataSource.class, EmbeddedDatabaseType.class })   // JDBC is on the classpath
+@EnableConfigurationProperties(DataSourceProperties.class)               // binds spring.datasource.*
+public class DataSourceAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean(DataSource.class)                          // only if YOU did not define one
+    HikariDataSource dataSource(DataSourceProperties properties) {
+        return properties.initializeDataSourceBuilder().type(HikariDataSource.class).build();
+    }
+}</pre>
+<table>
+<thead><tr><th>Condition</th><th>The bean or class applies only if…</th></tr></thead>
+<tbody>
+<tr><td><code>@ConditionalOnClass</code> / <code>@ConditionalOnMissingClass</code></td><td>a class is (not) on the classpath: "configure Redis only if the Redis client library is present"</td></tr>
+<tr><td><code>@ConditionalOnMissingBean</code></td><td>no bean of that type exists yet: the <strong>back-off</strong> rule that lets you override defaults</td></tr>
+<tr><td><code>@ConditionalOnBean</code></td><td>some other bean exists</td></tr>
+<tr><td><code>@ConditionalOnProperty</code></td><td>a setting has a value (EduMate's <code>DemoDataSeeder</code> uses this)</td></tr>
+<tr><td><code>@ConditionalOnWebApplication</code></td><td>the application is a (servlet or reactive) web application</td></tr>
+<tr><td><code>@ConditionalOnResource</code>, <code>@ConditionalOnExpression</code>, <code>@ConditionalOnJava</code>, <code>@ConditionalOnThreading</code>…</td><td>more specialised tests (a file exists, a SpEL expression, the Java version, virtual threads enabled)</td></tr>
+</tbody></table>
+<p>The golden rule: <strong>your beans win</strong>. User configuration is processed first; auto-configurations run
+afterwards and mostly say "only if missing".</p>
+
+<h2>Step 3: back-off, seen in EduMate</h2>
+<table>
+<thead><tr><th>EduMate defines…</th><th>…so Boot's default steps aside</th><th>Visible effect</th></tr></thead>
+<tbody>
+<tr><td>a <code>SecurityFilterChain</code> bean</td><td>the default chain (everything requires login, a login form and HTTP Basic)</td><td>no login page; EduMate's own rules</td></tr>
+<tr><td>a <code>JwtDecoder</code> bean</td><td>the resource server's decoder built from <code>spring.security.oauth2.resourceserver.jwt.*</code></td><td>tokens are checked with EduMate's HMAC key</td></tr>
+<tr><td>(because a <code>JwtDecoder</code> exists)</td><td><code>UserDetailsServiceAutoConfiguration</code>, which would create an in-memory user with a random password</td><td>the log never shows "Using generated security password"</td></tr>
+<tr><td>a <code>PasswordEncoder</code> bean</td><td>the default delegating encoder</td><td>bcrypt with cost 12</td></tr>
+<tr><td>a <code>Clock</code> bean</td><td>(Boot has no clock; nothing to back off from)</td><td>–</td></tr>
+</tbody></table>
+<p>And some defaults EduMate simply accepts: the HikariCP pool, Hibernate's <code>EntityManagerFactory</code>, the
+transaction manager, Jackson's mapper, Flyway, the cache manager (simple or Redis depending on
+<code>spring.cache.type</code>), the task scheduler.</p>
+
+<h2>Reading the condition evaluation report</h2>
+<p>Start with <code>--debug</code> (or expose <code>/actuator/conditions</code>) and Spring Boot prints, for every
+auto-configuration, why it did or did not apply:</p>
+<pre class="code" data-lang="text">============================
+CONDITIONS EVALUATION REPORT
+============================
+Positive matches:
+-----------------
+   DataSourceAutoConfiguration matched:
+      - @ConditionalOnClass found required classes 'javax.sql.DataSource', … (OnClassCondition)
+   FlywayAutoConfiguration matched:
+      - @ConditionalOnClass found required class 'org.flywaydb.core.Flyway' (OnClassCondition)
+      - @ConditionalOnProperty (spring.flyway.enabled) matched (OnPropertyCondition)
+
+Negative matches:
+-----------------
+   UserDetailsServiceAutoConfiguration:
+      Did not match:
+         - @ConditionalOnMissingBean (types: …AuthenticationManager, …UserDetailsService,
+           …JwtDecoder …) found beans of type 'org.springframework.security.oauth2.jwt.JwtDecoder'
+           jwtDecoder (OnBeanCondition)</pre>
+<p>When something is configured that you did not expect (or is missing), this report answers "why?" in seconds.</p>
+
+<h2>Switching auto-configuration off</h2>
+<ul>
+<li>Most of them have a property: <code>spring.flyway.enabled=false</code>, <code>spring.cache.type=none</code>.</li>
+<li>Exclude a whole class: <code>@SpringBootApplication(exclude = RedisRepositoriesAutoConfiguration.class)</code> or
+<code>spring.autoconfigure.exclude=…</code>.</li>
+<li>Usually the best way: define your own bean of the type, and the default backs off.</li>
+</ul>
+
+<h2>Write your own starter</h2>
+<p>Suppose several university applications want EduMate's audit log. Packaged as a starter, another application would
+only add one dependency and get an <code>AuditLogger</code> bean, configurable and replaceable. The recipe:</p>
+<ol class="steps-list">
+<li><strong>An autoconfigure module</strong> (<code>edumate-audit-spring-boot-autoconfigure</code>) with the configuration,
+depending on Spring Boot's <code>spring-boot-autoconfigure</code>.</li>
+<li><strong>Properties</strong> for the knobs:
+<pre class="code" data-lang="java">@ConfigurationProperties("edumate.audit")
+public record AuditProperties(boolean enabled, @DefaultValue("30") int retentionDays) { }</pre></li>
+<li><strong>The auto-configuration</strong>, conditional and backing off:
+<pre class="code" data-lang="java">@AutoConfiguration(after = DataSourceAutoConfiguration.class)
+@ConditionalOnClass(JdbcTemplate.class)
+@ConditionalOnProperty(prefix = "edumate.audit", name = "enabled", havingValue = "true", matchIfMissing = true)
+@EnableConfigurationProperties(AuditProperties.class)
+public class AuditAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean                         // an application can still provide its own
+    public AuditLogger auditLogger(JdbcTemplate jdbc, AuditProperties properties, ObjectProvider&lt;Clock&gt; clock) {
+        return new JdbcAuditLogger(jdbc, clock.getIfAvailable(Clock::systemUTC), properties.retentionDays());
+    }
+}</pre></li>
+<li><strong>Register it</strong> in
+<code>src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports</code>:
+<pre class="code" data-lang="text">com.edumate.audit.autoconfigure.AuditAutoConfiguration</pre></li>
+<li><strong>A starter module</strong> (<code>edumate-audit-spring-boot-starter</code>) that contains no code and depends on
+the autoconfigure module and whatever it needs (JDBC). Naming: your own starters are
+<code>xxx-spring-boot-starter</code>; the <code>spring-boot-starter-xxx</code> form is reserved for Spring's own.</li>
+<li><strong>Metadata</strong> for editor completion: add <code>spring-boot-configuration-processor</code> as an optional
+annotation processor, and it generates <code>META-INF/spring-configuration-metadata.json</code> from the properties class.</li>
+<li><strong>Test it without starting an application</strong>, with <code>ApplicationContextRunner</code>:
+<pre class="code" data-lang="java">class AuditAutoConfigurationTest {
+    private final ApplicationContextRunner runner = new ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(AuditAutoConfiguration.class))
+            .withBean(JdbcTemplate.class, () -> mock(JdbcTemplate.class));
+
+    @Test
+    void createsTheLoggerByDefault() {
+        runner.run(context -> assertThat(context).hasSingleBean(AuditLogger.class));
+    }
+
+    @Test
+    void backsOffWhenTheApplicationHasItsOwn() {
+        runner.withBean("custom", AuditLogger.class, () -> mock(AuditLogger.class))
+              .run(context -> assertThat(context).getBean(AuditLogger.class).isSameAs(context.getBean("custom")));
+    }
+
+    @Test
+    void canBeSwitchedOff() {
+        runner.withPropertyValues("edumate.audit.enabled=false")
+              .run(context -> assertThat(context).doesNotHaveBean(AuditLogger.class));
+    }
+}</pre></li>
+</ol>
+<div class="callout deep"><strong>Details that separate good starters from bad ones</strong>
+<ul>
+<li>Auto-configuration classes must <em>not</em> be found by component scanning; keep them in their own package, reached
+only through the imports file.</li>
+<li>Use <code>@AutoConfiguration(before/after = …)</code> for ordering against other auto-configurations, never
+<code>@Order</code>.</li>
+<li>Prefer <code>@ConditionalOnClass</code> on the class level with class literals: the conditions are evaluated from the
+bytecode before the class is loaded, so a missing optional library never causes <code>ClassNotFoundException</code>.</li>
+<li>Keep beans overridable (<code>@ConditionalOnMissingBean</code>) and settings discoverable (metadata).</li>
+<li>For GraalVM native images, conditions are evaluated at build time (next chapters), so they must not depend on
+things that change at run time other than properties.</li>
+</ul></div>
+
+<h2>Beyond annotations: registering beans in code</h2>
+<p>Spring Framework 7 adds <code>BeanRegistrar</code>, an interface for registering beans programmatically (loops,
+conditions in plain Java) in a way that also works with ahead-of-time compilation. For most applications
+<code>@Bean</code> methods remain the clearest choice; registrars are for framework and library authors.</p>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Run EduMate with <code>--debug</code> and find three auto-configurations that matched and three that did not; for each,
+say which condition decided it.</li>
+<li>Comment out the <code>jwtDecoder</code> bean in <code>SecurityConfig</code> and start: read the failure: nothing
+provides a <code>JwtDecoder</code> any more, because Boot's resource-server configuration only creates one when
+<code>spring.security.oauth2.resourceserver.jwt.*</code> settings are present. Restore it.</li>
+<li>Build the audit starter above as a small separate Maven project and use it from a fresh Initializr application.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>How does Spring Boot find auto-configuration classes?</summary>
+<div>From the <code>META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports</code> files in the jars
+on the classpath, loaded by <code>@EnableAutoConfiguration</code>.</div></details>
+<details class="quiz"><summary>What makes it possible to override almost any default?</summary>
+<div><code>@ConditionalOnMissingBean</code>: auto-configured beans are only created if the application has not defined its
+own bean of that type, and user configuration is processed first.</div></details>
+<details class="quiz"><summary>Why does EduMate never log a generated security password?</summary>
+<div><code>UserDetailsServiceAutoConfiguration</code> backs off because EduMate defines a <code>JwtDecoder</code> bean (one
+of the types in its <code>@ConditionalOnMissingBean</code> list).</div></details>
+<details class="quiz"><summary>How do you test an auto-configuration quickly?</summary>
+<div>With <code>ApplicationContextRunner</code>: build tiny contexts with chosen configurations, beans and properties,
+and assert which beans exist.</div></details>

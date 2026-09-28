@@ -1,16 +1,19 @@
 /*
  * The librarian's desk: search the catalogue, issue a book to a student by USN, take books back.
+ * Each book shows a small bar of how many copies are still on the shelf.
  */
-import { useState, type FormEvent } from 'react';
+import { BookDown, BookUp, IdCard, Library, Search } from 'lucide-react';
+import { useState, type CSSProperties, type FormEvent } from 'react';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/http';
 import type { Book, LoanView } from '../../api/types';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { useToast } from '../../components/Toast';
-import { Badge, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
+import { Avatar, Badge, EmptyState, ErrorBanner, Field, Loading, PageHeader, PercentBar } from '../../components/ui';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
 import { formatDate, formatMoney } from '../../utils/format';
+import { hueFor } from '../../utils/visuals';
 
 export function LibraryDeskPage() {
   const toast = useToast();
@@ -57,60 +60,88 @@ export function LibraryDeskPage() {
     <>
       <PageHeader title={t.library.deskTitle} subtitle={t.library.finePolicy} />
 
-      <div className="card">
-        <h2>{t.library.issueTitle}</h2>
+      <div className="card table-wrap">
+        <h2 className="card-title">
+          <BookUp size={18} /> {t.library.issueTitle}
+        </h2>
         <form className="toolbar" onSubmit={search}>
           <Field id="usn" label={t.common.usn}>
-            <input id="usn" value={usn} placeholder={t.library.usnPlaceholder} onChange={(e) => setUsn(e.target.value)} />
+            <div className="input-icon">
+              <IdCard size={16} />
+              <input id="usn" value={usn} placeholder={t.library.usnPlaceholder} onChange={(e) => setUsn(e.target.value)} />
+            </div>
           </Field>
           <Field id="q" label={t.common.search}>
-            <input id="q" value={typed} placeholder={t.library.searchPlaceholder} onChange={(e) => setTyped(e.target.value)} />
+            <div className="input-icon">
+              <Search size={16} />
+              <input id="q" value={typed} placeholder={t.library.searchPlaceholder} onChange={(e) => setTyped(e.target.value)} />
+            </div>
           </Field>
           <button type="submit" className="btn btn-secondary">
-            {t.common.search}
+            <Search size={16} /> {t.common.search}
           </button>
         </form>
-        {books.loading && <Loading />}
+        {books.loading && <Loading inline />}
         {books.error && <ErrorBanner message={books.error} />}
-        {books.data && (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t.library.columns.title}</th>
-                  <th>{t.library.columns.author}</th>
-                  <th className="num">{t.library.columns.available}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {books.data.map((b) => (
-                  <tr key={b.id}>
-                    <td>
-                      <strong>{b.title}</strong>
-                      <div className="small muted mono">{b.isbn}</div>
-                    </td>
-                    <td>{b.author}</td>
-                    <td className="num">
+        {books.data && books.data.length === 0 && <EmptyState icon={Library} />}
+        {books.data && books.data.length > 0 && (
+          <table>
+            <thead>
+              <tr>
+                <th>{t.library.columns.title}</th>
+                <th>{t.library.columns.author}</th>
+                <th>{t.library.columns.available}</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {books.data.map((b) => (
+                <tr key={b.id}>
+                  <td>
+                    <div className="btn-row" style={{ flexWrap: 'nowrap' }}>
+                      <span
+                        className="book-cover book-cover-sm"
+                        style={{ '--hue': hueFor(b.title) } as CSSProperties}
+                        aria-hidden="true"
+                      >
+                        {b.title.charAt(0)}
+                      </span>
+                      <div>
+                        <strong>{b.title}</strong>
+                        <div className="small muted mono">{b.isbn}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{b.author}</td>
+                  <td style={{ minWidth: 150 }}>
+                    <span className="small">
                       {b.copiesAvailable} / {b.copiesTotal}
-                    </td>
-                    <td>
-                      <button type="button" className="btn btn-small" disabled={b.copiesAvailable === 0} onClick={() => issue(b)}>
-                        {t.library.issue}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </span>
+                    <PercentBar
+                      percent={b.copiesTotal === 0 ? 0 : (b.copiesAvailable * 100) / b.copiesTotal}
+                      low={b.copiesAvailable === 0}
+                      warn={b.copiesAvailable === 1}
+                    />
+                  </td>
+                  <td className="right">
+                    <button type="button" className="btn btn-small" disabled={b.copiesAvailable === 0} onClick={() => issue(b)}>
+                      <BookUp size={14} /> {t.library.issue}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
       <div className="card table-wrap">
-        <h2>{t.library.loansTitle}</h2>
+        <h2 className="card-title">
+          <BookDown size={18} /> {t.library.loansTitle}
+        </h2>
         {loans.error && <ErrorBanner message={loans.error} />}
-        {loans.data && (
+        {loans.data && loans.data.length === 0 && <EmptyState icon={BookDown} />}
+        {loans.data && loans.data.length > 0 && (
           <table>
             <thead>
               <tr>
@@ -125,18 +156,26 @@ export function LibraryDeskPage() {
             <tbody>
               {loans.data.map((loan) => (
                 <tr key={loan.id}>
-                  <td>{loan.title}</td>
                   <td>
-                    <span className="mono">{loan.usn}</span> {loan.studentName}
+                    <strong>{loan.title}</strong>
+                  </td>
+                  <td>
+                    <div className="btn-row" style={{ flexWrap: 'nowrap' }}>
+                      <Avatar name={loan.studentName} size="sm" />
+                      <div>
+                        {loan.studentName}
+                        <div className="small muted mono">{loan.usn}</div>
+                      </div>
+                    </div>
                   </td>
                   <td>
                     {formatDate(loan.dueOn)} {loan.daysLate > 0 && <Badge tone="bad">{t.library.overdue}</Badge>}
                   </td>
                   <td className="num">{loan.daysLate}</td>
                   <td className="num">{formatMoney(loan.fine)}</td>
-                  <td>
+                  <td className="right">
                     <button type="button" className="btn btn-secondary btn-small" onClick={() => giveBack(loan)}>
-                      {t.library.return}
+                      <BookDown size={14} /> {t.library.return}
                     </button>
                   </td>
                 </tr>

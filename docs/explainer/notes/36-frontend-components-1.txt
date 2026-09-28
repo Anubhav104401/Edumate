@@ -1,116 +1,175 @@
 === FILE frontend/src/components/Toast.tsx
 >>> SUMMARY
-**Toasts** are the small messages that pop up in the bottom-right corner and vanish after 5 seconds: "Approval recorded.", "Book returned. Fine charged: ₹12.00.", "That code is not correct. Attempts left: 3." (They are named after toast popping out of a toaster.)
-
-Any page shows one with:
+**Toasts**: the small messages that slide up in the bottom-right corner and disappear after a few seconds ("Attendance saved.", "Something went wrong."). Any page shows one with:
 <pre class="block">const toast = useToast();
-toast.success(t.apply.savedToast);    // green
-toast.error(errorMessage(err));       // red</pre>
+toast.success(t.takeAttendance.savedToast);</pre>
 
-**To change how long they stay**, edit `TOAST_DURATION_MS` in `config.ts`. **To change their colours**, edit the `--good`, `--bad`, `--info` and `--warn` colours in `theme.css`.
-
-**Accessibility:** the stack of toasts is marked `role="status"` and `aria-live="polite"`, so screen readers read each new message aloud without interrupting what they are currently reading (WCAG 2.1, which the report's usability objective refers to).
-
-**Why toasts instead of `alert()`?** The browser's `alert()` freezes the whole page until OK is clicked, looks different in every browser, and cannot be styled. Toasts do not block work, and several can stack up.
->>> 12
-The four kinds of toast.
->>> 14-17
-One toast: a unique number, its kind, and its text.
->>> 20-24
-What `useToast()` gives a page: four functions, one per kind.
+Since release 3.0 the drawing is done by the **Sonner** library: messages stack neatly, can be swiped away, pause while the mouse is over them, and are announced to screen readers. This file keeps EduMate's own small API (`success`, `error`, `info`, `warning`) in front of Sonner, so **no page had to change**, and swapping Sonner for something else later would touch only this file. That is the *adapter* idea: wrap an outside library behind your own interface.
+>>> 18-22
+The four kinds of message a page can show. Each takes the text and returns nothing.
+>>> 25
+The shared context; `null` until `ToastProvider` fills it.
 >>> 27
-The context, empty until the provider fills it.
->>> 29-30
-The provider keeps the list of toasts currently on screen.
->>> 31
-A counter for giving each toast a unique id. `useRef` keeps a value between draws **without** causing a redraw when it changes.
->>> 33-35
-`dismiss(id)`: removes one toast. It keeps every item whose id is **not** this one.
->>> 37-41
-`show(kind, text)`: takes the next id, adds the toast to the end of the list (`[...list, new]` makes a new list, which React needs in order to notice the change), and sets a timer to dismiss it after 5 seconds.
->>> 43
-`show` depends only on `dismiss`.
->>> 46-51
-The four functions pages call, each one `show` with its kind.
+Every toast stays for `TOAST_DURATION_MS` (5 seconds, from `config.ts`).
+>>> 30
+The current light/dark theme, so Sonner can draw matching toasts.
+>>> 32-37
+The API given to pages: each function calls the matching Sonner function. `void` throws away Sonner's return value (an id), so the functions return nothing, exactly as before.
+>>> 39
+`[]`: the object is made once and never changes, so pages that use it are not redrawn needlessly.
+>>> 42-44
+Provide the API to everything inside, and draw the page as normal.
+>>> 46
+`<Toaster>`: the corner area where Sonner draws the messages.
+>>> 47
+Light or dark, following the app.
+>>> 48
+Bottom-right corner.
+>>> 49
+Every toast gets a small × button to close it early.
+>>> 50-52
+At most 4 at once (older ones fold behind), 10 px between them, 24 px from the window edges.
 >>> 53
-Re-created only if `show` changes (practically never).
->>> 56-58
-Draws the app (`children`) and, after it, the toast stack, so toasts float above the pages.
->>> 60
-The stack's box, announced by screen readers.
->>> 61-62
-One box per toast. `key` helps React track which toast is which. The class, e.g. `toast toast-error`, sets its colour.
->>> 64-65
-A × button to close it early. `aria-label` gives the button a spoken name ("Close").
->>> 75-77
-`useToast` outside the provider is a programming mistake, so fail with a clear message.
->>> 79
-Returns the four functions.
+The name screen readers announce for the toast area ("Notifications").
+>>> 54
+Every toast gets the CSS class `toast` (styled in `app.css`, where each kind gets its coloured edge) and a readable label for its close button.
+>>> 55-59
+EduMate's own icons (from Lucide) for the four kinds, so toasts match the rest of the app.
+>>> 67-71
+`useToast()`: read the API. Used outside the provider, it reports the mistake clearly at once.
 
 === FILE frontend/src/components/ConfirmDialog.tsx
 >>> SUMMARY
-**"Are you sure?" dialogs**, for actions that cannot easily be undone: publishing results, reversing an enrolment, removing a document.
-
-A page asks like this, and **waits** for the answer:
+**"Are you sure?" dialogs.** A page asks, and **waits** for the answer:
 <pre class="block">const confirm = useConfirm();
-if (await confirm(t.resultsManage.confirmPublish)) {
-  // the user clicked "Confirm"
-}</pre>
+if (await confirm(t.resultsManage.confirmPublish)) { …publish… }
+if (await confirm(t.apply.confirmWithdraw, t.apply.withdraw, 'danger')) { … }   // red button</pre>
 
-**How the waiting works.** `confirm(...)` returns a *Promise*: a promise of an answer that will come later. It stores the promise's `resolve` function and shows the dialog. When a button is clicked, `resolve(true)` or `resolve(false)` is called, which fulfils the promise, and the page's `await` continues with that answer.
+`confirm(...)` returns a **Promise**, a value that arrives later. `await` pauses the page's function (not the whole page) until the person clicks Confirm (`true`) or Cancel / presses Escape (`false`).
 
-**Why not the browser's `window.confirm()`?** It freezes the page, cannot be styled or translated, and looks different in every browser. This dialog uses EduMate's own look and `messages.ts` texts. Clicking outside it counts as **Cancel**, and **Confirm** has the keyboard focus, so Enter confirms.
->>> 12
-The type of the `confirm` function: a message and an optional button label in, a promise of true/false out.
->>> 14-17
-The question currently on screen: its message, the confirm button's label, and the `resolve` function that will deliver the answer.
->>> 20
-The context.
->>> 25-28
-`confirm(message, label)`: creates a Promise and stores its `resolve` together with the message, which makes the dialog appear. The button label defaults to "Confirm".
->>> 31-33
-`answer(value)`: delivers the answer to the waiting page and hides the dialog.
->>> 36-38
-Draws the app, and after it …
->>> 39-40
-… if a question is waiting: a dimmed background covering the page. Clicking it answers "no".
->>> 41
-The dialog box itself. `role="alertdialog"` and `aria-modal` tell screen readers it is a question that must be answered. `stopPropagation()` stops a click **inside** the box from also counting as a click on the background.
->>> 43-44
-The buttons, aligned to the right. Cancel answers false.
->>> 47-48
-Confirm (with the given label) answers true. `autoFocus` puts the keyboard focus on it.
->>> 59-61
-Used outside the provider → a clear error.
->>> 63
-Returns the `confirm` function.
+**Accessibility, done by Radix UI's AlertDialog.** A proper dialog must: trap the keyboard inside it (Tab cannot wander to the page behind), close on Escape, tell screen readers "this is an alert dialog" with its title and description, hide the page behind from them, and return the focus to the button that opened it. Radix does all of that; `motion` adds the entrance and exit animation. For a **dangerous** action (reject, withdraw, remove) the button is red, the icon is a warning triangle, and the keyboard focus starts on *Cancel*, so an absent-minded Enter does not destroy anything.
+>>> 22
+The two kinds of question: normal, or dangerous.
+>>> 23
+The shape of `confirm`: a message, an optional button text, an optional tone; it promises `true` or `false`.
+>>> 25-29
+The question currently on screen: its message, button text, tone, and `resolve`, the function that delivers the answer to the waiting page.
+>>> 32
+The shared context.
+>>> 36
+A handle on the confirm button, to give it the keyboard focus.
+>>> 37
+While a question is open, the page behind must not scroll (see `SmoothScroll.tsx`).
+>>> 39-41
+`confirm(...)`: creates a new Promise and stores its `resolve` function together with the question. Putting the question into state makes the dialog appear. Defaults: the button says "Confirm" and the tone is normal.
+>>> 42
+Made once, never re-created.
+>>> 45-47
+`answer(value)`: deliver the answer to the waiting page, then remove the question (which closes the dialog).
+>>> 50
+Is the open question a dangerous one?
+>>> 52-54
+Provide `confirm` to every page, and draw the pages.
+>>> 55
+The Radix dialog, open whenever there is a question. Radix calls `onOpenChange(false)` when the person presses Escape or Cancel; that counts as "no".
+>>> 56-57
+`AnimatePresence` lets the dialog animate **out** after `pending` becomes `null`, instead of vanishing instantly.
+>>> 58
+`Portal`: draw the dialog at the end of `<body>`, above everything else, whatever part of the page asked. `forceMount` hands control of appearing and disappearing to `AnimatePresence`.
+>>> 59-60
+The dimmed, blurred backdrop, fading in and out. `asChild` means "do not add a box of your own; give your behaviour to my child", here a `motion.div`.
+>>> 62
+A full-screen box that centres the dialog.
+>>> 63-65
+The dialog's content box (again handing its behaviour to the `motion.div` inside).
+>>> 67-70
+When the dialog opens: for a normal question, move the keyboard focus to the confirm button. For a dangerous one, let Radix focus *Cancel* (its default).
+>>> 74-79
+The dialog box itself: it pops in from slightly smaller and lower on a spring, and leaves quickly.
+>>> 81-82
+A tinted icon tile: a red warning triangle for danger, a blue question mark otherwise.
+>>> 84
+The title ("Please confirm"). Radix links it to the dialog for screen readers.
+>>> 85
+The question itself, linked as the dialog's description.
+>>> 86
+The row of buttons, aligned to the right.
+>>> 88
+Cancel: closes the dialog, which answers "no".
+>>> 89-92
+The confirm button: red for danger, blue otherwise. Clicking it answers "yes".
+>>> 94
+Its text, for example "Publish" or "Withdraw".
+>>> 109-113
+`useConfirm()`: read the function. Used outside the provider, it reports the mistake clearly at once.
 
 === FILE frontend/src/components/ErrorBoundary.tsx
 >>> SUMMARY
-A **safety net around every page**. If a page crashes while drawing itself (for example the server sent data in an unexpected shape), React normally removes **everything** from the screen, leaving a blank white page. This component catches the crash and shows a friendly red message instead: "This page could not be displayed. Something unexpected happened while drawing it. Choose another page from the menu, or reload the browser tab." The top bar and menu keep working.
+**A safety net around every page.** If a page crashes while drawing itself, React would normally remove the whole app from the screen. This component catches the crash and shows a friendly message instead, with a "Reload the page" button, while the menu stays usable so the person can go to another page.
 
-**Where it came from.** While EduMate was being built, the Role matrix page crashed because Spring 7 sent HTTP methods as `{}` (see `AdminController`), and the whole app went blank. The backend was fixed, and this boundary was added so any **future** bug stays contained to one page.
-
-`Layout.tsx` wraps the current page in `<ErrorBoundary resetKey={location.pathname}>`. When the person goes to another page, the address changes, and the error is forgotten.
-
-**Why a class?** React lets only *class components* catch errors (`getDerivedStateFromError`); there is no hook for it yet. That is why this file looks different from the others.
->>> 10-13
-Its inputs: the page to protect (`children`) and a `resetKey` (the current address).
->>> 16-17
-Its memory: has the page failed?
->>> 20
-A class component. `Component<Props, State>` states its input and memory shapes.
+React only supports this with a **class component** (the older way of writing components), which is why this file looks different from the others.
+>>> 11-14
+Its inputs: the page to protect, and `resetKey`, the current address. When the address changes, the error is forgotten, so moving to another page recovers.
+>>> 17-18
+Its memory: has the page crashed?
 >>> 21
-At first, nothing has failed.
->>> 23-24
-React calls this when something inside crashes while drawing. Returning `{ failed: true }` makes the component draw the message instead.
->>> 27-28
-Also called on a crash: writes the error and where it happened to the browser's console (F12), for developers.
->>> 31-33
-After every update: if the address changed and we are in the failed state, reset, so the new page gets a fresh chance.
->>> 37
-`render`: what to draw.
->>> 38-40
-Failed → the red alert box, marked `role="alert"` so screen readers announce it. The texts are `t.errors.pageCrashedTitle` and `pageCrashedBody` in `messages.ts`.
->>> 46
+`ErrorBoundary extends Component<Props, State>`: a class component with those inputs and that memory.
+>>> 22
+At first, nothing has crashed.
+>>> 24-25
+React calls this when anything inside crashes while drawing: set `failed` to true.
+>>> 28-29
+Also called on a crash: write the details to the browser's console for developers.
+>>> 32-34
+After every update: if the address changed and the page had crashed, try again.
+>>> 38-41
+Drawing: if it crashed, show a card with the "empty state" layout…
+>>> 42-43
+…a floating bug icon in red…
+>>> 47-48
+…and a button that reloads the browser tab.
+>>> 53
 Otherwise draw the page normally.
+
+=== FILE frontend/src/components/Layout.tsx
+>>> SUMMARY
+**The frame around every page after login**: the side menu on the left, the top bar, and the current page in the middle. It also owns the things that belong to the whole frame rather than to one page:
+- the **command menu**, opened with Ctrl+K (⌘K on a Mac) from anywhere;
+- the **phone drawer**: on narrow screens the side menu slides in over the page, with a dimmed backdrop;
+- the **collapsed menu** (icons only), remembered in the browser;
+- the **reading-progress line** along the top and the **back-to-top** button;
+- a **"Skip to content"** link for keyboard users.
+
+The page itself is drawn by `<AnimatedOutlet />` (see `motion/PageTransition.tsx`), which animates each change of page.
+>>> 25
+Is the menu collapsed? Remembered in `localStorage` under `SIDEBAR_STORAGE_KEY`.
+>>> 28
+While the phone drawer is open, the page behind does not scroll.
+>>> 31
+Whenever the address changes, close the phone drawer, so choosing a page from it also hides it.
+>>> 34-35
+Listen to every key pressed anywhere in the window…
+>>> 36-38
+…and when it is Ctrl+K or ⌘K (`metaKey` is the ⌘ key), open or close the command menu. `preventDefault()` stops the browser's own meaning of that shortcut (in some browsers, jumping to the address bar).
+>>> 41-43
+Start listening when the frame appears, and stop when it disappears (the returned function), so no listener is left behind.
+>>> 45-47
+Log out: forget the token, say "You have been logged out.", and go to the login page.
+>>> 50-51
+The whole frame. `data-collapsed` lets `app.css` narrow the menu column.
+>>> 52
+"Skip to content": invisible until a keyboard user presses Tab on a fresh page; it then jumps straight past the menu to the page (`#main`), which is an accessibility requirement (WCAG 2.4.1).
+>>> 55
+The thin gradient line at the top that fills as you scroll down the page.
+>>> 56-60
+The side menu. It is told whether it is collapsed and whether it is open as a drawer; choosing a link closes the drawer; its button collapses or expands it.
+>>> 62-70
+On phones, the dimmed backdrop behind the open drawer, fading in and out; tapping it closes the drawer. `aria-hidden` because it is only decoration for screen readers.
+>>> 74-75
+The main column: the top bar, which can open the drawer or the command menu and log out…
+>>> 76-77
+…and the page area. `id="main"` is where the skip link lands; `tabIndex={-1}` lets it receive the focus. Inside, the current page, animated.
+>>> 80
+The command menu (hidden until opened).
+>>> 81
+The back-to-top button (appears after scrolling down).
