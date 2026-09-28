@@ -1,0 +1,38 @@
+# ---------- Java / Maven (backend) ----------
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.class
+
+# ---------- Node / Vite (frontend) ----------
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# ---------- Python (ai-service) ----------
+ai-service/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ---------- Runtime data (never commit uploaded files or local databases) ----------
+backend/data/
+backend/storage/
+storage/
+*.mv.db
+*.trace.db
+*.log
+
+# ---------- Secrets ----------
+.env
+!.env.example
+
+# ---------- Editors / OS ----------
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# ---------- Local tool settings ----------
+.claude/

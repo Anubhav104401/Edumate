@@ -1,0 +1,93 @@
+# =====================================================================
+# EduMate backend configuration (settings shared by every environment).
+# ${NAME:default} means "read environment variable NAME, or use default".
+# Profile files (application-dev.yml, application-docker.yml) add to /
+# override these values.
+# =====================================================================
+server:
+  port: ${PORT:8080}                    # the backend listens on http://localhost:8080
+  error:
+    include-stacktrace: never           # never leak Java stack traces to clients (OWASP A05)
+    include-message: never
+
+spring:
+  application:
+    name: edumate-backend
+  profiles:
+    default: dev                        # if nobody chooses a profile, use "dev"
+  jpa:
+    open-in-view: false                 # database work happens only inside services
+    hibernate:
+      ddl-auto: none                    # Flyway owns the schema, Hibernate never changes it
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50                # send inserts to the DB in groups of 50
+        order_inserts: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 5MB                # biggest single upload (a scanned document)
+      max-request-size: 6MB
+  cache:
+    type: simple                        # in-memory cache; the docker profile switches to Redis
+    cache-names: publishedResults,dashboard
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info            # only harmless endpoints are exposed
+  endpoint:
+    health:
+      show-details: never
+  health:
+    redis:
+      enabled: false                    # Redis is optional in development
+
+logging:
+  level:
+    root: INFO
+    com.edumate: INFO
+
+# ---------------------------------------------------------------------
+# Settings that belong to EduMate itself (read by config/AppProperties).
+# ---------------------------------------------------------------------
+edumate:
+  security:
+    jwt-secret: ${JWT_SECRET:dev-only-jwt-secret-change-me-at-least-32-bytes-long}
+    token-validity-hours: 8
+    max-failed-logins: 5
+    lockout-minutes: 15
+    h2-console-enabled: false
+  academic:
+    regulation: R-2023
+    attendance-threshold-percent: 75
+    weeks-per-semester: 16
+  payment:
+    gateway-secret: ${PAYMENT_GATEWAY_SECRET:dev-gateway-secret-change-me}
+  storage:
+    root: ${STORAGE_ROOT:./storage}
+  library:
+    loan-days: 14
+    fine-per-day: 2.00
+    max-fine: 200.00
+  admissions:
+    entrance-weight: 0.60                # merit score = 60% entrance + 40% qualifying exam
+    qualifying-weight: 0.40
+    reserved-share:                      # share of seats reserved per category
+      OBC: 0.27
+      SC: 0.15
+      ST: 0.075
+  demo:
+    seed: false
+    expose-otp: false
+  tenants:                               # campuses are provisioned from here (Flexibility objective)
+    - code: JGC
+      name: Jain Global Campus
+      city: Kanakapura
+    - code: CCC
+      name: City Campus
+      city: Bengaluru

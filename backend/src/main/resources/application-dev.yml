@@ -1,0 +1,24 @@
+# =====================================================================
+# "dev" profile: runs on a laptop with nothing else installed.
+# Uses H2, a database that lives in memory and is wiped on every restart.
+# =====================================================================
+spring:
+  datasource:
+    url: jdbc:h2:mem:edumate;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  h2:
+    console:
+      enabled: true                     # browse the tables at http://localhost:8080/h2-console
+      path: /h2-console
+
+edumate:
+  security:
+    h2-console-enabled: true
+  demo:
+    seed: true                          # fill the empty database with demo campuses, users, marks ...
+    expose-otp: true                    # show guardian OTPs on screen (demo only, never in production)
+
+logging:
+  level:
+    com.edumate: DEBUG

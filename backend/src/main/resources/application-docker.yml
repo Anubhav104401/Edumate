@@ -1,0 +1,27 @@
+# =====================================================================
+# "docker" profile: the production-like setup started by docker-compose.
+# PostgreSQL is the database, Redis is the cache.
+# =====================================================================
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://postgres:5432/edumate}
+    username: ${DB_USER:edumate}
+    password: ${DB_PASSWORD:edumate}
+  cache:
+    type: redis
+    redis:
+      time-to-live: 10m                 # cached published results expire after 10 minutes
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+
+management:
+  health:
+    redis:
+      enabled: true
+
+edumate:
+  demo:
+    seed: ${DEMO_SEED:true}
+    expose-otp: ${DEMO_EXPOSE_OTP:true}
