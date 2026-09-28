@@ -435,7 +435,7 @@ were written by hand; grey ones were produced automatically for repetitive lines
 settings).</li>
 </ol>
 
-<p>This guide covers <strong>222 files</strong> containing <strong>20,810 lines</strong>. 5,643 lines have a hand-written explanation and 9,656 lines (imports, comments, closing brackets, settings) are explained automatically. Empty lines need no explanation.</p>
+<p>This guide covers <strong>222 files</strong> containing <strong>20,810 lines</strong>. 5,644 lines have a hand-written explanation and 9,655 lines (imports, comments, closing brackets, settings) are explained automatically. Empty lines need no explanation.</p>
 
 <h2>Suggested reading paths</h2>
 <table>
@@ -2325,7 +2325,7 @@ data that must persist.</li>
 <p>Every file in the project, with one line saying what it is for. Click a name to open its line-by-line
 explanation.</p>
 
-<p>This guide covers <strong>222 files</strong> containing <strong>20,810 lines</strong>. 5,643 lines have a hand-written explanation and 9,656 lines (imports, comments, closing brackets, settings) are explained automatically. Empty lines need no explanation.</p>
+<p>This guide covers <strong>222 files</strong> containing <strong>20,810 lines</strong>. 5,644 lines have a hand-written explanation and 9,655 lines (imports, comments, closing brackets, settings) are explained automatically. Empty lines need no explanation.</p>
 
 <h2>How the folders are organised</h2>
 <pre class="block">Edumate/
@@ -2403,7 +2403,7 @@ explanation.</p>
 </tbody></table>
 </details>
 <details class="file" id="f-gitignore">
-<summary><span class="path">.gitignore</span><span class="lines">38 lines</span><span class="ftitle">Files git must never upload (build output, uploads, secrets)</span></summary>
+<summary><span class="path">.gitignore</span><span class="lines">37 lines</span><span class="ftitle">Files git must never upload (build output, uploads, secrets)</span></summary>
 <div class="fsummary"><p><em>(No summary written.)</em></p></div>
 <table class="code"><tbody>
 <tr id="f-gitignore-L1"><td class="ln">1</td><td class="src"><span class="c1"># ---------- Java / Maven (backend) ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
@@ -2417,37 +2417,36 @@ explanation.</p>
 <tr id="f-gitignore-L9"><td class="ln">9</td><td class="src">frontend/.vite/</td><td class="ex auto">git ignores (never uploads) anything matching <code>frontend/.vite/</code>.</td></tr>
 <tr id="f-gitignore-L10"><td class="ln">10</td><td class="src">*.tsbuildinfo</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.tsbuildinfo</code>.</td></tr>
 <tr id="f-gitignore-L11"><td class="ln">11</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-gitignore-L12"><td class="ln">12</td><td class="src"><span class="c1"># ---------- Python (ai-service) ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
-<tr id="f-gitignore-L13"><td class="ln">13</td><td class="src">ai-service/.venv/</td><td class="ex auto">git ignores (never uploads) anything matching <code>ai-service/.venv/</code>.</td></tr>
-<tr id="f-gitignore-L14"><td class="ln">14</td><td class="src">__pycache__/</td><td class="ex auto">git ignores (never uploads) anything matching <code>__pycache__/</code>.</td></tr>
-<tr id="f-gitignore-L15"><td class="ln">15</td><td class="src">*.pyc</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.pyc</code>.</td></tr>
-<tr id="f-gitignore-L16"><td class="ln">16</td><td class="src">.pytest_cache/</td><td class="ex auto">git ignores (never uploads) anything matching <code>.pytest_cache/</code>.</td></tr>
-<tr id="f-gitignore-L17"><td class="ln">17</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-gitignore-L18"><td class="ln">18</td><td class="src"><span class="c1"># ---------- Runtime data (never commit uploaded files or local databases) ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
-<tr id="f-gitignore-L19"><td class="ln">19</td><td class="src">backend/data/</td><td class="ex auto">git ignores (never uploads) anything matching <code>backend/data/</code>.</td></tr>
-<tr id="f-gitignore-L20"><td class="ln">20</td><td class="src">backend/storage/</td><td class="ex auto">git ignores (never uploads) anything matching <code>backend/storage/</code>.</td></tr>
-<tr id="f-gitignore-L21"><td class="ln">21</td><td class="src">storage/</td><td class="ex auto">git ignores (never uploads) anything matching <code>storage/</code>.</td></tr>
-<tr id="f-gitignore-L22"><td class="ln">22</td><td class="src">*.mv.db</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.mv.db</code>.</td></tr>
-<tr id="f-gitignore-L23"><td class="ln">23</td><td class="src">*.trace.db</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.trace.db</code>.</td></tr>
-<tr id="f-gitignore-L24"><td class="ln">24</td><td class="src">*.log</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.log</code>.</td></tr>
-<tr id="f-gitignore-L25"><td class="ln">25</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-gitignore-L26"><td class="ln">26</td><td class="src"><span class="c1"># ---------- Secrets ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
-<tr id="f-gitignore-L27"><td class="ln">27</td><td class="src">.env</td><td class="ex auto">git ignores (never uploads) anything matching <code>.env</code>.</td></tr>
-<tr id="f-gitignore-L28"><td class="ln">28</td><td class="src">!.env.example</td><td class="ex auto">…but DO keep <code>.env.example</code> in git (the ! makes an exception).</td></tr>
-<tr id="f-gitignore-L29"><td class="ln">29</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-gitignore-L30"><td class="ln">30</td><td class="src"><span class="c1"># ---------- Editors / OS ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
-<tr id="f-gitignore-L31"><td class="ln">31</td><td class="src">.idea/</td><td class="ex auto">git ignores (never uploads) anything matching <code>.idea/</code>.</td></tr>
-<tr id="f-gitignore-L32"><td class="ln">32</td><td class="src">.vscode/</td><td class="ex auto">git ignores (never uploads) anything matching <code>.vscode/</code>.</td></tr>
-<tr id="f-gitignore-L33"><td class="ln">33</td><td class="src">*.iml</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.iml</code>.</td></tr>
-<tr id="f-gitignore-L34"><td class="ln">34</td><td class="src">.DS_Store</td><td class="ex auto">git ignores (never uploads) anything matching <code>.DS_Store</code>.</td></tr>
-<tr id="f-gitignore-L35"><td class="ln">35</td><td class="src">Thumbs.db</td><td class="ex auto">git ignores (never uploads) anything matching <code>Thumbs.db</code>.</td></tr>
-<tr id="f-gitignore-L36"><td class="ln">36</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-gitignore-L37"><td class="ln">37</td><td class="src"><span class="c1"># ---------- Local tool settings ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
-<tr id="f-gitignore-L38"><td class="ln">38</td><td class="src">.claude/</td><td class="ex auto">git ignores (never uploads) anything matching <code>.claude/</code>.</td></tr>
+<tr id="f-gitignore-L12"><td class="ln">12</td><td class="src"><span class="c1"># ---------- Python (the docs/explainer generator) ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
+<tr id="f-gitignore-L13"><td class="ln">13</td><td class="src">__pycache__/</td><td class="ex auto">git ignores (never uploads) anything matching <code>__pycache__/</code>.</td></tr>
+<tr id="f-gitignore-L14"><td class="ln">14</td><td class="src">*.pyc</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.pyc</code>.</td></tr>
+<tr id="f-gitignore-L15"><td class="ln">15</td><td class="src">.pytest_cache/</td><td class="ex auto">git ignores (never uploads) anything matching <code>.pytest_cache/</code>.</td></tr>
+<tr id="f-gitignore-L16"><td class="ln">16</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-gitignore-L17"><td class="ln">17</td><td class="src"><span class="c1"># ---------- Runtime data (never commit uploaded files or local databases) ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
+<tr id="f-gitignore-L18"><td class="ln">18</td><td class="src">backend/data/</td><td class="ex auto">git ignores (never uploads) anything matching <code>backend/data/</code>.</td></tr>
+<tr id="f-gitignore-L19"><td class="ln">19</td><td class="src">backend/storage/</td><td class="ex auto">git ignores (never uploads) anything matching <code>backend/storage/</code>.</td></tr>
+<tr id="f-gitignore-L20"><td class="ln">20</td><td class="src">storage/</td><td class="ex auto">git ignores (never uploads) anything matching <code>storage/</code>.</td></tr>
+<tr id="f-gitignore-L21"><td class="ln">21</td><td class="src">*.mv.db</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.mv.db</code>.</td></tr>
+<tr id="f-gitignore-L22"><td class="ln">22</td><td class="src">*.trace.db</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.trace.db</code>.</td></tr>
+<tr id="f-gitignore-L23"><td class="ln">23</td><td class="src">*.log</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.log</code>.</td></tr>
+<tr id="f-gitignore-L24"><td class="ln">24</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-gitignore-L25"><td class="ln">25</td><td class="src"><span class="c1"># ---------- Secrets ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
+<tr id="f-gitignore-L26"><td class="ln">26</td><td class="src">.env</td><td class="ex auto">git ignores (never uploads) anything matching <code>.env</code>.</td></tr>
+<tr id="f-gitignore-L27"><td class="ln">27</td><td class="src">!.env.example</td><td class="ex auto">…but DO keep <code>.env.example</code> in git (the ! makes an exception).</td></tr>
+<tr id="f-gitignore-L28"><td class="ln">28</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-gitignore-L29"><td class="ln">29</td><td class="src"><span class="c1"># ---------- Editors / OS ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
+<tr id="f-gitignore-L30"><td class="ln">30</td><td class="src">.idea/</td><td class="ex auto">git ignores (never uploads) anything matching <code>.idea/</code>.</td></tr>
+<tr id="f-gitignore-L31"><td class="ln">31</td><td class="src">.vscode/</td><td class="ex auto">git ignores (never uploads) anything matching <code>.vscode/</code>.</td></tr>
+<tr id="f-gitignore-L32"><td class="ln">32</td><td class="src">*.iml</td><td class="ex auto">git ignores (never uploads) anything matching <code>*.iml</code>.</td></tr>
+<tr id="f-gitignore-L33"><td class="ln">33</td><td class="src">.DS_Store</td><td class="ex auto">git ignores (never uploads) anything matching <code>.DS_Store</code>.</td></tr>
+<tr id="f-gitignore-L34"><td class="ln">34</td><td class="src">Thumbs.db</td><td class="ex auto">git ignores (never uploads) anything matching <code>Thumbs.db</code>.</td></tr>
+<tr id="f-gitignore-L35"><td class="ln">35</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-gitignore-L36"><td class="ln">36</td><td class="src"><span class="c1"># ---------- Local tool settings ----------</span></td><td class="ex auto cm"><b>Comment</b> – a note for people. The computer skips it completely.</td></tr>
+<tr id="f-gitignore-L37"><td class="ln">37</td><td class="src">.claude/</td><td class="ex auto">git ignores (never uploads) anything matching <code>.claude/</code>.</td></tr>
 </tbody></table>
 </details>
 <details class="file" id="f-README-md">
-<summary><span class="path">README.md</span><span class="lines">139 lines</span><span class="ftitle">The project's front page on GitHub: what it is and how to run it</span></summary>
+<summary><span class="path">README.md</span><span class="lines">140 lines</span><span class="ftitle">The project's front page on GitHub: what it is and how to run it</span></summary>
 <div class="fsummary"><p>The <strong>front page</strong> of the project. GitHub shows it automatically below the file list at https://github.com/Anubhav104401/Edumate. It is written in <strong>Markdown</strong>, a simple way to format text: <code>#</code> makes a heading, <code>**bold**</code> makes bold text, <code>|</code> builds tables, and text between three back-ticks is shown as code.</p><p>It answers the questions a newcomer (or an examiner) asks first: what is this, how is it built, how do I run it, which accounts can I try, how is it tested, where is each SQA finding fixed, and what is <strong>not</strong> done.</p></div>
 <table class="code"><tbody>
 <tr id="f-README-md-L1"><td class="ln">1</td><td class="src"><span class="gh"># EduMate</span></td><td class="ex"><p>The title. One <code>#</code> is the biggest heading.</p></td></tr>
@@ -2458,137 +2457,138 @@ explanation.</p>
 <tr id="f-README-md-L6"><td class="ln">6</td><td class="src">and results, fees, timetable, library and the student/parent portal. It is multi-campus, and every</td></tr>
 <tr id="f-README-md-L7"><td class="ln">7</td><td class="src">defect fix described in the report is built in and covered by an automated test.</td></tr>
 <tr id="f-README-md-L8"><td class="ln">8</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L9"><td class="ln">9</td><td class="src"><span class="k">&gt; </span><span class="ge">**New to programming?** Open [`docs/EduMate-Zero-to-Hero.html`](docs/EduMate-Zero-to-Hero.html) in a browser.</span></td><td class="ex" rowspan="2"><p>A quote box (<code>&gt;</code>) pointing beginners to this guide.</p></td></tr>
+<tr id="f-README-md-L9"><td class="ln">9</td><td class="src"><span class="k">&gt; </span><span class="ge">**New to programming?** Open [`docs/EduMate-Zero-to-Hero.html`](docs/EduMate-Zero-to-Hero.html) in a browser.</span></td><td class="ex" rowspan="3"><p>A quote box (<code>&gt;</code>) pointing beginners to this guide, and how to regenerate it after changing code.</p></td></tr>
 <tr id="f-README-md-L10"><td class="ln">10</td><td class="src"><span class="k">&gt; </span><span class="ge">It explains every folder, every file and every line of this project from first principles.</span></td></tr>
-<tr id="f-README-md-L11"><td class="ln">11</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L12"><td class="ln">12</td><td class="src">---</td><td class="ex"><p><code>---</code> draws a horizontal line.</p></td></tr>
-<tr id="f-README-md-L13"><td class="ln">13</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L14"><td class="ln">14</td><td class="src"><span class="gu">## 1. Architecture</span></td><td class="ex" rowspan="13"><p>Section 1: a text drawing of the architecture. The browser talks only to the frontend; the frontend sends JSON to the backend's <code>/api/...</code> URLs; the backend uses the database, the cache, the object store and the two gateways.</p></td></tr>
-<tr id="f-README-md-L15"><td class="ln">15</td><td class="src"> </td></tr>
-<tr id="f-README-md-L16"><td class="ln">16</td><td class="src"><span class="sb">```</span></td></tr>
-<tr id="f-README-md-L17"><td class="ln">17</td><td class="src"><span class="sb"> Browser ──► Frontend (React + TypeScript, port 5173 in dev / 3000 in Docker)</span></td></tr>
-<tr id="f-README-md-L18"><td class="ln">18</td><td class="src"><span class="sb">               │   every request: JSON over HTTP to /api/...</span></td></tr>
-<tr id="f-README-md-L19"><td class="ln">19</td><td class="src"><span class="sb">               ▼</span></td></tr>
-<tr id="f-README-md-L20"><td class="ln">20</td><td class="src"><span class="sb">            Backend (Spring Boot 4, Java, port 8080)</span></td></tr>
-<tr id="f-README-md-L21"><td class="ln">21</td><td class="src"><span class="sb">               ├─► Database: H2 in memory (dev)  or  PostgreSQL 17 (Docker)</span></td></tr>
-<tr id="f-README-md-L22"><td class="ln">22</td><td class="src"><span class="sb">               ├─► Cache:    in-memory (dev)      or  Redis 7 (Docker)</span></td></tr>
-<tr id="f-README-md-L23"><td class="ln">23</td><td class="src"><span class="sb">               ├─► Object store for scanned documents (./storage folder)</span></td></tr>
-<tr id="f-README-md-L24"><td class="ln">24</td><td class="src"><span class="sb">               ├─► Payment gateway (simulated, HMAC-signed callbacks)</span></td></tr>
-<tr id="f-README-md-L25"><td class="ln">25</td><td class="src"><span class="sb">               └─► E-mail / SMS gateway (outbox table + dispatcher; logs in dev)</span></td></tr>
-<tr id="f-README-md-L26"><td class="ln">26</td><td class="src"><span class="sb">```</span></td></tr>
-<tr id="f-README-md-L27"><td class="ln">27</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L28"><td class="ln">28</td><td class="src">| Report says | Implemented as |</td><td class="ex" rowspan="9"><p>A table matching each technology the report names to where it lives in the code.</p></td></tr>
-<tr id="f-README-md-L29"><td class="ln">29</td><td class="src">|---|---|</td></tr>
-<tr id="f-README-md-L30"><td class="ln">30</td><td class="src">| React single-page application | <span class="sb">`frontend/`</span> – React 19, TypeScript 7, Vite 8, React Router 8 |</td></tr>
-<tr id="f-README-md-L31"><td class="ln">31</td><td class="src">| Spring Boot REST backend | <span class="sb">`backend/`</span> – Spring Boot 4.1, Java 21 bytecode (runs on JDK 21+) |</td></tr>
-<tr id="f-README-md-L32"><td class="ln">32</td><td class="src">| PostgreSQL transactional store | Flyway migration <span class="sb">`V1__create_schema.sql`</span>; H2 in PostgreSQL mode for development |</td></tr>
-<tr id="f-README-md-L33"><td class="ln">33</td><td class="src">| Redis for cache data | <span class="sb">`@Cacheable("publishedResults")`</span>; Redis in the <span class="sb">`docker`</span> profile |</td></tr>
-<tr id="f-README-md-L34"><td class="ln">34</td><td class="src">| Object store for scanned documents | <span class="sb">`ObjectStore`</span> interface + <span class="sb">`LocalFileObjectStore`</span> |</td></tr>
-<tr id="f-README-md-L35"><td class="ln">35</td><td class="src">| Payment gateway integration | <span class="sb">`PaymentOrchestrator`</span>, <span class="sb">`GatewaySignature`</span>, <span class="sb">`MockPaymentGateway`</span> |</td></tr>
-<tr id="f-README-md-L36"><td class="ln">36</td><td class="src">| SMS and e-mail gateway | <span class="sb">`NotificationService`</span> → outbox → <span class="sb">`NotificationDispatcher`</span> |</td></tr>
-<tr id="f-README-md-L37"><td class="ln">37</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L38"><td class="ln">38</td><td class="src"><span class="gu">## 2. Run it (development, Windows)</span></td><td class="ex" rowspan="8"><p>Section 2: running it on Windows needs only a JDK and Node.js. The helper script starts both halves in one command.</p></td></tr>
-<tr id="f-README-md-L39"><td class="ln">39</td><td class="src"> </td></tr>
-<tr id="f-README-md-L40"><td class="ln">40</td><td class="src">You need <span class="gs">**JDK 21 or newer**</span> and <span class="gs">**Node.js 20 or newer**</span>. Nothing else: Maven comes with the project (<span class="sb">`mvnw`</span>) and the</td></tr>
-<tr id="f-README-md-L41"><td class="ln">41</td><td class="src">database runs in memory.</td></tr>
-<tr id="f-README-md-L42"><td class="ln">42</td><td class="src"> </td></tr>
-<tr id="f-README-md-L43"><td class="ln">43</td><td class="src"><span class="sb">```</span><span class="sb">powershell</span></td></tr>
-<tr id="f-README-md-L44"><td class="ln">44</td><td class="src"><span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">Bypass</span> <span class="o">-File</span> <span class="n">scripts</span><span class="p">\</span><span class="n">dev</span><span class="n">-start</span><span class="p">.</span><span class="n">ps1</span></td></tr>
-<tr id="f-README-md-L45"><td class="ln">45</td><td class="src"><span class="sb">```</span></td></tr>
-<tr id="f-README-md-L46"><td class="ln">46</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L47"><td class="ln">47</td><td class="src">or by hand, in two terminals:</td><td class="ex" rowspan="6"><p>The same by hand, in two terminals: the backend on port 8080, and the frontend on port 5173 (the one to open in the browser).</p></td></tr>
-<tr id="f-README-md-L48"><td class="ln">48</td><td class="src"> </td></tr>
-<tr id="f-README-md-L49"><td class="ln">49</td><td class="src"><span class="sb">```</span><span class="sb">bash</span></td></tr>
-<tr id="f-README-md-L50"><td class="ln">50</td><td class="src"><span class="nb">cd</span><span class="w"> </span>backend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>./mvnw<span class="w"> </span>spring-boot:run<span class="w">          </span><span class="c1"># http://localhost:8080  (API)</span></td></tr>
-<tr id="f-README-md-L51"><td class="ln">51</td><td class="src"><span class="nb">cd</span><span class="w"> </span>frontend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span>install<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span>run<span class="w"> </span>dev<span class="w">      </span><span class="c1"># http://localhost:5173  (open this)</span></td></tr>
-<tr id="f-README-md-L52"><td class="ln">52</td><td class="src"><span class="sb">```</span></td></tr>
-<tr id="f-README-md-L53"><td class="ln">53</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L54"><td class="ln">54</td><td class="src">The database is recreated with demo data on every backend start. Browse it at</td><td class="ex" rowspan="2"><p>The in-memory database is recreated with demo data on every backend start. It can be browsed with the H2 console.</p></td></tr>
-<tr id="f-README-md-L55"><td class="ln">55</td><td class="src">http://localhost:8080/h2-console (JDBC URL <span class="sb">`jdbc:h2:mem:edumate`</span>, user <span class="sb">`sa`</span>, empty password).</td></tr>
-<tr id="f-README-md-L56"><td class="ln">56</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L57"><td class="ln">57</td><td class="src"><span class="gu">### Demo accounts (password for all: `Edumate@2026`)</span></td><td class="ex" rowspan="16"><p>The demo accounts table: every username, who it is, and which test case or finding it demonstrates. All share the password <code>Edumate@2026</code>.</p></td></tr>
-<tr id="f-README-md-L58"><td class="ln">58</td><td class="src"> </td></tr>
-<tr id="f-README-md-L59"><td class="ln">59</td><td class="src">| Username | Who | Good for demonstrating |</td></tr>
-<tr id="f-README-md-L60"><td class="ln">60</td><td class="src">|---|---|---|</td></tr>
-<tr id="f-README-md-L61"><td class="ln">61</td><td class="src">| <span class="sb">`student`</span> | Aarav Sharma, B.Tech CSE sem 5 | exactly 75.00 % in Operating Systems (TC-009/DEF-019); fee unpaid → pay with replayed callback (TC-005/TC-006); SGPA 8.63 after publication (TC-013) |</td></tr>
-<tr id="f-README-md-L62"><td class="ln">62</td><td class="src">| <span class="sb">`student2`</span> | Ishaan Verma | attendance shortfall, medical exemption, overdue fee: rules R2/R4 |</td></tr>
-<tr id="f-README-md-L63"><td class="ln">63</td><td class="src">| <span class="sb">`guardian`</span> | Aarav's parent | parent portal |</td></tr>
-<tr id="f-README-md-L64"><td class="ln">64</td><td class="src">| <span class="sb">`kavya.rao`</span>, <span class="sb">`arjun.shetty`</span>, <span class="sb">`meera.nair`</span>, <span class="sb">`vikram.das`</span>, <span class="sb">`sneha.kulkarni`</span> | Faculty | attendance with optimistic locking (DR-01), marks amendment with audit (TC-012) |</td></tr>
-<tr id="f-README-md-L65"><td class="ln">65</td><td class="src">| <span class="sb">`examsup`</span>, <span class="sb">`examsup2`</span> | Exam superintendents | compute → two-person approval → publish (Safety objective, DEF-027) |</td></tr>
-<tr id="f-README-md-L66"><td class="ln">66</td><td class="src">| <span class="sb">`admissions`</span> | Admissions officer | application review, merit list with seat matrix (FR-05) |</td></tr>
-<tr id="f-README-md-L67"><td class="ln">67</td><td class="src">| <span class="sb">`accounts`</span> | Accounts officer | payments and ledgers |</td></tr>
-<tr id="f-README-md-L68"><td class="ln">68</td><td class="src">| <span class="sb">`librarian`</span> | Librarian | issue/return, fines |</td></tr>
-<tr id="f-README-md-L69"><td class="ln">69</td><td class="src">| <span class="sb">`applicant`</span> | Priya Nair, adult | application, scanned-document upload |</td></tr>
-<tr id="f-README-md-L70"><td class="ln">70</td><td class="src">| <span class="sb">`applicant.minor`</span> | Rohan Gupta, 17 | guardian OTP consent before submission (RR-02/TC-020) |</td></tr>
-<tr id="f-README-md-L71"><td class="ln">71</td><td class="src">| <span class="sb">`admin`</span> | Administrator | timetable generation and clash detection (TC-011), audit log, outbox, role matrix |</td></tr>
-<tr id="f-README-md-L72"><td class="ln">72</td><td class="src">| <span class="sb">`ccc.admin`</span> | Administrator of City Campus | multi-tenancy: sees none of Jain Global Campus's students |</td></tr>
-<tr id="f-README-md-L73"><td class="ln">73</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L74"><td class="ln">74</td><td class="src"><span class="gu">## 3. Run it (Docker, production-like)</span></td><td class="ex" rowspan="8"><p>Section 3: the Docker way, which starts PostgreSQL, Redis, the backend and nginx with one command, then opens port 3000.</p></td></tr>
-<tr id="f-README-md-L75"><td class="ln">75</td><td class="src"> </td></tr>
-<tr id="f-README-md-L76"><td class="ln">76</td><td class="src"><span class="sb">```</span><span class="sb">bash</span></td></tr>
-<tr id="f-README-md-L77"><td class="ln">77</td><td class="src">cp<span class="w"> </span>.env.example<span class="w"> </span>.env<span class="w">        </span><span class="c1"># then edit the secrets</span></td></tr>
-<tr id="f-README-md-L78"><td class="ln">78</td><td class="src">docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>--build<span class="w">   </span><span class="c1"># open http://localhost:3000</span></td></tr>
-<tr id="f-README-md-L79"><td class="ln">79</td><td class="src"><span class="sb">```</span></td></tr>
-<tr id="f-README-md-L80"><td class="ln">80</td><td class="src"> </td></tr>
-<tr id="f-README-md-L81"><td class="ln">81</td><td class="src">This starts PostgreSQL 17, Redis 7, the backend and nginx serving the built frontend.</td></tr>
-<tr id="f-README-md-L82"><td class="ln">82</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L83"><td class="ln">83</td><td class="src"><span class="gu">## 4. Tests</span></td><td class="ex" rowspan="6"><p>Section 4: the test commands and how many tests each part has.</p></td></tr>
-<tr id="f-README-md-L84"><td class="ln">84</td><td class="src"> </td></tr>
-<tr id="f-README-md-L85"><td class="ln">85</td><td class="src"><span class="sb">```</span><span class="sb">bash</span></td></tr>
-<tr id="f-README-md-L86"><td class="ln">86</td><td class="src"><span class="nb">cd</span><span class="w"> </span>backend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>./mvnw<span class="w"> </span><span class="nb">test</span><span class="w">     </span><span class="c1"># 64 JUnit tests: unit, integration (MockMvc + H2) and PostgreSQL 17 compatibility</span></td></tr>
-<tr id="f-README-md-L87"><td class="ln">87</td><td class="src"><span class="nb">cd</span><span class="w"> </span>frontend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span><span class="nb">test</span><span class="w">       </span><span class="c1"># 15 Vitest tests: upload checks, form validation, formatting</span></td></tr>
-<tr id="f-README-md-L88"><td class="ln">88</td><td class="src"><span class="sb">```</span></td></tr>
-<tr id="f-README-md-L89"><td class="ln">89</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L90"><td class="ln">90</td><td class="src"><span class="gu">## 5. Where each SQA finding lives in the code</span></td><td class="ex" rowspan="23"><p>Section 5: <strong>traceability</strong>. Each finding of the report (requirement review RR-…, design review DR-…, test defects DEF-…, OWASP security findings A0…, and recommendation 1) is listed with the code that fixes it and the test that proves the fix. An examiner can check any claim in a minute.</p></td></tr>
-<tr id="f-README-md-L91"><td class="ln">91</td><td class="src"> </td></tr>
-<tr id="f-README-md-L92"><td class="ln">92</td><td class="src">| Finding in the report | Fix in code | Proved by |</td></tr>
-<tr id="f-README-md-L93"><td class="ln">93</td><td class="src">|---|---|---|</td></tr>
-<tr id="f-README-md-L94"><td class="ln">94</td><td class="src">| RR-01 75 % vs 80 % threshold | one value, <span class="sb">`edumate.academic.attendance-threshold-percent: 75`</span> | <span class="sb">`EligibilityEvaluatorTest`</span> |</td></tr>
-<tr id="f-README-md-L95"><td class="ln">95</td><td class="src">| RR-02 no guardian consent for minors | <span class="sb">`ConsentRegistry`</span> (OTP to guardian), submit guard in <span class="sb">`AdmissionService`</span> | <span class="sb">`AdmissionConsentIntegrationTest`</span> (TC-020) |</td></tr>
-<tr id="f-README-md-L96"><td class="ln">96</td><td class="src">| RR-04 / DEF-019 boundary at exactly 75 % | inclusive <span class="sb">`&gt;=`</span> and exact integer comparison in <span class="sb">`AttendanceMath`</span> | <span class="sb">`EligibilityEvaluatorTest`</span> (TC-008/009/010) |</td></tr>
-<tr id="f-README-md-L97"><td class="ln">97</td><td class="src">| RR-07 Exam Superintendent rights undefined | <span class="sb">`Role.EXAM_SUPERINTENDENT`</span> rows in <span class="sb">`RoleMatrix`</span> | <span class="sb">`RoleMatrixCoverageTest`</span> |</td></tr>
-<tr id="f-README-md-L98"><td class="ln">98</td><td class="src">| RR-08 revaluation must supersede | <span class="sb">`Mark.effectiveExternal()`</span> | <span class="sb">`SgpaCalculatorTest`</span> |</td></tr>
-<tr id="f-README-md-L99"><td class="ln">99</td><td class="src">| DR-01 no locking on attendance | <span class="sb">`@Version`</span> + version check in <span class="sb">`AttendanceCaptureService`</span> | <span class="sb">`AttendanceConcurrencyIntegrationTest`</span> |</td></tr>
-<tr id="f-README-md-L100"><td class="ln">100</td><td class="src">| DR-02 / DEF-014 callback not idempotent | row lock + duplicate check + UNIQUE <span class="sb">`gateway_txn_ref`</span> in <span class="sb">`PaymentOrchestrator`</span> | <span class="sb">`PaymentIntegrationTest`</span> (TC-006) |</td></tr>
-<tr id="f-README-md-L101"><td class="ln">101</td><td class="src">| DR-03 N+1 in result computation | one cohort query <span class="sb">`MarkRepository.findRowsForCohort`</span> | <span class="sb">`ResultPublicationIntegrationTest`</span> |</td></tr>
-<tr id="f-README-md-L102"><td class="ln">102</td><td class="src">| DR-04 / DEF-022 audit lost prior value | <span class="sb">`AuditLogger`</span> stores old and new value | smoke test / <span class="sb">`MarksEntryService`</span> |</td></tr>
-<tr id="f-README-md-L103"><td class="ln">103</td><td class="src">| DR-05 duplicate mark rows | <span class="sb">`UNIQUE (student_id, course_id, exam_session_id)`</span> | schema |</td></tr>
-<tr id="f-README-md-L104"><td class="ln">104</td><td class="src">| DR-06 / DEF-031 report endpoints open | deny-by-default <span class="sb">`RoleMatrix`</span> | <span class="sb">`SecurityIntegrationTest`</span> (TC-017), <span class="sb">`RoleMatrixCoverageTest`</span> |</td></tr>
-<tr id="f-README-md-L105"><td class="ln">105</td><td class="src">| DR-07 cannot reverse enrolment | <span class="sb">`ENROLLED → ENROLMENT_REVERSED`</span> in <span class="sb">`AdmissionStateMachine`</span> | <span class="sb">`AdmissionStateMachineTest`</span> |</td></tr>
-<tr id="f-README-md-L106"><td class="ln">106</td><td class="src">| DR-08 computation also sends messages | outbox + <span class="sb">`NotificationDispatcher`</span> | design |</td></tr>
-<tr id="f-README-md-L107"><td class="ln">107</td><td class="src">| DEF-027 double publication | atomic <span class="sb">`UPDATE … WHERE status = 'APPROVED'`</span> | <span class="sb">`ResultPublicationIntegrationTest`</span> (TC-015) |</td></tr>
-<tr id="f-README-md-L108"><td class="ln">108</td><td class="src">| DEF-036 reflected XSS | React escapes text; CSP header in <span class="sb">`nginx.conf`</span> | design |</td></tr>
-<tr id="f-README-md-L109"><td class="ln">109</td><td class="src">| A02 password storage (tested in Table 3.13, no finding) | bcrypt cost 12, kept | <span class="sb">`SecurityConfig`</span> |</td></tr>
-<tr id="f-README-md-L110"><td class="ln">110</td><td class="src">| A05 stack traces in errors | <span class="sb">`GlobalExceptionHandler`</span>, <span class="sb">`include-stacktrace: never`</span> | <span class="sb">`SecurityIntegrationTest`</span> |</td></tr>
-<tr id="f-README-md-L111"><td class="ln">111</td><td class="src">| A07 no account lockout | <span class="sb">`LoginAttemptService`</span> (5 failures → 15 min) | <span class="sb">`SecurityIntegrationTest`</span> |</td></tr>
-<tr id="f-README-md-L112"><td class="ln">112</td><td class="src">| Recommendation 1: SGPA complexity 19 | <span class="sb">`SgpaCalculator`</span> split into methods of complexity ≤ 3 | <span class="sb">`SgpaCalculatorTest`</span> |</td></tr>
-<tr id="f-README-md-L113"><td class="ln">113</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L114"><td class="ln">114</td><td class="src"><span class="gu">## 6. Known limitations (be ready to say these)</span></td><td class="ex" rowspan="11"><p>Section 6: the <strong>known limitations</strong>, stated honestly: the code is smaller than the 48,600 lines the report describes; the report's TC-013 number is wrong (8.63, not 8.25); ERP and DigiLocker are not implemented; the audit log and outbox are not split by campus; and the gateways are simulated.</p></td></tr>
-<tr id="f-README-md-L115"><td class="ln">115</td><td class="src"> </td></tr>
-<tr id="f-README-md-L116"><td class="ln">116</td><td class="src"><span class="k">-</span><span class="w"> </span><span class="gs">**Scale:**</span> the report describes a 48,600-line production system. This repository is a working reference</td></tr>
-<tr id="f-README-md-L117"><td class="ln">117</td><td class="src">  implementation of its core modules, so it is smaller.</td></tr>
-<tr id="f-README-md-L118"><td class="ln">118</td><td class="src"><span class="k">-</span><span class="w"> </span><span class="gs">**TC-013:**</span> the report gives SGPA <span class="gs">**8.25**</span> for grades S, A, B, B, C over credits 4, 4, 3, 3, 2. On the 10-point scale</td></tr>
-<tr id="f-README-md-L119"><td class="ln">119</td><td class="src">  (S=10, A=9, B=8, C=7) the correct value is 138 ÷ 16 = <span class="gs">**8.63**</span>, which is what the code produces.</td></tr>
-<tr id="f-README-md-L120"><td class="ln">120</td><td class="src"><span class="k">-</span><span class="w"> </span><span class="gs">**Not implemented:**</span> the university ERP and DigiLocker integrations named in the report.</td></tr>
-<tr id="f-README-md-L121"><td class="ln">121</td><td class="src"><span class="k">-</span><span class="w"> </span><span class="gs">**Not split by campus:**</span> the audit log and the message outbox are university-wide. Only university-level</td></tr>
-<tr id="f-README-md-L122"><td class="ln">122</td><td class="src">  administrators should hold the ADMIN role.</td></tr>
-<tr id="f-README-md-L123"><td class="ln">123</td><td class="src"><span class="k">-</span><span class="w"> </span><span class="gs">**Simulated gateways:**</span> the payment gateway is simulated by <span class="sb">`MockPaymentGateway`</span>, and the SMS/e-mail gateway</td></tr>
-<tr id="f-README-md-L124"><td class="ln">124</td><td class="src">  only writes to the log (<span class="sb">`LoggingNotificationGateway`</span>).</td></tr>
-<tr id="f-README-md-L125"><td class="ln">125</td><td class="src"> </td><td class="ex blank"></td></tr>
-<tr id="f-README-md-L126"><td class="ln">126</td><td class="src"><span class="gu">## 7. Project layout</span></td><td class="ex" rowspan="14"><p>Section 7: the folder layout, with the two files beginners most need to know: <code>messages.ts</code> (every on-screen text) and <code>theme.css</code> (every colour).</p></td></tr>
-<tr id="f-README-md-L127"><td class="ln">127</td><td class="src"> </td></tr>
-<tr id="f-README-md-L128"><td class="ln">128</td><td class="src"><span class="sb">```</span></td></tr>
-<tr id="f-README-md-L129"><td class="ln">129</td><td class="src"><span class="sb">backend/     Spring Boot REST API (Java)          frontend/   React single-page app (TypeScript)</span></td></tr>
-<tr id="f-README-md-L130"><td class="ln">130</td><td class="src"><span class="sb">  src/main/java/com/edumate/                        src/api/        how the app talks to the backend</span></td></tr>
-<tr id="f-README-md-L131"><td class="ln">131</td><td class="src"><span class="sb">    academic/  admissions/  attendance/             src/pages/      one file per screen</span></td></tr>
-<tr id="f-README-md-L132"><td class="ln">132</td><td class="src"><span class="sb">    campus/    common/      config/                 src/components/ shared pieces (layout, toasts, upload)</span></td></tr>
-<tr id="f-README-md-L133"><td class="ln">133</td><td class="src"><span class="sb">    consent/   dashboard/   documents/              src/i18n/messages.ts   EVERY piece of on-screen text</span></td></tr>
-<tr id="f-README-md-L134"><td class="ln">134</td><td class="src"><span class="sb">    exam/      fees/        library/                src/styles/theme.css   EVERY colour and size</span></td></tr>
-<tr id="f-README-md-L135"><td class="ln">135</td><td class="src"><span class="sb">    notifications/  security/  timetable/  admin/</span></td></tr>
-<tr id="f-README-md-L136"><td class="ln">136</td><td class="src"><span class="sb">  src/main/resources/db/migration/  database schema</span></td></tr>
-<tr id="f-README-md-L137"><td class="ln">137</td><td class="src"><span class="sb">docs/        the zero-to-hero explainer             scripts/    start-up helper</span></td></tr>
-<tr id="f-README-md-L138"><td class="ln">138</td><td class="src"><span class="sb">docker-compose.yml   .env.example</span></td></tr>
-<tr id="f-README-md-L139"><td class="ln">139</td><td class="src"><span class="sb">```</span></td></tr>
+<tr id="f-README-md-L11"><td class="ln">11</td><td class="src"><span class="k">&gt; </span><span class="ge">After changing code, regenerate it with `python docs/explainer/build_explainer.py --report` (Python 3 + Pygments).</span></td></tr>
+<tr id="f-README-md-L12"><td class="ln">12</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L13"><td class="ln">13</td><td class="src">---</td><td class="ex"><p><code>---</code> draws a horizontal line.</p></td></tr>
+<tr id="f-README-md-L14"><td class="ln">14</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L15"><td class="ln">15</td><td class="src"><span class="gu">## 1. Architecture</span></td><td class="ex" rowspan="13"><p>Section 1: a text drawing of the architecture. The browser talks only to the frontend; the frontend sends JSON to the backend's <code>/api/...</code> URLs; the backend uses the database, the cache, the object store and the two gateways.</p></td></tr>
+<tr id="f-README-md-L16"><td class="ln">16</td><td class="src"> </td></tr>
+<tr id="f-README-md-L17"><td class="ln">17</td><td class="src"><span class="sb">```</span></td></tr>
+<tr id="f-README-md-L18"><td class="ln">18</td><td class="src"><span class="sb"> Browser ──► Frontend (React + TypeScript, port 5173 in dev / 3000 in Docker)</span></td></tr>
+<tr id="f-README-md-L19"><td class="ln">19</td><td class="src"><span class="sb">               │   every request: JSON over HTTP to /api/...</span></td></tr>
+<tr id="f-README-md-L20"><td class="ln">20</td><td class="src"><span class="sb">               ▼</span></td></tr>
+<tr id="f-README-md-L21"><td class="ln">21</td><td class="src"><span class="sb">            Backend (Spring Boot 4, Java, port 8080)</span></td></tr>
+<tr id="f-README-md-L22"><td class="ln">22</td><td class="src"><span class="sb">               ├─► Database: H2 in memory (dev)  or  PostgreSQL 17 (Docker)</span></td></tr>
+<tr id="f-README-md-L23"><td class="ln">23</td><td class="src"><span class="sb">               ├─► Cache:    in-memory (dev)      or  Redis 7 (Docker)</span></td></tr>
+<tr id="f-README-md-L24"><td class="ln">24</td><td class="src"><span class="sb">               ├─► Object store for scanned documents (./storage folder)</span></td></tr>
+<tr id="f-README-md-L25"><td class="ln">25</td><td class="src"><span class="sb">               ├─► Payment gateway (simulated, HMAC-signed callbacks)</span></td></tr>
+<tr id="f-README-md-L26"><td class="ln">26</td><td class="src"><span class="sb">               └─► E-mail / SMS gateway (outbox table + dispatcher; logs in dev)</span></td></tr>
+<tr id="f-README-md-L27"><td class="ln">27</td><td class="src"><span class="sb">```</span></td></tr>
+<tr id="f-README-md-L28"><td class="ln">28</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L29"><td class="ln">29</td><td class="src">| Report says | Implemented as |</td><td class="ex" rowspan="9"><p>A table matching each technology the report names to where it lives in the code.</p></td></tr>
+<tr id="f-README-md-L30"><td class="ln">30</td><td class="src">|---|---|</td></tr>
+<tr id="f-README-md-L31"><td class="ln">31</td><td class="src">| React single-page application | <span class="sb">`frontend/`</span> – React 19, TypeScript 7, Vite 8, React Router 8 |</td></tr>
+<tr id="f-README-md-L32"><td class="ln">32</td><td class="src">| Spring Boot REST backend | <span class="sb">`backend/`</span> – Spring Boot 4.1, Java 21 bytecode (runs on JDK 21+) |</td></tr>
+<tr id="f-README-md-L33"><td class="ln">33</td><td class="src">| PostgreSQL transactional store | Flyway migration <span class="sb">`V1__create_schema.sql`</span>; H2 in PostgreSQL mode for development |</td></tr>
+<tr id="f-README-md-L34"><td class="ln">34</td><td class="src">| Redis for cache data | <span class="sb">`@Cacheable("publishedResults")`</span>; Redis in the <span class="sb">`docker`</span> profile |</td></tr>
+<tr id="f-README-md-L35"><td class="ln">35</td><td class="src">| Object store for scanned documents | <span class="sb">`ObjectStore`</span> interface + <span class="sb">`LocalFileObjectStore`</span> |</td></tr>
+<tr id="f-README-md-L36"><td class="ln">36</td><td class="src">| Payment gateway integration | <span class="sb">`PaymentOrchestrator`</span>, <span class="sb">`GatewaySignature`</span>, <span class="sb">`MockPaymentGateway`</span> |</td></tr>
+<tr id="f-README-md-L37"><td class="ln">37</td><td class="src">| SMS and e-mail gateway | <span class="sb">`NotificationService`</span> → outbox → <span class="sb">`NotificationDispatcher`</span> |</td></tr>
+<tr id="f-README-md-L38"><td class="ln">38</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L39"><td class="ln">39</td><td class="src"><span class="gu">## 2. Run it (development, Windows)</span></td><td class="ex" rowspan="8"><p>Section 2: running it on Windows needs only a JDK and Node.js. The helper script starts both halves in one command.</p></td></tr>
+<tr id="f-README-md-L40"><td class="ln">40</td><td class="src"> </td></tr>
+<tr id="f-README-md-L41"><td class="ln">41</td><td class="src">You need <span class="gs">**JDK 21 or newer**</span> and <span class="gs">**Node.js 20 or newer**</span>. Nothing else: Maven comes with the project (<span class="sb">`mvnw`</span>) and the</td></tr>
+<tr id="f-README-md-L42"><td class="ln">42</td><td class="src">database runs in memory.</td></tr>
+<tr id="f-README-md-L43"><td class="ln">43</td><td class="src"> </td></tr>
+<tr id="f-README-md-L44"><td class="ln">44</td><td class="src"><span class="sb">```</span><span class="sb">powershell</span></td></tr>
+<tr id="f-README-md-L45"><td class="ln">45</td><td class="src"><span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">Bypass</span> <span class="o">-File</span> <span class="n">scripts</span><span class="p">\</span><span class="n">dev</span><span class="n">-start</span><span class="p">.</span><span class="n">ps1</span></td></tr>
+<tr id="f-README-md-L46"><td class="ln">46</td><td class="src"><span class="sb">```</span></td></tr>
+<tr id="f-README-md-L47"><td class="ln">47</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L48"><td class="ln">48</td><td class="src">or by hand, in two terminals:</td><td class="ex" rowspan="6"><p>The same by hand, in two terminals: the backend on port 8080, and the frontend on port 5173 (the one to open in the browser).</p></td></tr>
+<tr id="f-README-md-L49"><td class="ln">49</td><td class="src"> </td></tr>
+<tr id="f-README-md-L50"><td class="ln">50</td><td class="src"><span class="sb">```</span><span class="sb">bash</span></td></tr>
+<tr id="f-README-md-L51"><td class="ln">51</td><td class="src"><span class="nb">cd</span><span class="w"> </span>backend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>./mvnw<span class="w"> </span>spring-boot:run<span class="w">          </span><span class="c1"># http://localhost:8080  (API)</span></td></tr>
+<tr id="f-README-md-L52"><td class="ln">52</td><td class="src"><span class="nb">cd</span><span class="w"> </span>frontend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span>install<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span>run<span class="w"> </span>dev<span class="w">      </span><span class="c1"># http://localhost:5173  (open this)</span></td></tr>
+<tr id="f-README-md-L53"><td class="ln">53</td><td class="src"><span class="sb">```</span></td></tr>
+<tr id="f-README-md-L54"><td class="ln">54</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L55"><td class="ln">55</td><td class="src">The database is recreated with demo data on every backend start. Browse it at</td><td class="ex" rowspan="2"><p>The in-memory database is recreated with demo data on every backend start. It can be browsed with the H2 console.</p></td></tr>
+<tr id="f-README-md-L56"><td class="ln">56</td><td class="src">http://localhost:8080/h2-console (JDBC URL <span class="sb">`jdbc:h2:mem:edumate`</span>, user <span class="sb">`sa`</span>, empty password).</td></tr>
+<tr id="f-README-md-L57"><td class="ln">57</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L58"><td class="ln">58</td><td class="src"><span class="gu">### Demo accounts (password for all: `Edumate@2026`)</span></td><td class="ex" rowspan="16"><p>The demo accounts table: every username, who it is, and which test case or finding it demonstrates. All share the password <code>Edumate@2026</code>.</p></td></tr>
+<tr id="f-README-md-L59"><td class="ln">59</td><td class="src"> </td></tr>
+<tr id="f-README-md-L60"><td class="ln">60</td><td class="src">| Username | Who | Good for demonstrating |</td></tr>
+<tr id="f-README-md-L61"><td class="ln">61</td><td class="src">|---|---|---|</td></tr>
+<tr id="f-README-md-L62"><td class="ln">62</td><td class="src">| <span class="sb">`student`</span> | Aarav Sharma, B.Tech CSE sem 5 | exactly 75.00 % in Operating Systems (TC-009/DEF-019); fee unpaid → pay with replayed callback (TC-005/TC-006); SGPA 8.63 after publication (TC-013) |</td></tr>
+<tr id="f-README-md-L63"><td class="ln">63</td><td class="src">| <span class="sb">`student2`</span> | Ishaan Verma | attendance shortfall, medical exemption, overdue fee: rules R2/R4 |</td></tr>
+<tr id="f-README-md-L64"><td class="ln">64</td><td class="src">| <span class="sb">`guardian`</span> | Aarav's parent | parent portal |</td></tr>
+<tr id="f-README-md-L65"><td class="ln">65</td><td class="src">| <span class="sb">`kavya.rao`</span>, <span class="sb">`arjun.shetty`</span>, <span class="sb">`meera.nair`</span>, <span class="sb">`vikram.das`</span>, <span class="sb">`sneha.kulkarni`</span> | Faculty | attendance with optimistic locking (DR-01), marks amendment with audit (TC-012) |</td></tr>
+<tr id="f-README-md-L66"><td class="ln">66</td><td class="src">| <span class="sb">`examsup`</span>, <span class="sb">`examsup2`</span> | Exam superintendents | compute → two-person approval → publish (Safety objective, DEF-027) |</td></tr>
+<tr id="f-README-md-L67"><td class="ln">67</td><td class="src">| <span class="sb">`admissions`</span> | Admissions officer | application review, merit list with seat matrix (FR-05) |</td></tr>
+<tr id="f-README-md-L68"><td class="ln">68</td><td class="src">| <span class="sb">`accounts`</span> | Accounts officer | payments and ledgers |</td></tr>
+<tr id="f-README-md-L69"><td class="ln">69</td><td class="src">| <span class="sb">`librarian`</span> | Librarian | issue/return, fines |</td></tr>
+<tr id="f-README-md-L70"><td class="ln">70</td><td class="src">| <span class="sb">`applicant`</span> | Priya Nair, adult | application, scanned-document upload |</td></tr>
+<tr id="f-README-md-L71"><td class="ln">71</td><td class="src">| <span class="sb">`applicant.minor`</span> | Rohan Gupta, 17 | guardian OTP consent before submission (RR-02/TC-020) |</td></tr>
+<tr id="f-README-md-L72"><td class="ln">72</td><td class="src">| <span class="sb">`admin`</span> | Administrator | timetable generation and clash detection (TC-011), audit log, outbox, role matrix |</td></tr>
+<tr id="f-README-md-L73"><td class="ln">73</td><td class="src">| <span class="sb">`ccc.admin`</span> | Administrator of City Campus | multi-tenancy: sees none of Jain Global Campus's students |</td></tr>
+<tr id="f-README-md-L74"><td class="ln">74</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L75"><td class="ln">75</td><td class="src"><span class="gu">## 3. Run it (Docker, production-like)</span></td><td class="ex" rowspan="8"><p>Section 3: the Docker way, which starts PostgreSQL, Redis, the backend and nginx with one command, then opens port 3000.</p></td></tr>
+<tr id="f-README-md-L76"><td class="ln">76</td><td class="src"> </td></tr>
+<tr id="f-README-md-L77"><td class="ln">77</td><td class="src"><span class="sb">```</span><span class="sb">bash</span></td></tr>
+<tr id="f-README-md-L78"><td class="ln">78</td><td class="src">cp<span class="w"> </span>.env.example<span class="w"> </span>.env<span class="w">        </span><span class="c1"># then edit the secrets</span></td></tr>
+<tr id="f-README-md-L79"><td class="ln">79</td><td class="src">docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>--build<span class="w">   </span><span class="c1"># open http://localhost:3000</span></td></tr>
+<tr id="f-README-md-L80"><td class="ln">80</td><td class="src"><span class="sb">```</span></td></tr>
+<tr id="f-README-md-L81"><td class="ln">81</td><td class="src"> </td></tr>
+<tr id="f-README-md-L82"><td class="ln">82</td><td class="src">This starts PostgreSQL 17, Redis 7, the backend and nginx serving the built frontend.</td></tr>
+<tr id="f-README-md-L83"><td class="ln">83</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L84"><td class="ln">84</td><td class="src"><span class="gu">## 4. Tests</span></td><td class="ex" rowspan="6"><p>Section 4: the test commands and how many tests each part has.</p></td></tr>
+<tr id="f-README-md-L85"><td class="ln">85</td><td class="src"> </td></tr>
+<tr id="f-README-md-L86"><td class="ln">86</td><td class="src"><span class="sb">```</span><span class="sb">bash</span></td></tr>
+<tr id="f-README-md-L87"><td class="ln">87</td><td class="src"><span class="nb">cd</span><span class="w"> </span>backend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>./mvnw<span class="w"> </span><span class="nb">test</span><span class="w">     </span><span class="c1"># 64 JUnit tests: unit, integration (MockMvc + H2) and PostgreSQL 17 compatibility</span></td></tr>
+<tr id="f-README-md-L88"><td class="ln">88</td><td class="src"><span class="nb">cd</span><span class="w"> </span>frontend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span><span class="nb">test</span><span class="w">       </span><span class="c1"># 15 Vitest tests: upload checks, form validation, formatting</span></td></tr>
+<tr id="f-README-md-L89"><td class="ln">89</td><td class="src"><span class="sb">```</span></td></tr>
+<tr id="f-README-md-L90"><td class="ln">90</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L91"><td class="ln">91</td><td class="src"><span class="gu">## 5. Where each SQA finding lives in the code</span></td><td class="ex" rowspan="23"><p>Section 5: <strong>traceability</strong>. Each finding of the report (requirement review RR-…, design review DR-…, test defects DEF-…, OWASP security findings A0…, and recommendation 1) is listed with the code that fixes it and the test that proves the fix. An examiner can check any claim in a minute.</p></td></tr>
+<tr id="f-README-md-L92"><td class="ln">92</td><td class="src"> </td></tr>
+<tr id="f-README-md-L93"><td class="ln">93</td><td class="src">| Finding in the report | Fix in code | Proved by |</td></tr>
+<tr id="f-README-md-L94"><td class="ln">94</td><td class="src">|---|---|---|</td></tr>
+<tr id="f-README-md-L95"><td class="ln">95</td><td class="src">| RR-01 75 % vs 80 % threshold | one value, <span class="sb">`edumate.academic.attendance-threshold-percent: 75`</span> | <span class="sb">`EligibilityEvaluatorTest`</span> |</td></tr>
+<tr id="f-README-md-L96"><td class="ln">96</td><td class="src">| RR-02 no guardian consent for minors | <span class="sb">`ConsentRegistry`</span> (OTP to guardian), submit guard in <span class="sb">`AdmissionService`</span> | <span class="sb">`AdmissionConsentIntegrationTest`</span> (TC-020) |</td></tr>
+<tr id="f-README-md-L97"><td class="ln">97</td><td class="src">| RR-04 / DEF-019 boundary at exactly 75 % | inclusive <span class="sb">`&gt;=`</span> and exact integer comparison in <span class="sb">`AttendanceMath`</span> | <span class="sb">`EligibilityEvaluatorTest`</span> (TC-008/009/010) |</td></tr>
+<tr id="f-README-md-L98"><td class="ln">98</td><td class="src">| RR-07 Exam Superintendent rights undefined | <span class="sb">`Role.EXAM_SUPERINTENDENT`</span> rows in <span class="sb">`RoleMatrix`</span> | <span class="sb">`RoleMatrixCoverageTest`</span> |</td></tr>
+<tr id="f-README-md-L99"><td class="ln">99</td><td class="src">| RR-08 revaluation must supersede | <span class="sb">`Mark.effectiveExternal()`</span> | <span class="sb">`SgpaCalculatorTest`</span> |</td></tr>
+<tr id="f-README-md-L100"><td class="ln">100</td><td class="src">| DR-01 no locking on attendance | <span class="sb">`@Version`</span> + version check in <span class="sb">`AttendanceCaptureService`</span> | <span class="sb">`AttendanceConcurrencyIntegrationTest`</span> |</td></tr>
+<tr id="f-README-md-L101"><td class="ln">101</td><td class="src">| DR-02 / DEF-014 callback not idempotent | row lock + duplicate check + UNIQUE <span class="sb">`gateway_txn_ref`</span> in <span class="sb">`PaymentOrchestrator`</span> | <span class="sb">`PaymentIntegrationTest`</span> (TC-006) |</td></tr>
+<tr id="f-README-md-L102"><td class="ln">102</td><td class="src">| DR-03 N+1 in result computation | one cohort query <span class="sb">`MarkRepository.findRowsForCohort`</span> | <span class="sb">`ResultPublicationIntegrationTest`</span> |</td></tr>
+<tr id="f-README-md-L103"><td class="ln">103</td><td class="src">| DR-04 / DEF-022 audit lost prior value | <span class="sb">`AuditLogger`</span> stores old and new value | smoke test / <span class="sb">`MarksEntryService`</span> |</td></tr>
+<tr id="f-README-md-L104"><td class="ln">104</td><td class="src">| DR-05 duplicate mark rows | <span class="sb">`UNIQUE (student_id, course_id, exam_session_id)`</span> | schema |</td></tr>
+<tr id="f-README-md-L105"><td class="ln">105</td><td class="src">| DR-06 / DEF-031 report endpoints open | deny-by-default <span class="sb">`RoleMatrix`</span> | <span class="sb">`SecurityIntegrationTest`</span> (TC-017), <span class="sb">`RoleMatrixCoverageTest`</span> |</td></tr>
+<tr id="f-README-md-L106"><td class="ln">106</td><td class="src">| DR-07 cannot reverse enrolment | <span class="sb">`ENROLLED → ENROLMENT_REVERSED`</span> in <span class="sb">`AdmissionStateMachine`</span> | <span class="sb">`AdmissionStateMachineTest`</span> |</td></tr>
+<tr id="f-README-md-L107"><td class="ln">107</td><td class="src">| DR-08 computation also sends messages | outbox + <span class="sb">`NotificationDispatcher`</span> | design |</td></tr>
+<tr id="f-README-md-L108"><td class="ln">108</td><td class="src">| DEF-027 double publication | atomic <span class="sb">`UPDATE … WHERE status = 'APPROVED'`</span> | <span class="sb">`ResultPublicationIntegrationTest`</span> (TC-015) |</td></tr>
+<tr id="f-README-md-L109"><td class="ln">109</td><td class="src">| DEF-036 reflected XSS | React escapes text; CSP header in <span class="sb">`nginx.conf`</span> | design |</td></tr>
+<tr id="f-README-md-L110"><td class="ln">110</td><td class="src">| A02 password storage (tested in Table 3.13, no finding) | bcrypt cost 12, kept | <span class="sb">`SecurityConfig`</span> |</td></tr>
+<tr id="f-README-md-L111"><td class="ln">111</td><td class="src">| A05 stack traces in errors | <span class="sb">`GlobalExceptionHandler`</span>, <span class="sb">`include-stacktrace: never`</span> | <span class="sb">`SecurityIntegrationTest`</span> |</td></tr>
+<tr id="f-README-md-L112"><td class="ln">112</td><td class="src">| A07 no account lockout | <span class="sb">`LoginAttemptService`</span> (5 failures → 15 min) | <span class="sb">`SecurityIntegrationTest`</span> |</td></tr>
+<tr id="f-README-md-L113"><td class="ln">113</td><td class="src">| Recommendation 1: SGPA complexity 19 | <span class="sb">`SgpaCalculator`</span> split into methods of complexity ≤ 3 | <span class="sb">`SgpaCalculatorTest`</span> |</td></tr>
+<tr id="f-README-md-L114"><td class="ln">114</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L115"><td class="ln">115</td><td class="src"><span class="gu">## 6. Known limitations (be ready to say these)</span></td><td class="ex" rowspan="11"><p>Section 6: the <strong>known limitations</strong>, stated honestly: the code is smaller than the 48,600 lines the report describes; the report's TC-013 number is wrong (8.63, not 8.25); ERP and DigiLocker are not implemented; the audit log and outbox are not split by campus; and the gateways are simulated.</p></td></tr>
+<tr id="f-README-md-L116"><td class="ln">116</td><td class="src"> </td></tr>
+<tr id="f-README-md-L117"><td class="ln">117</td><td class="src"><span class="k">-</span><span class="w"> </span><span class="gs">**Scale:**</span> the report describes a 48,600-line production system. This repository is a working reference</td></tr>
+<tr id="f-README-md-L118"><td class="ln">118</td><td class="src">  implementation of its core modules, so it is smaller.</td></tr>
+<tr id="f-README-md-L119"><td class="ln">119</td><td class="src"><span class="k">-</span><span class="w"> </span><span class="gs">**TC-013:**</span> the report gives SGPA <span class="gs">**8.25**</span> for grades S, A, B, B, C over credits 4, 4, 3, 3, 2. On the 10-point scale</td></tr>
+<tr id="f-README-md-L120"><td class="ln">120</td><td class="src">  (S=10, A=9, B=8, C=7) the correct value is 138 ÷ 16 = <span class="gs">**8.63**</span>, which is what the code produces.</td></tr>
+<tr id="f-README-md-L121"><td class="ln">121</td><td class="src"><span class="k">-</span><span class="w"> </span><span class="gs">**Not implemented:**</span> the university ERP and DigiLocker integrations named in the report.</td></tr>
+<tr id="f-README-md-L122"><td class="ln">122</td><td class="src"><span class="k">-</span><span class="w"> </span><span class="gs">**Not split by campus:**</span> the audit log and the message outbox are university-wide. Only university-level</td></tr>
+<tr id="f-README-md-L123"><td class="ln">123</td><td class="src">  administrators should hold the ADMIN role.</td></tr>
+<tr id="f-README-md-L124"><td class="ln">124</td><td class="src"><span class="k">-</span><span class="w"> </span><span class="gs">**Simulated gateways:**</span> the payment gateway is simulated by <span class="sb">`MockPaymentGateway`</span>, and the SMS/e-mail gateway</td></tr>
+<tr id="f-README-md-L125"><td class="ln">125</td><td class="src">  only writes to the log (<span class="sb">`LoggingNotificationGateway`</span>).</td></tr>
+<tr id="f-README-md-L126"><td class="ln">126</td><td class="src"> </td><td class="ex blank"></td></tr>
+<tr id="f-README-md-L127"><td class="ln">127</td><td class="src"><span class="gu">## 7. Project layout</span></td><td class="ex" rowspan="14"><p>Section 7: the folder layout, with the two files beginners most need to know: <code>messages.ts</code> (every on-screen text) and <code>theme.css</code> (every colour).</p></td></tr>
+<tr id="f-README-md-L128"><td class="ln">128</td><td class="src"> </td></tr>
+<tr id="f-README-md-L129"><td class="ln">129</td><td class="src"><span class="sb">```</span></td></tr>
+<tr id="f-README-md-L130"><td class="ln">130</td><td class="src"><span class="sb">backend/     Spring Boot REST API (Java)          frontend/   React single-page app (TypeScript)</span></td></tr>
+<tr id="f-README-md-L131"><td class="ln">131</td><td class="src"><span class="sb">  src/main/java/com/edumate/                        src/api/        how the app talks to the backend</span></td></tr>
+<tr id="f-README-md-L132"><td class="ln">132</td><td class="src"><span class="sb">    academic/  admissions/  attendance/             src/pages/      one file per screen</span></td></tr>
+<tr id="f-README-md-L133"><td class="ln">133</td><td class="src"><span class="sb">    campus/    common/      config/                 src/components/ shared pieces (layout, toasts, upload)</span></td></tr>
+<tr id="f-README-md-L134"><td class="ln">134</td><td class="src"><span class="sb">    consent/   dashboard/   documents/              src/i18n/messages.ts   EVERY piece of on-screen text</span></td></tr>
+<tr id="f-README-md-L135"><td class="ln">135</td><td class="src"><span class="sb">    exam/      fees/        library/                src/styles/theme.css   EVERY colour and size</span></td></tr>
+<tr id="f-README-md-L136"><td class="ln">136</td><td class="src"><span class="sb">    notifications/  security/  timetable/  admin/</span></td></tr>
+<tr id="f-README-md-L137"><td class="ln">137</td><td class="src"><span class="sb">  src/main/resources/db/migration/  database schema</span></td></tr>
+<tr id="f-README-md-L138"><td class="ln">138</td><td class="src"><span class="sb">docs/        the zero-to-hero explainer             scripts/    start-up helper</span></td></tr>
+<tr id="f-README-md-L139"><td class="ln">139</td><td class="src"><span class="sb">docker-compose.yml   .env.example</span></td></tr>
+<tr id="f-README-md-L140"><td class="ln">140</td><td class="src"><span class="sb">```</span></td></tr>
 </tbody></table>
 </details>
 <details class="file" id="f-docker-compose-yml">
