@@ -1,0 +1,130 @@
+<!-- level: 4 -->
+<h1>Events and modular monoliths</h1>
+
+<p class="lead">As an application grows, the danger is not size but tangling: every module calling every other module
+directly, until nothing can change alone. Application events loosen the coupling inside one application, and Spring
+Modulith turns "we organise code by feature" into rules a test can check.</p>
+
+<h2>Direct calls couple modules</h2>
+<p>When a teacher saves attendance, EduMate queues guardian e-mails for students below the minimum. Today the attendance
+service calls the notifier directly:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/attendance/AttendanceCaptureService.java" data-lines="124-130" data-expect="shortfallNotifier.notifySection(course, request.section());" data-hl="6"></pre>
+<p>That is simple and fine at this size. But notice what it means: the capture service must know that e-mails exist, when
+they should be sent, and must change whenever another reaction to "attendance saved" is added (update a dashboard cache,
+recalculate eligibility, send an analytics event…). The publisher knows all its subscribers.</p>
+
+<h2>Application events: announce, don't command</h2>
+<p>Spring's container is also an event bus. A bean <em>publishes</em> an event (any object, usually a record); every
+bean with a matching listener method receives it.</p>
+<pre class="code" data-lang="java">// 1. The event: a fact that happened, in the past tense
+public record AttendanceSaved(Long courseId, String section, LocalDate date, int period) { }
+
+// 2. The publisher only announces it
+@Service
+public class AttendanceCaptureService {
+    private final ApplicationEventPublisher events;
+    …
+    @Transactional
+    public AttendanceSheet saveSheet(CurrentUser me, SaveSheetRequest request) {
+        …                                                  // save the register, audit
+        events.publishEvent(new AttendanceSaved(course.getId(), request.section(), request.date(), request.period()));
+        return buildSheet(…);
+    }
+}
+
+// 3. Any number of listeners, in any module, react
+@Component
+class ShortfallMailer {
+    @EventListener
+    void on(AttendanceSaved saved) { shortfallNotifier.notifySection(…); }
+}</pre>
+<p>The attendance module no longer depends on notifications; notifications depend on attendance's <em>event</em>, a small
+public record. Adding a reaction means adding a listener, without touching the publisher.</p>
+
+<h3>Timing matters: transactional listeners</h3>
+<table>
+<thead><tr><th>Listener</th><th>Runs</th><th>Use when</th></tr></thead>
+<tbody>
+<tr><td><code>@EventListener</code></td><td>immediately, synchronously, inside the publisher's transaction</td><td>the reaction must succeed or fail with the change (it can roll it back)</td></tr>
+<tr><td><code>@TransactionalEventListener</code> (phase <code>AFTER_COMMIT</code>, the default)</td><td>only after the publisher's transaction has committed</td><td>reacting to facts that are definitely true: never e-mail about a save that was rolled back</td></tr>
+<tr><td><code>… (phase = BEFORE_COMMIT)</code></td><td>just before the commit, still inside the transaction</td><td>writing an outbox row atomically with the change</td></tr>
+<tr><td><code>@Async</code> + one of the above</td><td>on another thread</td><td>slow reactions the user should not wait for</td></tr>
+</tbody></table>
+<div class="callout warn"><strong>After-commit reactions can be lost</strong>
+If the application crashes between the commit and the listener, an in-memory event is gone. That is why EduMate's
+notifications go through a database outbox written <em>inside</em> the transaction. Spring Modulith (below) can persist
+events automatically for the same reason (its "event publication registry").</div>
+
+<h2>A modular monolith</h2>
+<p>EduMate is one deployable application with one database, organised by feature: <code>attendance</code>,
+<code>exam</code>, <code>fees</code>, <code>admissions</code>, <code>library</code>, <code>timetable</code>… This is a
+<strong>modular monolith</strong>: the simplicity of one application (one transaction for "pay and credit the ledger",
+no network between modules) with the clarity of modules. The risk is that nothing enforces the modules: any class can
+import any other.</p>
+<p>Here are EduMate's actual dependencies between top-level packages (who imports whom):</p>
+<pre class="diagram">attendance    → academic, common, config, notifications, security
+exam          → academic, attendance, common, fees, notifications, security
+fees          → academic, common, config, notifications, security
+admissions    → academic, common, config, consent, documents, notifications, security
+documents     → admissions, common, config, security            ← admissions ⇄ documents: a cycle
+consent       → admissions, common, config, notifications, security   ← admissions ⇄ consent: a cycle
+library       → academic, common, config, security
+timetable     → academic, common, security
+notifications → (nothing)
+dashboard     → almost everything (it summarises every module: expected)</pre>
+<p>Mostly clean layering, with two <strong>cycles</strong>: admissions uses documents and consent, and they use
+admissions back (to check that an application belongs to the caller). Cycles mean the modules cannot be understood,
+tested or extracted separately.</p>
+
+<h2>Spring Modulith: modules you can verify</h2>
+<p><strong>Spring Modulith</strong> treats each direct sub-package of the main package as an <em>application module</em>.
+Classes in the module's top package are its public API; sub-packages are internal. One test checks the rules:</p>
+<pre class="code" data-lang="java">class ModularityTest {
+    ApplicationModules modules = ApplicationModules.of(EduMateApplication.class);
+
+    @Test
+    void verifiesModularStructure() {
+        modules.verify();          // fails on cycles and on access to another module's internal packages
+    }
+
+    @Test
+    void writesDocumentation() {
+        new Documenter(modules).writeModulesAsPlantUml().writeIndividualModulesAsPlantUml();
+    }
+}</pre>
+<p>On EduMate this test would fail today and name the two cycles. Fixing them is a design exercise: for example, let
+<code>documents</code> ask a small interface owned by <code>documents</code> ("may this user touch this application?"),
+implemented inside <code>admissions</code>, so the dependency points one way only (<em>dependency inversion</em>).</p>
+<p>Other Modulith features:</p>
+<ul>
+<li><code>@ApplicationModuleListener</code>: a listener that is asynchronous, transactional and runs after commit: the
+recommended way for modules to react to each other.</li>
+<li>An <strong>event publication registry</strong> that stores events in the database until every listener has processed
+them, and retries incomplete ones after a restart (a built-in outbox).</li>
+<li><code>@ApplicationModuleTest</code>: start only one module (and what it needs) in an integration test.</li>
+<li>Generated documentation: module diagrams and a "module canvas" per module.</li>
+</ul>
+<div class="callout tip"><strong>Monolith first</strong>
+Many teams start with microservices and discover that the boundaries were wrong, now with network calls and
+distributed transactions to undo. A well-modularised monolith keeps the options open: a module with a clean API and
+event-based communication can later be extracted into its own service if scale or team structure truly demands it.</div>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Implement the <code>AttendanceSaved</code> event and a <code>@TransactionalEventListener</code> for the shortfall
+e-mails; check with a test that a rolled-back save sends nothing.</li>
+<li>Add the <code>spring-modulith-starter-test</code> dependency (managed by the Spring Modulith BOM), write the
+<code>ModularityTest</code> above and read its report.</li>
+<li>Break one of the two cycles.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>What is the difference between <code>@EventListener</code> and <code>@TransactionalEventListener</code>?</summary>
+<div>The first runs immediately inside the publisher's transaction; the second (by default) only after the publisher's
+transaction commits, so it never reacts to changes that were rolled back.</div></details>
+<details class="quiz"><summary>Why are events named in the past tense?</summary>
+<div>They state facts that have happened ("attendance saved"), not commands; the publisher does not decide what others do
+about it.</div></details>
+<details class="quiz"><summary>What does <code>ApplicationModules.verify()</code> check?</summary>
+<div>That there are no cycles between application modules and that no module reaches into another module's internal
+packages.</div></details>

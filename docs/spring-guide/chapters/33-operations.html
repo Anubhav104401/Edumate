@@ -1,0 +1,123 @@
+<!-- level: 3 -->
+<h1>Running in production: Actuator, logging, observability and packaging</h1>
+
+<p class="lead">An application that works on your laptop is half the job. In production someone must know whether it is
+alive, why it is slow, what went wrong at 3 a.m., and how to ship a new version safely. Spring Boot's production
+features cover most of this with configuration, not code.</p>
+
+<h2>Actuator: the application's dashboard</h2>
+<p><code>spring-boot-starter-actuator</code> adds operational endpoints under <code>/actuator</code>. EduMate exposes only
+the harmless ones:</p>
+<pre class="code" data-src="backend/src/main/resources/application.yml" data-lines="38-48" data-expect="include: health,info"></pre>
+<table>
+<thead><tr><th>Endpoint</th><th>Shows</th><th>Exposed by EduMate?</th></tr></thead>
+<tbody>
+<tr><td><code>/actuator/health</code></td><td><code>{"status":"UP"}</code>: combined from health indicators (database, disk space, Redis in Docker…)</td><td>yes, public (Docker and load balancers call it)</td></tr>
+<tr><td><code>/actuator/info</code></td><td>build and version information you choose to publish</td><td>yes</td></tr>
+<tr><td><code>/actuator/metrics</code>, <code>/actuator/prometheus</code></td><td>request counts and timings, JVM memory, connection pool, cache hits…</td><td>no</td></tr>
+<tr><td><code>/actuator/env</code>, <code>/configprops</code>, <code>/beans</code>, <code>/conditions</code>, <code>/mappings</code></td><td>the effective configuration, every bean, the auto-configuration report, every endpoint</td><td>no: priceless while debugging, dangerous in public</td></tr>
+<tr><td><code>/actuator/loggers</code></td><td>read and <em>change</em> log levels at run time</td><td>no</td></tr>
+<tr><td><code>/actuator/threaddump</code>, <code>/heapdump</code></td><td>what every thread is doing; a memory snapshot</td><td>no</td></tr>
+</tbody></table>
+<div class="callout warn"><strong>Treat Actuator as an admin interface</strong>
+<code>/env</code> can reveal secrets and <code>/heapdump</code> contains everything in memory. Expose only what you need,
+protect the rest with security (EduMate's <code>RoleMatrix</code> opens only <code>health</code> and <code>info</code>), or serve
+the management endpoints on a separate, internal port (<code>management.server.port</code>).
+<code>show-details: never</code> hides which components are up or down from anonymous callers.</div>
+
+<h3>Health checks and orchestrators</h3>
+<p>Docker Compose, Kubernetes and load balancers ask "are you alive?" and "can you take traffic?". Spring Boot provides
+<strong>liveness</strong> and <strong>readiness</strong> groups (<code>/actuator/health/liveness</code>,
+<code>/actuator/health/readiness</code>), enabled automatically on Kubernetes. Readiness goes <code>UP</code> only after
+the <code>ApplicationRunner</code>s have finished, so no traffic reaches a half-started instance. You can write your own
+indicator by implementing <code>HealthIndicator</code> (for example "the payment gateway is reachable").</p>
+
+<h2>Logging</h2>
+<p>Spring Boot logs through <strong>SLF4J</strong> (the API your code uses) with <strong>Logback</strong> underneath.
+EduMate's classes use it like this:</p>
+<pre class="code" data-lang="java">private static final Logger log = LoggerFactory.getLogger(NotificationDispatcher.class);
+…
+log.warn("Sending notification {} failed: {}", message.getId(), ex.getMessage());</pre>
+<ul>
+<li><strong>Levels</strong>: TRACE, DEBUG, INFO, WARN, ERROR. Set them per package in YAML
+(<code>logging.level.com.edumate: DEBUG</code> in the dev profile) or at run time through <code>/actuator/loggers</code>.</li>
+<li><strong>Placeholders</strong> (<code>{}</code>) instead of string concatenation: the message is only built if the
+level is enabled. Pass the exception as the last argument to get its stack trace
+(<code>log.error("…", traceId, ex)</code> in <code>GlobalExceptionHandler</code>).</li>
+<li><strong>Never log secrets</strong> (passwords, tokens, OTPs, full card numbers) or more personal data than needed.</li>
+<li><strong>Structured logging</strong>: <code>logging.structured.format.console=ecs</code> (or <code>logstash</code>,
+<code>gelf</code>) writes JSON lines that log platforms can search by field.</li>
+<li><strong>Correlation</strong>: EduMate's unexpected-error handler logs a short <code>traceId</code> and shows the same
+id to the user, so a support request can be matched to its log line.</li>
+</ul>
+
+<h2>Observability: metrics and traces</h2>
+<p>Logs tell you what happened to one request; <strong>metrics</strong> tell you how the whole system behaves (requests
+per second, 95th-percentile latency, pool usage, cache hit rate); <strong>traces</strong> follow one request across
+services. Spring Boot instruments itself with <strong>Micrometer</strong>:</p>
+<ul>
+<li>Add <code>micrometer-registry-prometheus</code> and expose <code>prometheus</code>: Prometheus scrapes
+<code>/actuator/prometheus</code>, Grafana draws dashboards (<code>http.server.requests</code> per endpoint and status,
+<code>hikaricp.connections.active</code>, <code>cache.gets</code>…).</li>
+<li>Add tracing with OpenTelemetry (Spring Boot 4 has a starter for it) and every log line carries a trace id; a tracing
+UI shows the time spent in each step of a request.</li>
+<li>The <strong>Observation API</strong> (<code>@Observed</code> on a method, or <code>Observation.createNotStarted(...)</code>)
+produces a metric and a trace span from one piece of instrumentation, for your own important operations (computing
+results, handling a payment callback).</li>
+</ul>
+
+<h2>Packaging and running</h2>
+<h3>The fat jar</h3>
+<p><code>./mvnw package</code> produces one runnable jar. Run it anywhere with a JRE:
+<code>java -jar edumate-backend-2.0.0.jar --spring.profiles.active=docker</code>. Settings come from the environment (the
+twelve-factor way), so the same artifact goes to test and to production.</p>
+<h3>Containers</h3>
+<pre class="code" data-src="backend/Dockerfile" data-lines="1-23" data-expect="FROM eclipse-temurin:21-jre"></pre>
+<ul>
+<li><strong>Two stages</strong>: a JDK image builds; a much smaller JRE image runs. Compilers and sources never reach
+production.</li>
+<li><strong>Dependencies first</strong>: copying <code>pom.xml</code> and downloading libraries before copying the code lets
+Docker reuse that layer when only code changes.</li>
+<li><strong>Not root</strong>: the process runs as an unprivileged user that may only write its upload folder.</li>
+<li><strong>Alternatives</strong>: <code>./mvnw spring-boot:build-image</code> builds an optimised image with Cloud Native
+Buildpacks and no Dockerfile at all; Boot's <em>layered jars</em> split libraries and code into separate image layers.</li>
+</ul>
+
+<h3>Graceful shutdown</h3>
+<p>When a container is stopped, requests in progress should finish. Spring Boot enables graceful shutdown by default in
+recent versions: on the stop signal Tomcat stops accepting new connections and waits for active requests
+(<code>spring.lifecycle.timeout-per-shutdown-phase</code>, default 30 s), then beans are destroyed in order (pools closed,
+schedulers stopped).</p>
+
+<h2>A production checklist</h2>
+<table>
+<thead><tr><th>Area</th><th>Check</th><th>EduMate</th></tr></thead>
+<tbody>
+<tr><td>Secrets</td><td>from the environment, never in the jar or the repository</td><td>JWT and gateway secrets from <code>.env</code></td></tr>
+<tr><td>Schema</td><td>versioned migrations; <code>ddl-auto: none</code></td><td>Flyway</td></tr>
+<tr><td>Errors</td><td>no stack traces or SQL to clients; a reference id in the log</td><td><code>GlobalExceptionHandler</code></td></tr>
+<tr><td>Health</td><td>liveness/readiness for the orchestrator</td><td><code>/actuator/health</code> in Docker</td></tr>
+<tr><td>Actuator</td><td>only safe endpoints exposed</td><td>health, info</td></tr>
+<tr><td>Demo switches</td><td>off</td><td><code>DEMO_SEED=false</code>, <code>DEMO_EXPOSE_OTP=false</code></td></tr>
+<tr><td>Pool sizes</td><td>database connections sized for the database, not the thread count</td><td>HikariCP default (10)</td></tr>
+<tr><td>Time zone</td><td>one explicit zone</td><td><code>Clock</code> bean in Asia/Kolkata</td></tr>
+<tr><td>Observability</td><td>metrics and alerts on errors and latency</td><td>a next step (add Prometheus)</td></tr>
+</tbody></table>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Temporarily add <code>mappings,conditions,beans</code> to <code>management.endpoints.web.exposure.include</code> and
+open rules for them in the <code>RoleMatrix</code>; browse <code>/actuator/mappings</code> to see every endpoint and
+<code>/actuator/beans</code> to see every bean. Then remove them again.</li>
+<li>Stop PostgreSQL while the Docker set-up runs and watch <code>/actuator/health</code> change.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>Why does EduMate not expose <code>/actuator/env</code>?</summary>
+<div>It shows the effective configuration, which can include secrets; exposed publicly it would be an information leak.</div></details>
+<details class="quiz"><summary>What is the difference between liveness and readiness?</summary>
+<div>Liveness: is the process healthy or should it be restarted? Readiness: can it take traffic right now (started,
+dependencies available)? An orchestrator restarts on failed liveness and stops routing on failed readiness.</div></details>
+<details class="quiz"><summary>Why use <code>{}</code> placeholders in log messages?</summary>
+<div>The message text is only assembled when the level is enabled, and values are formatted consistently; it also avoids
+accidental expensive string building on hot paths.</div></details>

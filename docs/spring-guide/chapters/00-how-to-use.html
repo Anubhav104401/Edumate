@@ -1,0 +1,84 @@
+<!-- level: 0 -->
+<h1>How to use this course</h1>
+
+<p class="lead">This is a course on <strong>Spring Boot</strong>, the most widely used framework for building server
+applications in Java. It assumes you can read and write ordinary Java (classes, interfaces, generics, lambdas, records,
+exceptions) and that you have never seen Spring at all. It ends at the level where you can explain what the framework
+does inside, extend it, and make architectural decisions with it.</p>
+
+<h2>The running example: EduMate</h2>
+<p>Most Spring tutorials build a to-do list. This course uses a real application instead: the <strong>EduMate
+backend</strong> in this repository (<code>backend/</code>). It runs admissions, attendance, examinations, fees,
+timetables and the library of a multi-campus university, with login tokens, role-based security, a database, caching,
+background jobs, file uploads and a test suite. Every Spring feature in this course is shown where EduMate really uses
+it.</p>
+<p>Code blocks with a grey title bar are <strong>copied from the real files when this page is built</strong>, so they
+always match the code. The <em>explained ↗</em> link on their title bar opens the same lines in the companion guide,
+<a href="EduMate-Zero-to-Hero.html">EduMate: Zero to Hero</a>, where every line is explained on its own.</p>
+
+<h2>The five levels</h2>
+<table>
+<thead><tr><th>Level</th><th>You will be able to…</th></tr></thead>
+<tbody>
+<tr><td><strong>Orientation</strong></td><td>say what problem Spring solves and how Spring, Spring Boot and their siblings fit together</td></tr>
+<tr><td><strong>1 · Foundations</strong></td><td>create an application, understand beans and dependency injection, configure it, build a REST API with validation and clean error handling</td></tr>
+<tr><td><strong>2 · Data</strong></td><td>map Java classes to tables, write repositories and queries, use transactions and locking correctly, evolve a schema with migrations</td></tr>
+<tr><td><strong>3 · Production</strong></td><td>secure an API with JWT and roles, cache, run background jobs, test every layer, observe and ship the application</td></tr>
+<tr><td><strong>4 · Pioneer</strong></td><td>explain auto-configuration, the bean lifecycle, proxies and AOP from the inside; build your own starter; use events, modules, virtual threads, native images and the newest features; choose between MVC and reactive</td></tr>
+</tbody></table>
+<p>Read the levels in order. Inside a level, each chapter builds on the previous one. Tick <strong>Mark as done</strong>
+at the top of a chapter when you have finished it; your progress is remembered in this browser and shown at the top
+of the page.</p>
+
+<h2>The boxes you will meet</h2>
+<div class="callout note"><strong>Everyday comparison</strong>
+An idea explained with something from ordinary life, before the technical words.</div>
+<div class="callout tip"><strong>Good practice</strong>
+What experienced Spring developers do, and why.</div>
+<div class="callout warn"><strong>Trap</strong>
+A mistake almost everyone makes once, and how to recognise it.</div>
+<div class="callout deep"><strong>Under the hood</strong>
+What the framework is really doing. Optional on a first reading; essential for Level 4.</div>
+<div class="callout try"><strong>Try it</strong>
+A small exercise on the EduMate code. Doing them is the fastest way to learn.</div>
+<p>Each chapter ends with a few <strong>self-check questions</strong>; click a question to see the answer.</p>
+
+<h2>What you need on your computer</h2>
+<ul>
+<li><strong>A JDK, version 21 or newer</strong> (EduMate compiles for Java 21). Check with <code>java -version</code>.</li>
+<li><strong>An editor that understands Java</strong>: IntelliJ IDEA (Community edition is free) or VS Code with the Java
+and Spring Boot extensions. Both can run and debug a Spring Boot application with one click.</li>
+<li><strong>Nothing else.</strong> Maven is downloaded by the <em>Maven Wrapper</em> (<code>mvnw</code>) that is part of
+the project, and the development database (H2) runs inside the application.</li>
+</ul>
+
+<h2>Start the example application</h2>
+<pre class="code" data-lang="bash">cd backend
+./mvnw spring-boot:run          # Windows: mvnw.cmd spring-boot:run</pre>
+<p>After some seconds of log lines you will see something like
+<code>Tomcat started on port 8080</code> and <code>Started EduMateApplication in 6.4 seconds</code>. The backend is now
+answering on <code>http://localhost:8080</code>. Three quick checks from a second terminal:</p>
+<pre class="code" data-lang="bash"># 1. Is it alive? (Spring Boot Actuator)
+curl http://localhost:8080/actuator/health
+#    {"status":"UP"}
+
+# 2. Log in as the demo student and keep the token
+curl -s -X POST http://localhost:8080/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"username":"student","password":"Edumate@2026"}'
+#    {"token":"eyJhbGciOiJIUzI1NiJ9...","expiresAt":"...","user":{...}}
+
+# 3. Call a protected address with the token
+curl http://localhost:8080/api/attendance/me -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+#    [{"courseId":1,"courseCode":"23CS501","courseName":"Design and Analysis of Algorithms",
+#      "held":32,"attended":30,"percent":93.75,"meetsThreshold":true,...}, ...]
+
+# Without the token the answer is 401, and for an address the role may not use it is 403.</pre>
+<p>While it runs in development mode you can also open <code>http://localhost:8080/h2-console</code> (JDBC URL
+<code>jdbc:h2:mem:edumate</code>, user <code>sa</code>, empty password) to look at the tables Spring created. To see the
+whole product in a browser, start the frontend as well (<code>cd frontend</code>, <code>npm install</code>,
+<code>npm run dev</code>, then open <code>http://localhost:5173</code>).</p>
+
+<div class="callout tip"><strong>Keep the code open next to this page</strong>
+Every chapter names the files it talks about. Open them in your editor, set a breakpoint, and watch Spring call your
+code. Seeing the call stack of a real request teaches more than any diagram.</div>

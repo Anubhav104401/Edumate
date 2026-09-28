@@ -7,32 +7,38 @@ It answers the questions a newcomer (or an examiner) asks first: what is this, h
 The title. One `#` is the biggest heading.
 >>> 3-7
 What EduMate is, and its link to the SQA report (course 23CSE701). The report calls the system **EduAutomate**; the code is called **EduMate**.
->>> 9-11
-A quote box (`>`) pointing beginners to this guide, and how to regenerate it after changing code.
->>> 13
+>>> 9-12
+A quote box (`>`) pointing beginners to this guide (including its chapter on the Release 3.0 interface), and how to regenerate it after changing code.
+>>> 13-16
+The second guide: a course on Spring Boot for readers who know Java but not Spring, taught with EduMate's own backend code, and the command that rebuilds it.
+>>> 18
 `---` draws a horizontal line.
->>> 15-27
+>>> 20-32
 Section 1: a text drawing of the architecture. The browser talks only to the frontend; the frontend sends JSON to the backend's `/api/...` URLs; the backend uses the database, the cache, the object store and the two gateways.
->>> 29-37
+>>> 34-42
 A table matching each technology the report names to where it lives in the code.
->>> 39-46
+>>> 44-47
+"The interface (Release 3.0)": the redesign, and the promise that it keeps the security policy, keyboard access and reduced-motion support.
+>>> 49-56
+The interface's building blocks: the design tokens, the animation library (motion), smooth scrolling (Lenis) and scroll-driven CSS, the accessible components (Radix UI, the cmdk command palette, Sonner toasts), icons and fonts, and the extra features. Links go to each library's website.
+>>> 58-65
 Section 2: running it on Windows needs only a JDK and Node.js. The helper script starts both halves in one command.
->>> 48-53
+>>> 67-72
 The same by hand, in two terminals: the backend on port 8080, and the frontend on port 5173 (the one to open in the browser).
->>> 55-56
-The in-memory database is recreated with demo data on every backend start. It can be browsed with the H2 console.
->>> 58-73
+>>> 74-77
+The in-memory database is recreated with demo data on every backend start and can be browsed with the H2 console. Signed out, the app opens on the welcome page; the login page lists the demo accounts; Ctrl K opens the command palette.
+>>> 79-94
 The demo accounts table: every username, who it is, and which test case or finding it demonstrates. All share the password `Edumate@2026`.
->>> 75-82
+>>> 96-103
 Section 3: the Docker way, which starts PostgreSQL, Redis, the backend and nginx with one command, then opens port 3000.
->>> 84-89
+>>> 105-110
 Section 4: the test commands and how many tests each part has.
->>> 91-113
+>>> 112-134
 Section 5: **traceability**. Each finding of the report (requirement review RR-…, design review DR-…, test defects DEF-…, OWASP security findings A0…, and recommendation 1) is listed with the code that fixes it and the test that proves the fix. An examiner can check any claim in a minute.
->>> 115-125
+>>> 136-146
 Section 6: the **known limitations**, stated honestly: the code is smaller than the 48,600 lines the report describes; the report's TC-013 number is wrong (8.63, not 8.25); ERP and DigiLocker are not implemented; the audit log and outbox are not split by campus; and the gateways are simulated.
->>> 127-140
-Section 7: the folder layout, with the two files beginners most need to know: `messages.ts` (every on-screen text) and `theme.css` (every colour).
+>>> 148-162
+Section 7: the folder layout, with the files beginners most need to know: `messages.ts` (every on-screen text), `theme.css` (every colour, size and animation curve) and the `motion/` folder.
 
 === FILE scripts/dev-start.ps1
 >>> SUMMARY

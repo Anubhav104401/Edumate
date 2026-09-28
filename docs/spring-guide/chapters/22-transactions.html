@@ -1,0 +1,165 @@
+<!-- level: 2 -->
+<h1>Transactions and concurrency: all or nothing, one at a time</h1>
+
+<p class="lead">Saving attendance writes a session, sixty records, an audit line and a few outbox messages. Either all
+of that must happen or none of it. And when two teachers save the same register at once, neither may silently destroy
+the other's work. This chapter covers <code>@Transactional</code>, rollback rules, propagation, and the two kinds of
+locking, with the real bugs EduMate fixed.</p>
+
+<h2>What a transaction guarantees</h2>
+<p>A database <strong>transaction</strong> groups statements into one unit with the <strong>ACID</strong> guarantees:</p>
+<table>
+<thead><tr><th></th><th>Guarantee</th><th>In EduMate</th></tr></thead>
+<tbody>
+<tr><td><strong>A</strong>tomic</td><td>all statements succeed, or none take effect</td><td>a payment is never marked SUCCESS without its ledger credit and receipt</td></tr>
+<tr><td><strong>C</strong>onsistent</td><td>constraints (UNIQUE, foreign keys, CHECK) hold after every transaction</td><td>no second ledger credit for the same bank reference</td></tr>
+<tr><td><strong>I</strong>solated</td><td>concurrent transactions do not see each other's half-done work</td><td>a student never sees a result set half-published</td></tr>
+<tr><td><strong>D</strong>urable</td><td>once committed, it survives a crash</td><td>a receipt number, once shown, exists</td></tr>
+</tbody></table>
+
+<h2><code>@Transactional</code>: one annotation, and the method becomes a transaction</h2>
+<pre class="code" data-src="backend/src/main/java/com/edumate/exam/ResultPublicationService.java" data-lines="78-93" data-expect="@CacheEvict(cacheNames = &quot;publishedResults&quot;, allEntries = true)"></pre>
+<p>When another bean calls <code>publish(...)</code>, Spring:</p>
+<ol class="steps-list">
+<li>takes a connection from the pool and starts a transaction;</li>
+<li>runs your method; every repository call inside it uses that same connection and transaction;</li>
+<li>if the method returns normally: flushes pending changes and <strong>commits</strong>;</li>
+<li>if it throws an unchecked exception: <strong>rolls back</strong>, as if nothing had happened, and re-throws.</li>
+</ol>
+<p>So when <code>publish</code> throws <code>ApiException.conflict("NOT_APPROVED", …)</code>, any change made earlier in
+the method is undone, and <code>GlobalExceptionHandler</code> sends the 409.</p>
+<div class="callout deep"><strong>Under the hood: a proxy stands in front of your bean</strong>
+Spring does not change your class. At start-up it wraps the bean in a <strong>proxy</strong>: an object of a generated
+subclass that intercepts calls to <code>@Transactional</code> methods, starts the transaction, calls your real method,
+then commits or rolls back. Other beans receive the proxy, not your object. This explains the famous trap below, and
+Level 4 has a whole chapter on proxies.</div>
+
+<h3>Read-only transactions</h3>
+<p>Many EduMate services are annotated at class level with <code>@Transactional(readOnly = true)</code>
+(<code>AttendanceSummaryService</code>, <code>ReportService</code>, <code>DashboardService</code>…). A class-level
+annotation applies to every public method. <code>readOnly</code> tells Hibernate it may skip dirty checking and lets the
+driver and database optimise; a method that must write overrides it with its own <code>@Transactional</code>.</p>
+
+<h2>Rollback rules, and when you do <em>not</em> want to roll back</h2>
+<p>By default Spring rolls back for <strong>unchecked</strong> exceptions (<code>RuntimeException</code>,
+<code>Error</code>) and <strong>commits</strong> for checked exceptions. You can change that per method. EduMate has a
+case where a refusal must still save something: a wrong password must increase the failed-attempts counter, even though
+the method then throws.</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/security/LoginAttemptService.java" data-lines="49-91" data-expect="@Transactional(noRollbackFor = ApiException.class)" data-hl="5,21,31-42"></pre>
+<p><code>noRollbackFor = ApiException.class</code> means: if an <code>ApiException</code> is thrown, commit anyway. The
+counter update (dirty checking on <code>user</code>) and the audit line are saved, then the 401 is sent. Without it the
+counter would be rolled back on every failure, and the lockout after five wrong passwords would never happen.
+<code>ConsentRegistry.verify</code> uses the same technique for the guardian's wrong-code counter.</p>
+<p>Also worth noticing in that method: when the username does not exist, it still runs a bcrypt check against a dummy
+hash, so that "no such user" takes as long as "wrong password" and an attacker cannot discover valid usernames by
+timing the answers.</p>
+
+<h2>Propagation: transactions inside transactions</h2>
+<p>When a <code>@Transactional</code> method calls another <code>@Transactional</code> method (on another bean), what
+happens depends on <em>propagation</em>:</p>
+<table>
+<thead><tr><th>Propagation</th><th>Behaviour</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td><code>REQUIRED</code> (default)</td><td>join the caller's transaction if there is one, else start one</td><td>almost always: EduMate's <code>AuditLogger.record</code> joins the caller's transaction, so the audit line commits or rolls back <em>with</em> the change it describes</td></tr>
+<tr><td><code>REQUIRES_NEW</code></td><td>suspend the caller's transaction and run in a new, independent one</td><td>something that must be saved even if the caller fails, e.g. a security log line that must survive a rollback</td></tr>
+<tr><td><code>MANDATORY</code></td><td>must be called inside a transaction, or fail</td><td>guard methods that are only meaningful as part of a bigger unit</td></tr>
+<tr><td><code>SUPPORTS</code>, <code>NOT_SUPPORTED</code>, <code>NEVER</code>, <code>NESTED</code></td><td>rarer variants</td><td>read the reference when you need them</td></tr>
+</tbody></table>
+<div class="callout warn"><strong>Joined transactions roll back together</strong>
+If an inner <code>REQUIRED</code> method throws and the outer method catches the exception and carries on, the shared
+transaction has already been marked <em>rollback-only</em>, and the commit at the end fails with
+<code>UnexpectedRollbackException</code>. Catching an exception does not undo the inner method's vote.</div>
+
+<h2>The self-invocation trap</h2>
+<pre class="code" data-lang="java">@Service
+public class ReportJob {
+    public void runAll() {
+        for (Long id : ids) {
+            runOne(id);          // ← a plain call on "this", NOT through the proxy
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void runOne(Long id) { … }   // the annotation is silently ignored for the call above
+}</pre>
+<p>The proxy only sees calls that come <em>from outside</em> the bean. A method calling another method of the same
+object goes straight to the real object, and no transaction (or cache, or security check) is applied. Fixes: move
+<code>runOne</code> to another bean (the cleanest), or inject the bean's own proxy, or use
+<code>TransactionTemplate</code> in code. The same rule applies to <code>@Cacheable</code>, <code>@Async</code> and
+<code>@PreAuthorize</code>. Also: annotated methods must be <code>public</code> and not <code>final</code>.</p>
+
+<h2>Two users, one record: optimistic locking</h2>
+<p><strong>The bug (EduMate's design review finding DR-01):</strong> two teachers open the same attendance register.
+Teacher A saves. Teacher B, still looking at the old version, saves a minute later, and A's work is silently
+overwritten. This is a <em>lost update</em>.</p>
+<p><strong>The fix:</strong> a version number on the row.</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/attendance/AttendanceSession.java" data-lines="44-45" data-expect="@Version"></pre>
+<p>With <code>@Version</code>, every <code>UPDATE</code> Hibernate writes looks like this:</p>
+<pre class="code" data-lang="sql">update attendance_session set taken_by=?, updated_at=?, version=4 where id=41 and version=3</pre>
+<p>If someone else has already moved the row to version 4, the <code>WHERE</code> matches nothing, Hibernate sees
+"0 rows updated", and throws an optimistic-locking exception, which EduMate turns into <strong>409
+STALE_UPDATE</strong>. Nobody waits and nothing is locked: the conflict is detected at the moment it happens. EduMate
+adds a second, earlier check: the browser sends the version it loaded, and the service compares it before writing
+anything:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/attendance/AttendanceCaptureService.java" data-lines="97-102" data-expect="STALE_UPDATE"></pre>
+<p>The frontend then tells the teacher: "Someone else saved this register while you were editing. Your changes were not
+saved, so nothing was overwritten. Reload…". <code>AttendanceConcurrencyIntegrationTest</code> proves the whole chain.</p>
+
+<h2>One record, strictly one at a time: pessimistic locking</h2>
+<p><strong>The bug (DEF-014):</strong> payment gateways sometimes deliver the same "payment succeeded" callback twice,
+sometimes at the same instant. The old handler credited the student twice.</p>
+<p>Here, detecting the conflict afterwards is not enough; the second delivery must <em>wait</em> for the first and then
+see its result. So <code>PaymentOrchestrator.handleCallback</code> loads the payment with
+<code>findByGatewayOrderIdForUpdate</code> (<code>@Lock(PESSIMISTIC_WRITE)</code>, i.e. <code>SELECT … FOR
+UPDATE</code>): the database holds the row lock until the first transaction commits, the second then reads a payment
+already marked SUCCESS and answers <code>DUPLICATE_IGNORED</code>. A UNIQUE constraint on the bank reference is the last
+line of defence.</p>
+<table>
+<thead><tr><th></th><th>Optimistic (<code>@Version</code>)</th><th>Pessimistic (<code>@Lock</code>)</th></tr></thead>
+<tbody>
+<tr><td>Idea</td><td>assume conflicts are rare; detect them at write time</td><td>assume conflicts happen; prevent them by locking at read time</td></tr>
+<tr><td>Cost</td><td>none until a conflict; the loser must retry</td><td>others wait; risk of deadlocks if rows are locked in different orders</td></tr>
+<tr><td>Good for</td><td>human editing (forms open for minutes)</td><td>short, machine-driven critical sections (payments, counters)</td></tr>
+<tr><td>EduMate</td><td>attendance registers, marks, result sets</td><td>payment callbacks</td></tr>
+</tbody></table>
+<p>The third tool, seen in the repositories chapter, is the <strong>atomic conditional update</strong>
+(<code>UPDATE … WHERE status = 'APPROVED'</code>): check and change in one statement, no lock held in between.</p>
+
+<h2>Isolation levels, briefly</h2>
+<p>Databases let transactions see each other's committed changes in different ways (<code>READ_COMMITTED</code>,
+<code>REPEATABLE_READ</code>, <code>SERIALIZABLE</code>). PostgreSQL's default, <code>READ_COMMITTED</code>, is what EduMate
+uses: a statement sees data committed before it started. Rather than raising the isolation level globally (slower, and
+more transactions fail), EduMate protects the few places that need it with the locks and conditional updates above.
+<code>@Transactional(isolation = …)</code> exists when you need it.</p>
+
+<h2>Doing something only if the transaction commits</h2>
+<p>Files are not in the database, so a rollback cannot undo writing one. EduMate's <code>DocumentService</code> therefore
+registers callbacks with the transaction:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/documents/DocumentService.java" data-lines="174-192" data-expect="public void afterCommit()"></pre>
+<p>A new upload is written to disk first; if the transaction then rolls back (say the database insert fails), the file
+is deleted again. When a document is <em>removed</em>, its file is only deleted after the database change has
+committed. The database and the disk can never disagree. <code>@TransactionalEventListener</code> (Level 4) is the
+higher-level version of the same idea.</p>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Remove <code>noRollbackFor = ApiException.class</code> from <code>LoginAttemptService.authenticate</code>, log in with
+a wrong password six times, and see that the account never locks. Put it back.</li>
+<li>Open two browser windows as the same teacher on the same register, save in one, then in the other.</li>
+<li>Read <code>ResultPublicationIntegrationTest</code>: it publishes the same results from two threads at once and
+checks that exactly one wins.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>A <code>@Transactional</code> method throws a checked <code>IOException</code>. Is the transaction rolled back?</summary>
+<div>No, by default only unchecked exceptions roll back. Use <code>rollbackFor = IOException.class</code> (or wrap it
+in an unchecked exception, as EduMate does with <code>UncheckedIOException</code>).</div></details>
+<details class="quiz"><summary>Why does calling a <code>@Transactional</code> method from another method of the same class not start a transaction?</summary>
+<div>Transactions are applied by a proxy around the bean; an internal call on <code>this</code> never goes through the
+proxy.</div></details>
+<details class="quiz"><summary>When would you choose a pessimistic lock over <code>@Version</code>?</summary>
+<div>When the second party must wait and then act on the first one's result (duplicate payment callbacks), in short
+critical sections. For people editing forms, optimistic locking is better: nobody waits, conflicts are reported.</div></details>
+<details class="quiz"><summary>What does <code>noRollbackFor</code> achieve in <code>LoginAttemptService</code>?</summary>
+<div>The failed-attempt counter and audit line are committed even though the method throws the 401 error, so the
+lockout works.</div></details>

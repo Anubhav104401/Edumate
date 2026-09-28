@@ -1,0 +1,124 @@
+<!-- level: 4 -->
+<h1>Talking to other services, resilience, and reactive programming</h1>
+
+<p class="lead">Real systems call other systems: a payment gateway, an SMS provider, the university ERP. Calls across a
+network are slow, fail, and sometimes hang. This chapter covers Spring's HTTP clients, declarative HTTP interfaces,
+timeouts and retries, and when the reactive stack (WebFlux) is the better foundation.</p>
+
+<h2>Where EduMate would need a client</h2>
+<p>EduMate simulates its external systems: <code>MockPaymentGateway</code> builds the signed callback a bank would send and
+hands it straight to <code>PaymentOrchestrator.handleCallback</code>; <code>LoggingNotificationGateway</code> writes e-mails to
+the log. Both sit behind interfaces or clear seams, so a real integration replaces one class. Here is how that class
+would be written.</p>
+
+<h2><code>RestClient</code>: the synchronous HTTP client</h2>
+<pre class="code" data-lang="java">@Component
+class SmsProviderGateway implements NotificationGateway {
+
+    private final RestClient http;
+
+    SmsProviderGateway(RestClient.Builder builder, SmsProperties props) {   // Boot provides a pre-configured builder
+        this.http = builder
+                .baseUrl(props.baseUrl())
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + props.apiKey())
+                .build();
+    }
+
+    @Override
+    public void send(NotificationMessage message) {
+        http.post()
+            .uri("/v1/messages")
+            .body(new SmsRequest(message.getRecipient(), message.getBody()))   // record → JSON (Jackson)
+            .retrieve()                                                        // 4xx/5xx → exception
+            .toBodilessEntity();
+    }
+}</pre>
+<p><code>RestClient</code> (Spring Framework 6.1+) is the modern replacement for <code>RestTemplate</code>: a fluent API,
+the same message converters as your controllers, and exceptions for error statuses. Inject Boot's
+<code>RestClient.Builder</code> rather than creating one yourself, so observability (metrics, tracing) and shared settings
+apply.</p>
+
+<h2>Declarative HTTP interfaces</h2>
+<p>Instead of writing the calls, declare them, the same way you declare Spring Data repositories:</p>
+<pre class="code" data-lang="java">@HttpExchange("/v1")
+public interface PaymentGatewayClient {
+
+    @PostExchange("/orders")
+    GatewayOrder createOrder(@RequestBody CreateOrder request);
+
+    @GetExchange("/orders/{id}")
+    GatewayOrder getOrder(@PathVariable String id);
+}</pre>
+<p>Spring generates the implementation on top of <code>RestClient</code>. In Spring Framework 7 you register groups of
+such interfaces with <code>@ImportHttpServices(group = "gateway", types = PaymentGatewayClient.class)</code>, give each
+group its base URL and timeouts in Spring Boot properties (the exact keys are listed under "HTTP Service Interface
+Clients" in the Boot reference for your version), and simply inject <code>PaymentGatewayClient</code>.</p>
+
+<h2>Resilience: timeouts, retries, limits</h2>
+<div class="callout warn"><strong>Every remote call needs a timeout</strong>
+Without one, a hanging provider holds your request thread (and, inside a transaction, a database connection) forever.
+Set connect and read timeouts on every client (Spring Boot has global HTTP-client timeout properties and per-group
+settings for HTTP interfaces), and never call a remote service while holding a database transaction open if you
+can avoid it. EduMate's outbox exists precisely so that e-mail sending happens outside business transactions.</div>
+<p>Spring Framework 7 brings basic resilience into the core:</p>
+<pre class="code" data-lang="java">@Configuration
+@EnableResilientMethods                         // activates the annotations below (proxy-based)
+class ResilienceConfig { }
+
+@Component
+class SmsProviderGateway implements NotificationGateway {
+    @Retryable(includes = HttpServerErrorException.class, delay = 500, multiplier = 2)   // 3 retries by default
+    @ConcurrencyLimit(10)                        // at most 10 calls to the provider at the same time
+    public void send(NotificationMessage message) { … }
+}</pre>
+<ul>
+<li><strong>Retry only what is safe to repeat</strong> (idempotent operations) and only transient failures (timeouts, 5xx,
+not 4xx). Use increasing delays with jitter so many clients do not retry in lockstep.</li>
+<li><strong>Idempotency keys</strong>: when retrying a payment call, send the same key so the provider does not charge twice;
+on the receiving side, EduMate's replay-safe callback handling is the mirror image.</li>
+<li><strong>Circuit breakers and bulkheads</strong>: Resilience4j (with Spring Cloud Circuit Breaker) stops calling a
+failing service for a while and fails fast instead.</li>
+</ul>
+
+<h2>Spring MVC or Spring WebFlux?</h2>
+<p>Spring has two web stacks:</p>
+<table>
+<thead><tr><th></th><th>Spring MVC (EduMate)</th><th>Spring WebFlux</th></tr></thead>
+<tbody>
+<tr><td>Model</td><td>a thread per request; code blocks while waiting</td><td>an event loop with few threads; nothing may block; work is described as <code>Mono&lt;T&gt;</code> (0–1 value) and <code>Flux&lt;T&gt;</code> (0–n values) pipelines</td></tr>
+<tr><td>Server</td><td>Tomcat (servlets)</td><td>Netty (or a servlet container in async mode)</td></tr>
+<tr><td>Database</td><td>JDBC, JPA, Spring Data JPA</td><td>R2DBC and reactive drivers (JPA is blocking)</td></tr>
+<tr><td>Strengths</td><td>simple, debuggable, huge ecosystem; with virtual threads, high concurrency for blocking I/O</td><td>streaming (server-sent events, WebSockets), back-pressure, very high numbers of slow connections, fan-out to many remote calls</td></tr>
+<tr><td>Costs</td><td>a thread per concurrent request (cheap with virtual threads)</td><td>a different programming model; harder stack traces; one blocking call can stall the event loop</td></tr>
+</tbody></table>
+<pre class="code" data-lang="java">// WebFlux style, for comparison
+@GetMapping("/api/attendance/me")
+Mono&lt;List&lt;CourseAttendance&gt;&gt; mine(@AuthenticationPrincipal Jwt jwt) {
+    return summaryService.forStudent(studentId(jwt))            // Mono from a reactive repository
+            .timeout(Duration.ofSeconds(2))
+            .onErrorResume(TimeoutException.class, e -&gt; Mono.just(List.of()));
+}</pre>
+<p><strong>Rule of thumb:</strong> choose MVC unless you have a streaming or massive-fan-out problem. EduMate, a CRUD and
+workflow application on a relational database with JPA, is a textbook MVC application; with virtual threads it does
+not give up scalability. <code>WebClient</code>, WebFlux's HTTP client, can still be used from MVC when you need
+reactive features for a particular call.</p>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Write <code>SmsProviderGateway</code> against a public echo service (for example a local WireMock), switchable with
+<code>@ConditionalOnProperty(name = "edumate.sms.provider", havingValue = "http")</code>, keeping the logging gateway as the
+default.</li>
+<li>Give it a 2-second read timeout and make the fake provider sleep for 5 seconds; watch the outbox mark the message
+failed and retry on the next runs.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>Why inject <code>RestClient.Builder</code> instead of calling <code>RestClient.create()</code>?</summary>
+<div>Boot's builder is pre-configured with the application's message converters and observability (metrics, tracing)
+and shared settings; a hand-made client misses them.</div></details>
+<details class="quiz"><summary>Which calls may you safely retry?</summary>
+<div>Idempotent operations (repeating them has the same effect), and only for transient failures like timeouts or 5xx
+errors; for non-idempotent ones, use an idempotency key understood by the other side.</div></details>
+<details class="quiz"><summary>Why is WebFlux a poor fit for an application built on JPA?</summary>
+<div>JPA and JDBC block the calling thread, which would stall WebFlux's small event-loop thread pool; the reactive stack
+needs non-blocking drivers such as R2DBC throughout.</div></details>

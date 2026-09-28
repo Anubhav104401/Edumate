@@ -1,0 +1,80 @@
+<!-- level: 4 -->
+<h1>The frontier: what is new in Spring Boot 4 and Spring Framework 7</h1>
+
+<p class="lead">EduMate is built on the newest generation of Spring. This chapter lists what changed in that generation,
+shows where EduMate already relies on it, and explains how to migrate an older application. Versions move quickly: for
+details, always check the release notes of the exact version you use.</p>
+
+<h2>The new baseline</h2>
+<table>
+<thead><tr><th>Area</th><th>Spring Framework 7 / Spring Boot 4</th><th>Why it matters</th></tr></thead>
+<tbody>
+<tr><td>Java</td><td>Java 17 minimum; Java 21 and 25 fully supported</td><td>records, sealed types, pattern matching and virtual threads are everyday tools (EduMate targets 21)</td></tr>
+<tr><td>Jakarta EE</td><td>EE 11: Servlet 6.1, Persistence 3.2, Validation 3.1</td><td>new APIs in JPA 3.2 (for example better record support in queries); servlet containers must support 6.1, which is why Undertow is no longer supported</td></tr>
+<tr><td>Hibernate</td><td>ORM 7</td><td>the JPA provider behind every repository</td></tr>
+<tr><td>JSON</td><td>Jackson 3 by default (package <code>tools.jackson</code>)</td><td>immutable, builder-style mappers; many defaults modernised</td></tr>
+<tr><td>Null safety</td><td>JSpecify annotations (<code>@Nullable</code>, <code>@NullMarked</code>) across the portfolio</td><td>IDEs and tools such as NullAway can check null handling at build time; Kotlin sees Spring APIs with correct nullability</td></tr>
+</tbody></table>
+<p>EduMate already shows Jackson 3: the handler that writes 401/403 bodies receives Boot's mapper from the new package:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/security/RestAuthHandlers.java" data-lines="19-35" data-expect="import tools.jackson.databind.json.JsonMapper;"></pre>
+
+<h2>A modular Spring Boot</h2>
+<p>Spring Boot 4 split its large auto-configuration jar into many focused modules, each with its own starter. You add
+exactly the technologies you use, the classpath shrinks, and conditions have less to evaluate. EduMate's
+<code>pom.xml</code> uses the new names:</p>
+<table>
+<thead><tr><th>EduMate uses</th><th>Before Boot 4</th></tr></thead>
+<tbody>
+<tr><td><code>spring-boot-starter-webmvc</code></td><td><code>spring-boot-starter-web</code></td></tr>
+<tr><td><code>spring-boot-starter-flyway</code></td><td>a plain <code>flyway-core</code> dependency, configured by Boot's single autoconfigure jar</td></tr>
+<tr><td><code>spring-boot-h2console</code></td><td>part of the general autoconfigure jar</td></tr>
+<tr><td><code>spring-boot-starter-webmvc-test</code>, <code>…-security-test</code></td><td>everything inside <code>spring-boot-starter-test</code></td></tr>
+<tr><td>(AOP, if added) <code>spring-boot-starter-aspectj</code></td><td><code>spring-boot-starter-aop</code></td></tr>
+</tbody></table>
+<p>Class and package names of auto-configurations and test annotations moved with the modules, which mostly matters if
+you import them (for example in <code>exclude = …</code> or slice-test annotations).</p>
+
+<h2>New capabilities</h2>
+<table>
+<thead><tr><th>Feature</th><th>What it gives you</th><th>Covered in</th></tr></thead>
+<tbody>
+<tr><td>API versioning</td><td>map controller methods per API version (header, parameter, path or media type), with deprecation support</td><td>the REST chapter</td></tr>
+<tr><td>HTTP service clients</td><td>declarative <code>@HttpExchange</code> interfaces registered in groups with <code>@ImportHttpServices</code>, configured by Boot properties</td><td>the clients chapter</td></tr>
+<tr><td>Core resilience</td><td><code>@Retryable</code>, <code>@ConcurrencyLimit</code>, <code>@EnableResilientMethods</code> and a core <code>RetryTemplate</code>, no extra project needed</td><td>the clients chapter</td></tr>
+<tr><td>Programmatic bean registration</td><td><code>BeanRegistrar</code>: register beans in code, compatible with AOT and native images</td><td>the auto-configuration chapter</td></tr>
+<tr><td>Test clients</td><td><code>RestTestClient</code> and AssertJ-based <code>MockMvcTester</code></td><td>the testing chapter</td></tr>
+<tr><td>Observability</td><td>OpenTelemetry support out of the box alongside Micrometer</td><td>the operations chapter</td></tr>
+<tr><td>Native images</td><td>current GraalVM support and smaller, faster AOT output</td><td>the performance chapter</td></tr>
+</tbody></table>
+
+<h2>Migrating an older application</h2>
+<ol class="steps-list">
+<li><strong>Get to the latest 3.x first</strong> (3.5), fix every deprecation warning there, and make sure the test suite is
+green. Deprecated APIs in one generation are usually removed in the next.</li>
+<li><strong>If coming from Boot 2</strong>: first move to 3 (Java 17, <code>javax.*</code> → <code>jakarta.*</code>,
+<code>SecurityFilterChain</code> beans instead of <code>WebSecurityConfigurerAdapter</code>,
+<code>requestMatchers</code> instead of <code>antMatchers</code>).</li>
+<li><strong>Use the properties migrator</strong>: add <code>spring-boot-properties-migrator</code> as a runtime dependency
+for one run; it reports and temporarily maps renamed properties at start-up. Remove it afterwards.</li>
+<li><strong>Automate the mechanical parts</strong>: OpenRewrite recipes can update dependencies, starters, imports and
+common API changes across a code base.</li>
+<li><strong>Change the parent version</strong>, switch to the new starter names, and fix compilation: Jackson 3 packages,
+moved test annotations, removed deprecated APIs.</li>
+<li><strong>Run everything</strong>: unit and integration tests, then a manual smoke test of the main flows; watch the
+start-up log for warnings.</li>
+</ol>
+<div class="callout tip"><strong>Stay current in small steps</strong>
+Spring Boot releases a minor version about every six months and supports each for a limited time. Upgrading every
+release (a routine, tested change) is far cheaper than a big jump every few years. EduMate's test suite, including the
+PostgreSQL compatibility and security coverage tests, is what makes such upgrades safe.</div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>Why did EduMate's starters change names compared with older tutorials?</summary>
+<div>Spring Boot 4 modularised auto-configuration into focused modules with matching starters, for example
+<code>spring-boot-starter-webmvc</code> instead of <code>spring-boot-starter-web</code>.</div></details>
+<details class="quiz"><summary>How do you recognise Jackson 3 code?</summary>
+<div>Its packages start with <code>tools.jackson</code> instead of <code>com.fasterxml.jackson</code> (the annotations
+package is the exception and remains compatible).</div></details>
+<details class="quiz"><summary>What is the safest order for a major upgrade?</summary>
+<div>Latest minor of the current generation first, remove deprecations, green tests; then change the major version,
+using the properties migrator and automated recipes, and test again.</div></details>

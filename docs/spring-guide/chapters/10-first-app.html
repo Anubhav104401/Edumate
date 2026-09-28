@@ -1,0 +1,189 @@
+<!-- level: 1 -->
+<h1>Your first Spring Boot application</h1>
+
+<p class="lead">In this chapter you create a project, read its build file, meet the one class every Spring Boot
+application has, and follow step by step what happens between pressing <em>Run</em> and "Started".</p>
+
+<h2>Creating a project</h2>
+<p>Nobody writes a Spring Boot project from an empty folder. Go to <strong>start.spring.io</strong> (the
+<em>Spring Initializr</em>; IntelliJ and VS Code have it built in), and choose:</p>
+<table>
+<thead><tr><th>Field</th><th>What to pick</th><th>EduMate's choice</th></tr></thead>
+<tbody>
+<tr><td>Project</td><td>Maven or Gradle (the build tool)</td><td>Maven</td></tr>
+<tr><td>Language</td><td>Java (Kotlin and Groovy also work)</td><td>Java</td></tr>
+<tr><td>Spring Boot</td><td>the newest non-snapshot version</td><td>4.1</td></tr>
+<tr><td>Group / Artifact</td><td>your organisation's reversed domain / the project name</td><td><code>com.edumate</code> / <code>edumate-backend</code></td></tr>
+<tr><td>Java</td><td>the version to compile for</td><td>21</td></tr>
+<tr><td>Dependencies</td><td>the starters you need</td><td>Spring Web, Validation, Spring Data JPA, Flyway, Spring Security, OAuth2 Resource Server, Cache, Redis, Actuator, H2, PostgreSQL</td></tr>
+</tbody></table>
+<p>The Initializr gives you a zip with this layout (EduMate's, with a few of its files):</p>
+<pre class="diagram">backend/
+├── pom.xml                         the build file: libraries and how to package
+├── mvnw, mvnw.cmd, .mvn/           the Maven Wrapper: builds without installing Maven
+└── src/
+    ├── main/
+    │   ├── java/com/edumate/
+    │   │   ├── EduMateApplication.java      the starting point
+    │   │   ├── attendance/  exam/  fees/ …  your code, one package per module
+    │   └── resources/
+    │       ├── application.yml              settings
+    │       ├── application-dev.yml          settings for the "dev" profile
+    │       └── db/migration/V1__create_schema.sql
+    └── test/java/com/edumate/…              tests, mirroring the main packages</pre>
+<div class="callout tip"><strong>Package by feature</strong>
+EduMate groups code by business module (<code>attendance</code>, <code>fees</code>, <code>exam</code>…), each holding
+its controller, services, entities and repositories. The other common style, package by layer
+(<code>controllers/</code>, <code>services/</code>, <code>repositories/</code>), spreads one feature over many folders.
+Package by feature keeps related code together and makes module boundaries visible, which matters when the application
+grows (see the Level 4 chapter on events and modules).</div>
+
+<h2>The build file, <code>pom.xml</code></h2>
+<p>Maven reads <code>pom.xml</code> to know which libraries to download and how to build. Four parts matter.</p>
+
+<h3>1. The parent: tested versions for everything</h3>
+<pre class="code" data-src="backend/pom.xml" data-lines="12-18" data-expect="spring-boot-starter-parent"></pre>
+<p>Inheriting from <code>spring-boot-starter-parent</code> gives you a <strong>bill of materials</strong> (BOM): a list
+of hundreds of libraries with versions that the Spring team has tested together. That is why the dependencies below
+have no <code>&lt;version&gt;</code>: the parent decides. Upgrading Spring Boot means changing this one number.</p>
+
+<h3>2. Starters: one line per capability</h3>
+<pre class="code" data-src="backend/pom.xml" data-lines="33-47" data-expect="spring-boot-starter-webmvc"></pre>
+<p>A <strong>starter</strong> is an almost empty library whose only job is to depend on the right set of real
+libraries. <code>spring-boot-starter-webmvc</code> brings Spring MVC, an embedded Tomcat server and Jackson for JSON;
+<code>spring-boot-starter-data-jpa</code> brings Hibernate, Spring Data and a connection pool (HikariCP). In Spring Boot
+4 the starters were split into smaller, more precise modules; that is why EduMate uses
+<code>spring-boot-starter-webmvc</code> and <code>spring-boot-starter-flyway</code> where older projects used
+<code>spring-boot-starter-web</code> and a plain Flyway dependency.</p>
+
+<h3>3. Scopes: when a library is needed</h3>
+<pre class="code" data-src="backend/pom.xml" data-lines="82-103" data-expect="&lt;scope&gt;runtime&lt;/scope&gt;"></pre>
+<table>
+<thead><tr><th>Scope</th><th>Meaning</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td>(none) = compile</td><td>your code uses it directly</td><td>the starters</td></tr>
+<tr><td><code>runtime</code></td><td>needed only while running; your code never imports it</td><td>the H2 and PostgreSQL JDBC drivers: code talks to JDBC, the driver is found at run time</td></tr>
+<tr><td><code>test</code></td><td>only for <code>src/test</code>; not packaged</td><td><code>spring-boot-starter-test</code> (JUnit 5, AssertJ, Mockito, MockMvc)</td></tr>
+</tbody></table>
+
+<h3>4. The plugin: one runnable jar</h3>
+<pre class="code" data-src="backend/pom.xml" data-lines="136-144" data-expect="spring-boot-maven-plugin"></pre>
+<p><code>spring-boot-maven-plugin</code> adds <code>mvnw spring-boot:run</code> and repackages the build into a
+<strong>fat jar</strong>: your classes <em>and</em> every library inside one file, with a small launcher that knows how
+to load jars nested in a jar. The result, <code>target/edumate-backend-2.0.0.jar</code>, runs anywhere Java runs.</p>
+
+<h2>The starting point: <code>@SpringBootApplication</code></h2>
+<pre class="code" data-src="backend/src/main/java/com/edumate/EduMateApplication.java" data-lines="15-24" data-expect="SpringApplication.run"></pre>
+<p>That is the whole class. <code>SpringApplication.run(...)</code> starts Spring; the annotations tell it what to
+switch on:</p>
+<table>
+<thead><tr><th>Annotation</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>@SpringBootApplication</code></td><td>three annotations in one: <code>@SpringBootConfiguration</code> (this class may declare beans), <code>@EnableAutoConfiguration</code> (let Boot configure what it finds on the classpath) and <code>@ComponentScan</code> (look for my classes in this package and every package below it)</td></tr>
+<tr><td><code>@ConfigurationPropertiesScan</code></td><td>find classes annotated with <code>@ConfigurationProperties</code> (EduMate's <code>AppProperties</code>) and fill them from <code>application.yml</code></td></tr>
+<tr><td><code>@EnableCaching</code></td><td>make <code>@Cacheable</code> and <code>@CacheEvict</code> work</td></tr>
+<tr><td><code>@EnableScheduling</code></td><td>make <code>@Scheduled</code> methods run on their timers</td></tr>
+</tbody></table>
+<div class="callout warn"><strong>Where the main class lives matters</strong>
+Component scanning starts at the package of the main class (<code>com.edumate</code>) and goes down. A class in
+<code>com.edumate.fees</code> is found; a class in <code>com.other</code> is silently ignored, and you get
+"No qualifying bean" errors. Keep the main class in the top package.</div>
+
+<h2>What happens when you press Run</h2>
+<p>Here is the start-up of EduMate, in order. You can see most steps in the log.</p>
+<ol class="steps-list">
+<li><strong>Prepare the environment.</strong> Read <code>application.yml</code>, then the file of the active profile
+(<code>application-dev.yml</code> by default), environment variables and command-line arguments, into one set of
+settings.</li>
+<li><strong>Create the application context</strong>, the container that will hold every object. Because Spring MVC is
+on the classpath, it is a <em>servlet web</em> context.</li>
+<li><strong>Scan for your classes.</strong> Every class under <code>com.edumate</code> annotated with
+<code>@Component</code>, <code>@Service</code>, <code>@Repository</code>, <code>@RestController</code> or
+<code>@Configuration</code> becomes a <em>bean definition</em>: a recipe for an object. Interfaces extending
+<code>JpaRepository</code> become repository recipes.</li>
+<li><strong>Add the auto-configurations</strong> whose conditions match: a <code>DataSource</code> because a JDBC driver
+and a URL are present, an <code>EntityManagerFactory</code> because JPA is present, Flyway because it is on the
+classpath, a <code>JwtDecoder</code>… unless EduMate already defined one (it did).</li>
+<li><strong>Create every singleton bean</strong>, each after the beans it needs. The <code>DataSource</code> opens its
+pool; <strong>Flyway</strong> runs <code>V1__create_schema.sql</code> on the empty database; Hibernate checks the entity
+classes; security builds its filter chain from the <code>RoleMatrix</code>.</li>
+<li><strong>Start Tomcat</strong> on port 8080 and register Spring MVC's <code>DispatcherServlet</code>.</li>
+<li><strong>Log "Started EduMateApplication in … seconds".</strong> The scheduler was switched on together with the
+context: the outbox dispatcher runs 10 seconds after start, then every 5 seconds.</li>
+<li><strong>Run the start-up tasks</strong>: every <code>ApplicationRunner</code>, in order.
+EduMate's <code>TenantProvisioner</code> creates the campuses, then <code>DemoDataSeeder</code> fills the demo data.
+Only then is the application announced as <em>ready</em> (an <code>ApplicationReadyEvent</code>).</li>
+</ol>
+
+<h3>Reading the start-up log</h3>
+<pre class="code" data-lang="text">The following 1 profile is active: "dev"
+Tomcat initialized with port 8080 (http)
+HikariPool-1 - Start completed.
+H2 console available at '/h2-console'. Database available at 'jdbc:h2:mem:edumate'
+Successfully applied 1 migration to schema "PUBLIC", now at version v1
+Tomcat started on port 8080 (http) with context path '/'
+Started EduMateApplication in 6.4 seconds (process running for 7.1)
+Provisioned new campus JGC (Jain Global Campus)
+Demo data ready in 2140 ms. Log in with any demo account, password Edumate@2026</pre>
+<p>When start-up fails, the most useful line is usually the <em>last</em> "Caused by:" of the stack trace, and Spring
+Boot often prints an <strong>APPLICATION FAILED TO START</strong> box with a plain-English description and an
+<em>Action</em> suggestion. The <a href="#91-troubleshooting">troubleshooting appendix</a> lists the common ones.</p>
+
+<h2>Your first endpoint</h2>
+<p>Add this class anywhere under <code>com.edumate</code>, for example
+<code>backend/src/main/java/com/edumate/admin/HelloController.java</code>:</p>
+<pre class="code" data-lang="java">package com.edumate.admin;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class HelloController {
+
+    @GetMapping("/api/hello")
+    public Greeting hello() {
+        return new Greeting("Hello from Spring Boot", java.time.Instant.now());
+    }
+
+    public record Greeting(String message, java.time.Instant at) {
+    }
+}</pre>
+<p>Restart and call <code>curl -i http://localhost:8080/api/hello</code>. You get… <strong>403 Forbidden</strong>.
+That is not a mistake: EduMate's security is <em>deny by default</em>. Every address must be listed in the
+<code>RoleMatrix</code>. Add one line to its constructor (the "Any logged-in user" or "Public" group), for example
+<code>open(GET, "/api/hello");</code>, restart, and you receive:</p>
+<pre class="code" data-lang="json">{"message":"Hello from Spring Boot","at":"2026-09-28T10:15:30.123Z"}</pre>
+<p>Notice what you did <em>not</em> write: no server code, no JSON code, no registration. Spring found the class
+because of <code>@RestController</code>, mapped the method because of <code>@GetMapping</code>, and Jackson turned the
+record into JSON. (Then delete the class again, or <code>RoleMatrixCoverageTest</code> will remind you it exists.)</p>
+
+<h2>Building and running for real</h2>
+<pre class="code" data-lang="bash">./mvnw test                     # compile and run every test
+./mvnw package                  # tests + target/edumate-backend-2.0.0.jar
+java -jar target/edumate-backend-2.0.0.jar
+java -jar target/edumate-backend-2.0.0.jar --spring.profiles.active=docker --server.port=9090</pre>
+<p>Any setting can be given on the command line with <code>--name=value</code>; it wins over the files. The next
+chapters explain beans (step 3 and 5 above) and settings (step 1) in depth.</p>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Start the backend with <code>--debug</code> (<code>./mvnw spring-boot:run -Dspring-boot.run.arguments=--debug</code>)
+and find the <strong>CONDITIONS EVALUATION REPORT</strong> in the log. Look for <code>DataSourceAutoConfiguration</code>
+under "Positive matches" and <code>UserDetailsServiceAutoConfiguration</code> under "Negative matches". You will
+understand every line of it by the end of Level 4.</li>
+<li>Stop the backend, change <code>server.port</code> in <code>application.yml</code> to 8081, start it again and
+check the log line "Tomcat started on port".</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>Why do the dependencies in EduMate's <code>pom.xml</code> have no version numbers?</summary>
+<div>The parent <code>spring-boot-starter-parent</code> provides a bill of materials with tested versions for them.
+Only libraries outside that list (like <code>embedded-postgres</code>) need an explicit version.</div></details>
+<details class="quiz"><summary>What three annotations does <code>@SpringBootApplication</code> combine?</summary>
+<div><code>@SpringBootConfiguration</code>, <code>@EnableAutoConfiguration</code> and <code>@ComponentScan</code>.</div></details>
+<details class="quiz"><summary>Why is the PostgreSQL driver in <code>runtime</code> scope?</summary>
+<div>EduMate's code never imports the driver's classes; it talks to the standard JDBC and JPA interfaces. The driver
+is only needed when the program runs, so it is kept off the compile classpath.</div></details>
+<details class="quiz"><summary>Your new controller answers 403 although you are logged in. Why, in EduMate?</summary>
+<div>The <code>RoleMatrix</code> ends with <code>anyRequest().denyAll()</code>: an address that is not listed is
+refused for everyone. Add a rule for it.</div></details>

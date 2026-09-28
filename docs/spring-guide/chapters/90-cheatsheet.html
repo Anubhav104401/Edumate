@@ -1,0 +1,99 @@
+<!-- level: 5 -->
+<h1>Annotation cheat-sheet</h1>
+
+<p class="lead">Every annotation EduMate uses, and the most important ones it does not, with one line of meaning and
+where to see it. The number after an annotation is roughly how many times it appears in EduMate's backend (code and comments).</p>
+
+<h2>Application and configuration</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Annotation</th><th>Meaning</th><th>In EduMate</th></tr></thead>
+<tbody>
+<tr><td><code>@SpringBootApplication</code></td><td>configuration + auto-configuration + component scanning from this package</td><td><code>EduMateApplication</code></td></tr>
+<tr><td><code>@Configuration</code> (3)</td><td>a class that declares beans with <code>@Bean</code> methods</td><td><code>ClockConfig</code>, <code>SecurityConfig</code>, <code>WebConfig</code></td></tr>
+<tr><td><code>@Bean</code> (6)</td><td>the method's return value is a bean</td><td><code>clock()</code>, <code>passwordEncoder()</code>, <code>jwtDecoder(…)</code></td></tr>
+<tr><td><code>@Component</code> (17), <code>@Service</code> (24)</td><td>this class is a bean (found by scanning)</td><td><code>RoleMatrix</code>; <code>AttendanceCaptureService</code></td></tr>
+<tr><td><code>@Repository</code></td><td>a data-access bean with exception translation</td><td>(implicit on Spring Data interfaces)</td></tr>
+<tr><td><code>@Autowired</code> (7)</td><td>inject here (needed on fields/setters; optional on a single constructor)</td><td>test classes only</td></tr>
+<tr><td><code>@Qualifier</code> (1)</td><td>choose a bean by name among several of the same type</td><td><code>RoleMatrixCoverageTest</code></td></tr>
+<tr><td><code>@Primary</code></td><td>the default choice among several beans of one type</td><td>–</td></tr>
+<tr><td><code>@Order</code> (2)</td><td>ordering among runners, filters, listeners, aspects</td><td><code>TenantProvisioner</code> (1), <code>DemoDataSeeder</code> (2)</td></tr>
+<tr><td><code>@Profile("dev")</code></td><td>create the bean only when a profile is active</td><td>–</td></tr>
+<tr><td><code>@ConditionalOnProperty</code></td><td>create the bean only for a setting value</td><td><code>DemoDataSeeder</code></td></tr>
+<tr><td><code>@ConditionalOnMissingBean</code>, <code>@ConditionalOnClass</code></td><td>the building blocks of auto-configuration</td><td>(Boot's auto-configurations)</td></tr>
+<tr><td><code>@ConfigurationProperties(prefix)</code> (1)</td><td>bind settings under a prefix into a typed object</td><td><code>AppProperties</code></td></tr>
+<tr><td><code>@ConfigurationPropertiesScan</code> (1)</td><td>find <code>@ConfigurationProperties</code> classes</td><td><code>EduMateApplication</code></td></tr>
+<tr><td><code>@Value("${…}")</code></td><td>inject one setting</td><td>–</td></tr>
+<tr><td><code>@PostConstruct</code>, <code>@PreDestroy</code></td><td>run after injection / before destruction</td><td>–</td></tr>
+<tr><td><code>@Lazy</code></td><td>create on first use</td><td>–</td></tr>
+<tr><td><code>@EnableCaching</code>, <code>@EnableScheduling</code>, <code>@EnableAsync</code></td><td>switch on proxy-based features</td><td>first two on <code>EduMateApplication</code></td></tr>
+</tbody></table></div>
+
+<h2>Web (Spring MVC)</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Annotation</th><th>Meaning</th><th>In EduMate</th></tr></thead>
+<tbody>
+<tr><td><code>@RestController</code> (17)</td><td>controller whose return values are the response body (JSON)</td><td>every <code>*Controller</code></td></tr>
+<tr><td><code>@RequestMapping</code> (16)</td><td>a path prefix (on the class) or a mapping</td><td><code>@RequestMapping("/api/attendance")</code></td></tr>
+<tr><td><code>@GetMapping</code> (40), <code>@PostMapping</code> (18), <code>@PutMapping</code> (4), <code>@DeleteMapping</code> (1)</td><td>method + path</td><td>–</td></tr>
+<tr><td><code>@PathVariable</code> (23)</td><td>a part of the path</td><td><code>/courses/{courseId}/summary</code></td></tr>
+<tr><td><code>@RequestParam</code> (32)</td><td>a query parameter or form field (also files)</td><td><code>?section=A</code>; <code>MultipartFile file</code></td></tr>
+<tr><td><code>@RequestBody</code> (15)</td><td>the JSON body as an object</td><td><code>SaveSheetRequest</code></td></tr>
+<tr><td><code>@DateTimeFormat</code> (1)</td><td>how to parse a date parameter</td><td><code>AttendanceController.loadSheet</code></td></tr>
+<tr><td><code>@ResponseStatus</code></td><td>the status of a successful response</td><td>– (EduMate uses <code>ResponseEntity</code>)</td></tr>
+<tr><td><code>@RestControllerAdvice</code> (1)</td><td>shared exception handling for all controllers</td><td><code>GlobalExceptionHandler</code></td></tr>
+<tr><td><code>@ExceptionHandler</code> (11)</td><td>turn an exception type into a response</td><td><code>GlobalExceptionHandler</code></td></tr>
+</tbody></table></div>
+
+<h2>Validation (Jakarta Bean Validation)</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Annotation</th><th>Meaning</th><th>In EduMate</th></tr></thead>
+<tbody>
+<tr><td><code>@Valid</code> (16)</td><td>validate this parameter / nested object</td><td>every <code>@RequestBody</code></td></tr>
+<tr><td><code>@NotNull</code> (13), <code>@NotBlank</code> (17), <code>@NotEmpty</code> (1)</td><td>required; non-blank text; non-empty collection</td><td><code>ApplicationForm</code>, <code>SaveSheetRequest</code></td></tr>
+<tr><td><code>@Size</code> (12), <code>@Min</code> (7), <code>@Max</code> (6)</td><td>length / number ranges</td><td><code>@Min(1) @Max(6) int period</code></td></tr>
+<tr><td><code>@DecimalMin</code>, <code>@DecimalMax</code> (3 each)</td><td>decimal ranges</td><td>entrance scores</td></tr>
+<tr><td><code>@Email</code> (2), <code>@Pattern</code> (6), <code>@Past</code> (1)</td><td>formats and dates</td><td><code>ApplicationForm</code></td></tr>
+<tr><td><code>@Validated</code></td><td>validate method parameters of a bean, or a properties class</td><td>–</td></tr>
+</tbody></table></div>
+
+<h2>Persistence (JPA and Spring Data)</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Annotation</th><th>Meaning</th><th>In EduMate</th></tr></thead>
+<tbody>
+<tr><td><code>@Entity</code> (24), <code>@Table</code> (24)</td><td>a class stored in a table</td><td><code>ResultSet</code>, <code>AttendanceSession</code>…</td></tr>
+<tr><td><code>@Id</code> (24), <code>@GeneratedValue</code> (23)</td><td>primary key and how it is generated</td><td><code>IDENTITY</code> everywhere</td></tr>
+<tr><td><code>@Column</code> (181)</td><td>column name, nullability, length</td><td>every entity</td></tr>
+<tr><td><code>@Enumerated(EnumType.STRING)</code> (4)</td><td>store an enum by name</td><td><code>ResultSet.status</code></td></tr>
+<tr><td><code>@Version</code> (8)</td><td>optimistic locking</td><td>attendance sessions, marks, result sets, payments, books, applications</td></tr>
+<tr><td><code>@ManyToOne</code>, <code>@OneToMany</code>, <code>@JoinColumn</code></td><td>relationships as object references</td><td>– (EduMate stores ids)</td></tr>
+<tr><td><code>@Query</code> (17), <code>@Param</code> (38)</td><td>a JPQL (or native) query and its named parameters</td><td><code>AdmissionApplicationRepository.search</code></td></tr>
+<tr><td><code>@Modifying</code> (3)</td><td>an update/delete query</td><td><code>publishIfApproved</code></td></tr>
+<tr><td><code>@Lock</code> (1)</td><td>lock the rows read (<code>FOR UPDATE</code>)</td><td><code>findByGatewayOrderIdForUpdate</code></td></tr>
+<tr><td><code>@Transactional</code> (60)</td><td>run in a transaction; <code>readOnly</code>, <code>noRollbackFor</code>, <code>propagation</code>…</td><td>services</td></tr>
+</tbody></table></div>
+
+<h2>Security, caching, scheduling, events</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Annotation</th><th>Meaning</th><th>In EduMate</th></tr></thead>
+<tbody>
+<tr><td><code>@EnableWebSecurity</code>, <code>@EnableMethodSecurity</code></td><td>switch on web and method security</td><td><code>SecurityConfig</code></td></tr>
+<tr><td><code>@PreAuthorize("…")</code></td><td>check an expression before a method runs</td><td>– (EduMate uses the RoleMatrix)</td></tr>
+<tr><td><code>@Cacheable</code>, <code>@CacheEvict</code>, <code>@CachePut</code></td><td>cache results / remove / refresh entries</td><td><code>ResultQueryService</code>, <code>ResultPublicationService</code></td></tr>
+<tr><td><code>@Scheduled</code> (1)</td><td>run on a timer (<code>fixedDelay</code>, <code>fixedRate</code>, <code>cron</code>)</td><td><code>NotificationDispatcher</code></td></tr>
+<tr><td><code>@Async</code></td><td>run on another thread</td><td>–</td></tr>
+<tr><td><code>@EventListener</code>, <code>@TransactionalEventListener</code></td><td>react to application events</td><td>– (see the events chapter)</td></tr>
+<tr><td><code>@Retryable</code>, <code>@ConcurrencyLimit</code></td><td>core resilience (Spring Framework 7)</td><td>– (see the clients chapter)</td></tr>
+</tbody></table></div>
+
+<h2>Testing</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Annotation</th><th>Meaning</th><th>In EduMate</th></tr></thead>
+<tbody>
+<tr><td><code>@Test</code> (42), <code>@DisplayName</code> (23)</td><td>a JUnit test and its readable name</td><td>every test class</td></tr>
+<tr><td><code>@ParameterizedTest</code> (4), <code>@CsvSource</code> (4)</td><td>one test, many data rows</td><td><code>EligibilityEvaluatorTest</code></td></tr>
+<tr><td><code>@SpringBootTest</code> (1), <code>@AutoConfigureMockMvc</code></td><td>start the whole application; provide MockMvc</td><td><code>IntegrationTestBase</code></td></tr>
+<tr><td><code>@TestPropertySource</code> (1), <code>@DynamicPropertySource</code> (1)</td><td>test settings, fixed or computed at run time</td><td><code>IntegrationTestBase</code>, <code>PostgresCompatibilityTest</code></td></tr>
+<tr><td><code>@WebMvcTest</code>, <code>@DataJpaTest</code></td><td>start one layer only</td><td>–</td></tr>
+<tr><td><code>@MockitoBean</code></td><td>replace a bean with a mock</td><td>–</td></tr>
+<tr><td><code>@WithMockUser</code></td><td>a fake authenticated user</td><td>–</td></tr>
+</tbody></table></div>

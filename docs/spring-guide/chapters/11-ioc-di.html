@@ -1,0 +1,196 @@
+<!-- level: 1 -->
+<h1>Beans and dependency injection: the heart of Spring</h1>
+
+<p class="lead">Everything else in Spring is built on one idea: <strong>you do not create your important objects;
+the container does, and it hands each object the others it needs.</strong> Understand this chapter well and the rest
+of the framework stops feeling like magic.</p>
+
+<h2>The problem: wiring objects by hand</h2>
+<p>EduMate's <code>AttendanceController</code> needs an <code>AttendanceCaptureService</code>. That service needs two
+repositories, a student repository, a course-access checker, an audit logger, a shortfall notifier and a clock. The
+notifier needs a summary service, which needs more repositories and the settings… Without a framework, some
+<code>main</code> method would have to build the whole tree, in the right order:</p>
+<pre class="code" data-lang="java">// Imagine this for all 120 classes of EduMate…
+AppProperties properties = loadPropertiesSomehow();
+Clock clock = Clock.system(ZoneId.of("Asia/Kolkata"));
+DataSource dataSource = new HikariDataSource(/* url, user, password, pool size… */);
+AttendanceSessionRepository sessions = new JdbcAttendanceSessionRepository(dataSource);
+AttendanceRecordRepository records = new JdbcAttendanceRecordRepository(dataSource);
+StudentRepository students = new JdbcStudentRepository(dataSource);
+AuditLogger audit = new AuditLogger(new JdbcAuditRepository(dataSource), clock);
+AttendanceSummaryService summary = new AttendanceSummaryService(records, /* 4 more… */);
+ShortfallNotifier notifier = new ShortfallNotifier(summary, students, /* notifications */, clock);
+AttendanceCaptureService capture = new AttendanceCaptureService(sessions, records, students,
+        new CourseAccess(/* … */), audit, notifier, clock);
+AttendanceController controller = new AttendanceController(capture, summary, notifier, /* … */);</pre>
+<p>This is fragile (change one constructor and fix ten places), repetitive, and it gets harder when some objects must
+be shared (one clock, one connection pool) and others must be wrapped with extra behaviour (transactions, security,
+caching).</p>
+
+<h2>Inversion of Control and Dependency Injection</h2>
+<div class="callout note"><strong>Like a film set</strong>
+An actor does not hire the camera crew or build the set. They say what they need for a scene ("a chair, a phone"),
+and the production team provides it before the camera rolls. In Spring, your class is the actor: its constructor
+lists what it needs, and the <strong>container</strong> is the production team.</div>
+<ul>
+<li><strong>Inversion of Control (IoC)</strong>: the framework, not your code, controls when objects are created and
+how they are connected. You describe; it builds.</li>
+<li><strong>Dependency Injection (DI)</strong>: the specific technique: an object receives the objects it depends on
+("dependencies") from outside, usually through its constructor, instead of creating them itself.</li>
+<li>A <strong>bean</strong> is simply an object that the Spring container creates and manages. EduMate has a few hundred:
+its own services, controllers and repositories, plus the ones Spring Boot creates (the data source, the JSON mapper,
+the security filters…).</li>
+<li>The container is the <strong><code>ApplicationContext</code></strong>. <code>SpringApplication.run</code> creates it.</li>
+</ul>
+
+<h2>Constructor injection, in a real class</h2>
+<pre class="code" data-src="backend/src/main/java/com/edumate/attendance/AttendanceCaptureService.java" data-lines="41-62" data-expect="public AttendanceCaptureService(" data-hl="1,12-14"></pre>
+<p>Read it as a sentence: "<em>I am a service. To exist, I need these seven things.</em>" That is all. When Spring
+creates this bean it looks at the constructor, finds a bean for each parameter type (the two repositories, the
+student repository, <code>CourseAccess</code>, <code>AuditLogger</code>, <code>ShortfallNotifier</code>,
+<code>Clock</code>), creates those first if necessary, and calls the constructor.</p>
+<ul>
+<li><strong>No <code>@Autowired</code> is needed</strong>: when a class has exactly one constructor, Spring uses it.</li>
+<li><strong>Fields are <code>final</code></strong>: once built, the service can never lose or swap a collaborator. That
+also makes it safe to share between threads (see scopes below).</li>
+<li><strong>The class does not know Spring exists.</strong> Nothing in the constructor mentions the container. A test
+can call <code>new AttendanceCaptureService(...)</code> with test doubles.</li>
+</ul>
+
+<div class="callout tip"><strong>Always prefer constructor injection</strong>
+The older styles are <em>field injection</em> (<code>@Autowired private Foo foo;</code>) and <em>setter injection</em>.
+Field injection hides what a class needs, cannot use <code>final</code>, and forces tests to use reflection or Spring.
+Use constructor injection in application code. In test classes, field injection is fine and common: EduMate's
+<code>IntegrationTestBase</code> uses <code>@Autowired protected MockMvc mvc;</code>.</div>
+
+<h2>How Spring finds your beans: stereotypes and scanning</h2>
+<p>During start-up Spring scans the package of the main class and everything below it for classes with one of these
+annotations (all of them are forms of <code>@Component</code>):</p>
+<table>
+<thead><tr><th>Annotation</th><th>Use it for</th><th>Extra behaviour</th><th>EduMate example</th></tr></thead>
+<tbody>
+<tr><td><code>@Component</code></td><td>any general bean</td><td>none</td><td><code>RoleMatrix</code>, <code>NotificationDispatcher</code>, <code>LocalFileObjectStore</code></td></tr>
+<tr><td><code>@Service</code></td><td>business logic</td><td>none (it documents intent)</td><td><code>AttendanceCaptureService</code>, <code>PaymentOrchestrator</code></td></tr>
+<tr><td><code>@Repository</code></td><td>data access classes</td><td>translates database exceptions into Spring's <code>DataAccessException</code> family</td><td>(Spring Data interfaces get this automatically)</td></tr>
+<tr><td><code>@Controller</code> / <code>@RestController</code></td><td>web endpoints</td><td>registered with Spring MVC; <code>@RestController</code> writes return values as JSON</td><td><code>AttendanceController</code></td></tr>
+<tr><td><code>@Configuration</code></td><td>classes that declare beans with <code>@Bean</code> methods</td><td>its <code>@Bean</code> methods are intercepted (see below)</td><td><code>ClockConfig</code>, <code>SecurityConfig</code>, <code>WebConfig</code></td></tr>
+</tbody></table>
+<p>Interfaces that extend a Spring Data repository (<code>interface AttendanceSessionRepository extends
+JpaRepository&lt;…&gt;</code>) are found too, and Spring Data generates their implementation at start-up.</p>
+
+<h2><code>@Bean</code>: beans made from classes you do not own</h2>
+<p>You cannot put <code>@Component</code> on <code>java.time.Clock</code> or on Spring Security's
+<code>BCryptPasswordEncoder</code>: they are not your classes. Instead, a <code>@Configuration</code> class has a
+method that <em>makes</em> the object, marked <code>@Bean</code>:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/config/ClockConfig.java" data-lines="14-24" data-expect="Clock.system(CAMPUS_ZONE)"></pre>
+<p>The method's return value becomes a bean named after the method (<code>clock</code>). Every class that asks for a
+<code>Clock</code> in its constructor, and there are many, receives this same object. Why not just call
+<code>LocalDate.now()</code> everywhere? Because a test can then replace this one bean with a fixed clock
+(<code>Clock.fixed(...)</code>) and get the same "today" on every run: "attendance for a future date" and "the loan is
+3 days late" become testable.</p>
+<p><code>@Bean</code> methods can ask for other beans as <strong>parameters</strong>:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/security/SecurityConfig.java" data-lines="75-99" data-expect="public JwtDecoder jwtDecoder(SecretKey jwtSigningKey)"></pre>
+<p><code>jwtSigningKey</code> needs the settings (<code>AppProperties</code>); <code>jwtEncoder</code> and
+<code>jwtDecoder</code> both need the key. Spring works out the order. Notice the check in
+<code>jwtSigningKey</code>: a secret shorter than 32 bytes stops the application at start-up with a clear message,
+which is far better than a security weakness discovered in production.</p>
+
+<div class="callout deep"><strong>Under the hood: why <code>@Configuration</code> classes are special</strong>
+Spring creates a subclass of every <code>@Configuration</code> class at start-up (with a library called CGLIB). The
+subclass intercepts <code>@Bean</code> methods, so if one <code>@Bean</code> method <em>called</em> another
+(<code>return new NimbusJwtEncoder(new ImmutableSecret&lt;&gt;(jwtSigningKey()))</code>), it would still receive the
+one shared key instead of a new one. Passing beans as parameters, as EduMate does, avoids relying on that trick
+altogether; such classes can even be marked <code>@Configuration(proxyBeanMethods = false)</code> to skip the subclass.
+Spring Boot's own auto-configurations do exactly that.</div>
+
+<h2>Depend on interfaces, choose the implementation in one place</h2>
+<p>EduMate queues e-mails and SMS, and a dispatcher hands them to a <em>gateway</em>. The dispatcher depends on an
+interface:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/notifications/NotificationGateway.java" data-lines="3-12" data-expect="void send(NotificationMessage message);"></pre>
+<p>and there is exactly one implementation bean, which only writes to the log:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/notifications/LoggingNotificationGateway.java" data-lines="7-18" data-expect="implements NotificationGateway"></pre>
+<p><code>NotificationDispatcher</code>'s constructor asks for a <code>NotificationGateway</code>, and Spring supplies the
+only one there is. To send real SMS, you would write <code>SmsProviderGateway implements NotificationGateway</code>;
+nothing that <em>uses</em> the gateway changes. The same pattern is used for file storage: services depend on the
+<code>ObjectStore</code> interface, and <code>LocalFileObjectStore</code> keeps files in a folder; an S3 version would
+be one new class.</p>
+
+<h3>When there is more than one candidate</h3>
+<p>Add <code>SmsProviderGateway</code> without removing the logging one, and start-up fails:</p>
+<pre class="code" data-lang="text">Parameter 1 of constructor in com.edumate.notifications.NotificationDispatcher required a single bean,
+but 2 were found:
+	- loggingNotificationGateway: defined in file [.../LoggingNotificationGateway.class]
+	- smsProviderGateway: defined in file [.../SmsProviderGateway.class]</pre>
+<p>Spring refuses to guess. You choose, in one of these ways:</p>
+<table>
+<thead><tr><th>Technique</th><th>How</th><th>Best when</th></tr></thead>
+<tbody>
+<tr><td><strong>Only create one</strong></td><td><code>@Profile("dev")</code> on the logging gateway, <code>@Profile("docker")</code> on the real one; or <code>@ConditionalOnProperty</code></td><td>the choice depends on the environment (usually the best answer)</td></tr>
+<tr><td><code>@Primary</code></td><td>on the preferred implementation</td><td>one is the normal choice, others are for special cases</td></tr>
+<tr><td><code>@Qualifier("name")</code></td><td>on the constructor parameter, naming the bean</td><td>a particular user needs a particular implementation</td></tr>
+<tr><td><code>List&lt;NotificationGateway&gt;</code></td><td>ask for all of them</td><td>you want every implementation (e.g. send by e-mail <em>and</em> SMS)</td></tr>
+</tbody></table>
+<p>EduMate's test <code>RoleMatrixCoverageTest</code> uses a qualifier, because Spring MVC registers several beans of
+type <code>RequestMappingHandlerMapping</code> and the test wants the main one:</p>
+<pre class="code" data-src="backend/src/test/java/com/edumate/security/RoleMatrixCoverageTest.java" data-lines="33-35" data-expect="@Qualifier(&quot;requestMappingHandlerMapping&quot;)"></pre>
+
+<h2>DI makes code testable without Spring</h2>
+<p>Because classes receive their collaborators, a unit test can build them directly:</p>
+<pre class="code" data-src="backend/src/test/java/com/edumate/attendance/EligibilityEvaluatorTest.java" data-lines="20-22" data-expect="new EligibilityEvaluator(TestFixtures.properties())"></pre>
+<p>No container is started; the test runs in milliseconds. <code>TestFixtures.properties()</code> builds the settings
+record by hand. The Level 3 testing chapter shows when to start the whole container instead.</p>
+
+<h2>Scopes: how many objects, and for how long</h2>
+<table>
+<thead><tr><th>Scope</th><th>How many instances</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td><strong>singleton</strong> (default)</td><td>one per container, shared by everyone</td><td>services, repositories, controllers: almost everything</td></tr>
+<tr><td>prototype</td><td>a new one every time it is requested</td><td>rare: stateful helpers</td></tr>
+<tr><td>request / session</td><td>one per HTTP request / per HTTP session</td><td>rare in stateless REST APIs like EduMate</td></tr>
+</tbody></table>
+<div class="callout warn"><strong>Singletons are shared by all requests at the same time</strong>
+Tomcat serves many requests in parallel, each on its own thread, and they all use the <em>same</em>
+<code>AttendanceCaptureService</code> object. So a singleton must be <strong>stateless</strong>: no field may hold data
+about one request (the current user, a running total…). Keep that data in local variables and parameters. EduMate's
+services only have <code>final</code> fields holding other beans. <code>RoleMatrix</code> fills its list once, in the
+constructor, and afterwards only reads it; <code>rules()</code> even hands out a copy.</div>
+
+<h2>A few more things you will meet</h2>
+<ul>
+<li><strong>Bean names</strong> default to the class name with a small first letter (<code>attendanceCaptureService</code>)
+or the <code>@Bean</code> method name (<code>clock</code>).</li>
+<li><strong><code>ObjectProvider&lt;T&gt;</code></strong>: inject it instead of <code>T</code> to get the bean lazily,
+or only if it exists (<code>getIfAvailable()</code>).</li>
+<li><strong>Optional dependencies</strong>: a constructor parameter of type <code>Optional&lt;T&gt;</code> receives an
+empty Optional when no such bean exists.</li>
+<li><strong>Circular dependencies</strong> (A needs B, B needs A) make start-up fail. Spring Boot refuses them by
+default since version 2.6, because they usually signal a design problem. Break the cycle: extract the shared part into
+a third bean, or let one side publish an event.</li>
+<li><strong>Never fetch beans by hand</strong> with <code>context.getBean(...)</code> in application code (the
+"service locator" style). It hides dependencies just like field injection does.</li>
+</ul>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Put a breakpoint in the constructor of <code>AttendanceCaptureService</code> and start the backend in debug mode.
+Look at the call stack: you will see <code>AbstractAutowireCapableBeanFactory.createBean</code> and
+<code>ConstructorResolver.autowireConstructor</code>, Spring creating your bean.</li>
+<li>Create a second class implementing <code>NotificationGateway</code> and read the start-up error. Then add
+<code>@Primary</code> to it and watch the dispatcher use it.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>What is the difference between IoC and DI?</summary>
+<div>Inversion of Control is the general principle that the framework controls object creation and the flow; Dependency
+Injection is the concrete technique of handing an object its collaborators from outside (in Spring, usually through the
+constructor).</div></details>
+<details class="quiz"><summary>When do you use <code>@Bean</code> instead of <code>@Component</code>?</summary>
+<div>When the class is not yours (a JDK or library class such as <code>Clock</code>, <code>PasswordEncoder</code>,
+<code>JwtDecoder</code>), or when creating the object needs code (reading a setting, checking a secret's length,
+choosing an implementation).</div></details>
+<details class="quiz"><summary>Why must a singleton service not keep "the current user" in a field?</summary>
+<div>The same instance serves many requests in parallel threads. A field would be overwritten by another request while
+the first is still running, mixing up users. Request data belongs in parameters and local variables.</div></details>
+<details class="quiz"><summary>Two beans implement the same interface and start-up fails. Name three fixes.</summary>
+<div>Create only one (profiles or conditions), mark one <code>@Primary</code>, or name the wanted one with
+<code>@Qualifier</code> at the injection point. (Or inject a <code>List</code> of all of them.)</div></details>

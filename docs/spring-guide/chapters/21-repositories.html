@@ -1,0 +1,132 @@
+<!-- level: 2 -->
+<h1>Spring Data repositories: queries without boilerplate</h1>
+
+<p class="lead">A repository is an interface. You declare what you want, Spring Data writes the implementation at
+start-up. This chapter covers the free methods, queries derived from method names, hand-written JPQL, projections,
+bulk updates, locking and paging, all from EduMate's repositories.</p>
+
+<h2>The smallest repository</h2>
+<pre class="code" data-src="backend/src/main/java/com/edumate/attendance/MedicalExemptionRepository.java" data-lines="7-13" data-expect="extends JpaRepository&lt;MedicalExemption, Long&gt;"></pre>
+<p>Extending <code>JpaRepository&lt;Entity, IdType&gt;</code> gives you, without writing anything:</p>
+<table>
+<thead><tr><th>Method</th><th>Does</th></tr></thead>
+<tbody>
+<tr><td><code>save(entity)</code>, <code>saveAll(list)</code></td><td>insert a new entity or merge a detached one; returns the managed entity (with its generated id)</td></tr>
+<tr><td><code>findById(id)</code></td><td>an <code>Optional</code>: empty if there is no such row</td></tr>
+<tr><td><code>findAll()</code>, <code>findAll(Sort)</code>, <code>findAll(Pageable)</code></td><td>everything, sorted, or one page</td></tr>
+<tr><td><code>existsById</code>, <code>count()</code></td><td>quick checks</td></tr>
+<tr><td><code>delete(entity)</code>, <code>deleteById(id)</code></td><td>remove</td></tr>
+<tr><td><code>flush()</code>, <code>saveAndFlush</code></td><td>send pending SQL now (used by EduMate to detect a lost race inside the request)</td></tr>
+</tbody></table>
+<p>Every call runs in a transaction (a read-only one for the finders) unless you are already inside one.</p>
+
+<h2>Derived queries: the method name is the query</h2>
+<p>Spring Data parses the method name at start-up and builds the query. A misspelt property is a start-up error, not a
+runtime surprise.</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/academic/StudentRepository.java" data-lines="11-17" data-expect="findByProgramIdAndSemesterAndSectionOrderByUsn"></pre>
+<p><code>findByProgramIdAndSemesterAndSectionOrderByUsn(programId, semester, section)</code> becomes
+<code>select s from Student s where s.programId = ?1 and s.semester = ?2 and s.section = ?3 order by s.usn</code>. The
+grammar:</p>
+<table>
+<thead><tr><th>Part</th><th>Examples from EduMate and beyond</th></tr></thead>
+<tbody>
+<tr><td>Subject</td><td><code>findBy</code>, <code>existsBy</code>, <code>countBy</code>, <code>deleteBy</code>, <code>findFirstBy</code>, <code>findTop10By</code>, <code>findDistinctBy</code></td></tr>
+<tr><td>Conditions</td><td><code>And</code>, <code>Or</code>; <code>…In(Collection)</code>, <code>…Between</code>, <code>…LessThan</code>, <code>…IsNull</code>, <code>…Containing</code>, <code>…StartingWith</code>, <code>…IgnoreCase</code>, <code>…True</code> (<code>findByStudentIdAndApprovedTrue</code>)</td></tr>
+<tr><td>Order</td><td><code>OrderByUsn</code>, <code>OrderByDayOfWeekAscPeriodAsc</code>, <code>OrderByCreatedAtDesc</code></td></tr>
+<tr><td>Return type</td><td><code>Optional&lt;T&gt;</code> (0 or 1), <code>List&lt;T&gt;</code>, <code>Page&lt;T&gt;</code>, <code>Stream&lt;T&gt;</code>, <code>boolean</code>, <code>long</code></td></tr>
+</tbody></table>
+<p>EduMate's <code>findFirstByApplicantUserIdOrderByIdDesc(userId)</code> ("the newest application of this user") shows
+how far this goes. When a name grows longer than that, switch to <code>@Query</code>.</p>
+
+<h2><code>@Query</code>: JPQL when names are not enough</h2>
+<p><strong>JPQL</strong> looks like SQL but speaks about entities and their fields; Hibernate translates it into the SQL
+dialect of whatever database is connected. Here is a search with optional filters:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/admissions/AdmissionApplicationRepository.java" data-lines="18-29" data-expect="(:status is null or a.status = :status)"></pre>
+<ul>
+<li><code>:campus</code>, <code>:status</code>, <code>:q</code> are <strong>named parameters</strong>, bound by
+<code>@Param</code>. Values are sent separately from the query text, so they can never change the query itself: no SQL
+injection, whatever the user types into the search box.</li>
+<li><code>(:status is null or …)</code> makes a filter optional in one query.</li>
+<li>Java text blocks (<code>"""…"""</code>) keep multi-line queries readable.</li>
+<li>Queries are checked when the application starts; a typo stops start-up with the query and the error.</li>
+</ul>
+
+<h3>Projections: select only what you need, straight into a record</h3>
+<p>Loading whole entities to compute a few numbers is wasteful. A <strong>constructor expression</strong> builds result
+records directly in the query:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/attendance/AttendanceRecordRepository.java" data-lines="18-26" data-expect="select new com.edumate.attendance.AttendanceCount"></pre>
+<p>The database groups and counts; only one small row per course travels to Java, and the result is a list of
+<code>AttendanceCount</code> records (<code>key</code>, <code>held</code>, <code>attended</code>). One query for a
+student's whole semester, whatever the number of classes. This is how EduMate avoids the N+1 problem: think in
+<em>sets</em> (one query for the cohort), not in loops (one query per student).</p>
+<div class="callout tip"><strong>Other projection styles</strong>
+Spring Data also accepts an <em>interface</em> projection (declare <code>interface CourseName { String getCode();
+String getName(); }</code> and return <code>List&lt;CourseName&gt;</code>) or a record type as the return type of a
+derived query. Constructor expressions are the most explicit and work everywhere.</div>
+
+<h2>Changing many rows at once: <code>@Modifying</code></h2>
+<p>An <code>update</code> or <code>delete</code> query needs <code>@Modifying</code>. EduMate uses one for the most
+safety-critical write in the system, publishing results:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/exam/ResultSetRepository.java" data-lines="19-33" data-expect="int publishIfApproved("></pre>
+<p>The whole decision "is it still approved? then publish it" happens in <strong>one</strong> SQL statement. The
+database executes it atomically: if two superintendents press Publish at the same moment, only one
+<code>UPDATE</code> finds the row still <code>APPROVED</code>; the method returns <code>1</code> for that one and
+<code>0</code> for the other, which the service turns into a clear refusal. The earlier design (read the status in Java,
+then write it) let both succeed.</p>
+<ul>
+<li><code>flushAutomatically = true</code>: write any pending changes <em>before</em> the bulk statement, so it sees them.</li>
+<li><code>clearAutomatically = true</code>: empty the persistence context <em>after</em> it, because bulk statements
+bypass dirty checking and loaded entities would otherwise show stale values.</li>
+<li>Bulk statements skip entity callbacks and <code>@Version</code> checks; that is why this query increments
+<code>version</code> itself.</li>
+</ul>
+
+<h2>Locking a row: <code>@Lock</code></h2>
+<p>When a payment callback arrives, EduMate must be sure no other thread handles the same payment at the same time:</p>
+<pre class="code" data-src="backend/src/main/java/com/edumate/fees/PaymentRepository.java" data-lines="20-27" data-expect="@Lock(LockModeType.PESSIMISTIC_WRITE)"></pre>
+<p><code>PESSIMISTIC_WRITE</code> adds <code>FOR UPDATE</code> to the SQL: the database locks the row until the
+transaction ends, and a second callback for the same order waits, then sees the payment already marked SUCCESS. The
+transactions chapter compares this with optimistic locking.</p>
+
+<h2>Paging and sorting</h2>
+<pre class="code" data-lang="java">List&lt;Payment&gt; findAllByOrderByCreatedAtDesc(Pageable pageable);     // PaymentRepository
+
+// FeeAccountService.recent: "the 200 newest payments" (page 0, 200 per page)
+payments.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 200));</pre>
+<p>A <code>Pageable</code> parameter adds <code>LIMIT</code>/<code>OFFSET</code> (page number and size, optionally a
+sort). Return <code>Page&lt;T&gt;</code> instead of <code>List&lt;T&gt;</code> to also get the total count (one extra
+<code>count</code> query), useful for "page 3 of 12" in a table. The outbox dispatcher uses the same technique to take at
+most 50 pending messages per run.</p>
+
+<h2>When to go below JPA</h2>
+<ul>
+<li><strong>Native queries</strong>: <code>@Query(value = "…", nativeQuery = true)</code> for database-specific SQL
+(window functions, JSON operators). You lose portability between H2 and PostgreSQL, so test on the real database.</li>
+<li><strong><code>JdbcTemplate</code> / <code>JdbcClient</code></strong>: plain SQL with Spring's help, no entities. EduMate's
+demo seeder inserts thousands of attendance rows with one batched <code>jdbc.batchUpdate(...)</code>, far faster than
+saving entities one by one.</li>
+<li><strong>Specifications / Querydsl</strong>: build queries dynamically from many optional filters.</li>
+</ul>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Add <code>long countByStudentIdAndReturnedOnIsNull(Long studentId)</code> to <code>BookLoanRepository</code>
+(check the entity's field names first) and use it to show the number of open loans somewhere.</li>
+<li>Misspell a property in a derived query name (<code>findByUsnn</code>) and read the start-up error.</li>
+<li>With SQL logging on, call <code>GET /api/attendance/me</code> and count the queries. Then imagine the same page
+written with one query per course and per class.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>Where does the implementation of <code>StudentRepository</code> come from?</summary>
+<div>Spring Data creates it at start-up (a proxy backed by a generic repository implementation), deriving each query
+from the method name or its <code>@Query</code>.</div></details>
+<details class="quiz"><summary>Why is <code>publishIfApproved</code> safe when two people publish at the same moment?</summary>
+<div>The check and the change are one atomic <code>UPDATE … WHERE status = 'APPROVED'</code>; only one statement can
+match the row, and the returned count tells each caller whether it won.</div></details>
+<details class="quiz"><summary>What does <code>clearAutomatically = true</code> protect you from?</summary>
+<div>From reading stale entities: a bulk update changes rows directly in the database, not the objects already loaded in
+the persistence context, so the context is cleared after it.</div></details>
+<details class="quiz"><summary>Why are named parameters immune to SQL injection?</summary>
+<div>The values are sent to the database separately from the query text (as bound parameters), so they are always
+treated as data, never as SQL.</div></details>

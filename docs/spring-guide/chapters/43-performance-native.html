@@ -1,0 +1,122 @@
+<!-- level: 4 -->
+<h1>Performance: threads, the database, start-up and native images</h1>
+
+<p class="lead">Most Spring applications are slow for a handful of reasons: too many database round trips, too few (or
+too many) connections, blocking on slow services, and heavy start-up. This chapter shows how to reason about each, and
+the newest tools: virtual threads, ahead-of-time processing and GraalVM native images.</p>
+
+<h2>First rule: measure</h2>
+<ul>
+<li><strong>Metrics</strong> (Actuator + Micrometer): <code>http.server.requests</code> by endpoint (count, mean, max,
+percentiles), <code>hikaricp.connections.pending</code> (requests waiting for a connection), <code>jvm.*</code>.</li>
+<li><strong>SQL logging</strong> in development: count the queries of one request.</li>
+<li><strong>Profilers</strong>: Java Flight Recorder (built into the JDK: <code>-XX:StartFlightRecording</code>) or
+async-profiler show where time really goes.</li>
+<li><strong>Load tests</strong> (k6, Gatling, JMeter) against a production-like set-up, with realistic data volumes: EduMate's
+demo seeds a 60-student cohort; results morning means thousands.</li>
+</ul>
+
+<h2>The request thread model and virtual threads</h2>
+<p>Spring MVC on Tomcat is <em>thread-per-request</em>: each request occupies one thread until its answer is written.
+While that thread waits for the database or a payment gateway, it does nothing but still costs memory (a platform thread
+has a large stack) and Tomcat's pool has a limit (200 by default). Under load, requests queue although the CPU is idle.</p>
+<p>Java 21's <strong>virtual threads</strong> are cheap threads managed by the JVM: millions can exist, and a virtual thread
+that blocks on I/O releases its carrier thread for others. One setting switches Spring Boot to them:</p>
+<pre class="code" data-lang="yaml">spring:
+  threads:
+    virtual:
+      enabled: true      # Tomcat request handling, @Async, the scheduler… run on virtual threads</pre>
+<ul>
+<li><strong>Helps</strong> when requests mostly <em>wait</em> (database, HTTP calls, file I/O) and you need high concurrency.</li>
+<li><strong>Does not help</strong> CPU-heavy work (EduMate's timetable solver) or a bottleneck elsewhere: if the connection
+pool has 10 connections, 10,000 virtual threads still get 10 queries at a time.</li>
+<li><strong>Watch for pinning</strong>: code that blocks while holding a monitor could pin the carrier thread in Java 21
+(largely fixed for <code>synchronized</code> in Java 24). Libraries have mostly adapted; keep dependencies current.</li>
+</ul>
+<p>With virtual threads, the classic Spring MVC style (simple, blocking, easy to debug) scales far enough for most
+applications; the next chapter compares it with reactive programming.</p>
+
+<h2>The database is usually the bottleneck</h2>
+<h3>Round trips</h3>
+<p>A query costs a network round trip plus database work. Ten fast queries are slower than one query that fetches the
+same data. EduMate's rules of thumb, seen throughout this course:</p>
+<ul>
+<li>One grouped query per screen instead of one per row (<code>countByCourseForStudent</code>): avoid N+1.</li>
+<li>Projections into records instead of whole entities when only a few columns are needed.</li>
+<li>Load related data for a whole set in one <code>…In(ids)</code> query (<code>findByStudentResultIdIn</code>), then join in
+memory with a map.</li>
+<li>Atomic conditional updates instead of read-modify-write (<code>publishIfApproved</code>).</li>
+<li><code>@Transactional(readOnly = true)</code> for reads; <code>open-in-view: false</code>.</li>
+<li>Cache what many users read and few change (<code>@Cacheable</code> on published results).</li>
+</ul>
+
+<h3>Batching writes, and an IDENTITY surprise</h3>
+<pre class="code" data-src="backend/src/main/resources/application.yml" data-lines="18-26" data-expect="batch_size: 50"></pre>
+<p>With <code>hibernate.jdbc.batch_size</code>, Hibernate groups many <code>UPDATE</code>s into one JDBC batch. But Hibernate
+<strong>cannot batch <code>INSERT</code>s for entities whose ids come from an <code>IDENTITY</code> column</strong>: it must
+send each insert alone to learn the generated id. EduMate's entities use <code>IDENTITY</code>, which is why the demo
+seeder inserts thousands of attendance rows with <code>JdbcTemplate.batchUpdate</code> instead of saving entities. For
+write-heavy entities, a <code>SEQUENCE</code> generator with an <code>allocationSize</code> (e.g. 50) lets Hibernate reserve ids
+in advance and batch the inserts.</p>
+
+<h3>Connection pool size</h3>
+<p>Counter-intuitively, a <em>small</em> pool is usually faster: a database with 4 cores does not run 100 queries at once
+any faster than 10; it just switches between them. HikariCP's default of 10 is a good start. Increase it only when
+metrics show requests waiting for connections <em>and</em> the database has spare capacity; and remember that every
+application instance has its own pool.</p>
+
+<h2>Start-up time and memory</h2>
+<table>
+<thead><tr><th>Technique</th><th>Effect</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td>Fewer dependencies and auto-configurations</td><td>less to scan, fewer beans</td><td>none; just discipline</td></tr>
+<tr><td><code>spring.main.lazy-initialization=true</code></td><td>beans created on first use</td><td>errors appear later; first requests slower</td></tr>
+<tr><td>Class Data Sharing / the JDK's AOT cache (Java 24+)</td><td>the JVM reuses class loading and linking work from a training run: often 30–50 % faster start</td><td>an extra training step in the build</td></tr>
+<tr><td>Spring AOT processing (<code>spring-boot:process-aot</code>)</td><td>bean definitions generated as code at build time instead of discovered at start</td><td>the classpath and conditions are fixed at build time</td></tr>
+<tr><td>GraalVM native image</td><td>start in a few tens of milliseconds, a fraction of the memory</td><td>long builds, a "closed world", no JIT warm-up gains</td></tr>
+<tr><td>CRaC (checkpoint/restore)</td><td>restore a warmed-up JVM from a snapshot</td><td>needs a CRaC-enabled JDK and care with open resources</td></tr>
+</tbody></table>
+
+<h2>GraalVM native images</h2>
+<p>A native image compiles the application and the parts of the JDK and libraries it uses into one operating-system
+executable, ahead of time. Spring Boot supports this directly:</p>
+<pre class="code" data-lang="bash"># with GraalVM installed (the Spring Boot parent defines a "native" profile)
+./mvnw -Pnative native:compile          # → target/edumate-backend (an executable, no JVM needed)
+./mvnw -Pnative spring-boot:build-image # → a container image with the native executable</pre>
+<p>How it works: at build time Spring runs its <strong>AOT engine</strong>: it evaluates the conditions, creates bean
+definitions as generated Java code, and records which classes need reflection, proxies, resources or serialization
+("runtime hints"). GraalVM then analyses everything reachable from <code>main</code> and leaves the rest out: the
+<em>closed-world assumption</em>.</p>
+<div class="callout warn"><strong>The closed world has rules</strong>
+<ul>
+<li>Profiles and <code>@Conditional</code> decisions are taken at build time; a native image built for one set of
+conditions cannot switch beans at run time (properties can still change values).</li>
+<li>Reflection, dynamic proxies and resources the analysis cannot see need hints: implement
+<code>RuntimeHintsRegistrar</code> and register it with <code>@ImportRuntimeHints</code>, or use
+<code>@RegisterReflectionForBinding</code>. Most Spring and popular libraries ship their hints already.</li>
+<li>Builds take minutes and much memory; test on the JVM, build native in CI.</li>
+<li>Peak throughput may be lower than a warmed-up JIT-compiled JVM; native shines where start-up and memory matter
+(serverless, scale-to-zero, many small instances, command-line tools).</li>
+</ul></div>
+<p>For EduMate, a long-running server with a steady load, the JVM is the right default; a native build would be worth
+it only for, say, a serverless payment-callback handler.</p>
+
+<div class="callout try"><strong>Try it</strong>
+<ol>
+<li>Start the backend with <code>spring.threads.virtual.enabled=true</code> and look at a thread dump
+(<code>jcmd &lt;pid&gt; Thread.dump_to_file -format=json dump.json</code>) during a request.</li>
+<li>Measure start-up time with and without <code>spring.main.lazy-initialization=true</code>.</li>
+<li>Count the SQL statements the demo seeder sends for attendance with SQL logging on, then imagine saving every row as an
+entity with IDENTITY ids.</li>
+</ol></div>
+
+<h3 class="quiz-title">Self-check</h3>
+<details class="quiz"><summary>When do virtual threads improve throughput, and when do they not?</summary>
+<div>They help when requests spend most of their time blocked on I/O and concurrency is limited by threads. They do not
+help CPU-bound work or when another resource (the connection pool, the database) is the limit.</div></details>
+<details class="quiz"><summary>Why can Hibernate not batch inserts of IDENTITY-id entities?</summary>
+<div>The id is generated by the database during the insert, and Hibernate needs it immediately to manage the entity, so
+it must execute each insert on its own. Sequence-based ids can be reserved in advance.</div></details>
+<details class="quiz"><summary>What is the "closed-world assumption" of native images?</summary>
+<div>Everything the program may use must be known at build time; code reachable only through undeclared reflection or
+dynamic loading is left out, which is why runtime hints exist and conditions are fixed at build time.</div></details>

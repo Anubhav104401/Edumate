@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spring Boot: Zero to Pioneer</title>
+<meta name="description" content="Spring Boot from the first annotation to the framework's internals, taught through the EduMate backend.">
+<meta name="color-scheme" content="light dark">
+<style>
+:root {
+  --bg: #f7f8fa; --panel: #ffffff; --panel-2: #f0f3f7; --text: #18202b; --muted: #5a6677; --faint: #8893a3;
+  --line: #e1e6ed; --accent: #2f5bd8; --accent-2: #7a3fe0; --accent-soft: #e8eefc; --good: #177a45;
+  --good-soft: #e3f4ea; --warn: #8a5a00; --warn-soft: #fdf2dc; --bad: #b42318; --bad-soft: #fde8e6;
+  --deep: #1d5f8f; --deep-soft: #e3f0f9; --note: #6b3fc4; --note-soft: #f1ebfd; --code-bg: #fbfcfd;
+  --hl: #fff5c2; --shadow: 0 1px 2px rgba(20, 30, 50, .06), 0 8px 24px -12px rgba(20, 30, 50, .18);
+  --mono: "Cascadia Mono", "JetBrains Mono", Consolas, "SFMono-Regular", Menlo, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1117; --panel: #131a23; --panel-2: #1a232e; --text: #e3e9f0; --muted: #9aa7b6; --faint: #6f7c8c;
+    --line: #26313d; --accent: #82a8ff; --accent-2: #b794ff; --accent-soft: #1a2640; --good: #6fd39a;
+    --good-soft: #12291c; --warn: #e9b95a; --warn-soft: #33270f; --bad: #f1857b; --bad-soft: #3a1714;
+    --deep: #7cc0f0; --deep-soft: #122636; --note: #c2a6ff; --note-soft: #221a36; --code-bg: #0f151d;
+    --hl: #3b3413; --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .7);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --panel: #131a23; --panel-2: #1a232e; --text: #e3e9f0; --muted: #9aa7b6; --faint: #6f7c8c;
+  --line: #26313d; --accent: #82a8ff; --accent-2: #b794ff; --accent-soft: #1a2640; --good: #6fd39a;
+  --good-soft: #12291c; --warn: #e9b95a; --warn-soft: #33270f; --bad: #f1857b; --bad-soft: #3a1714;
+  --deep: #7cc0f0; --deep-soft: #122636; --note: #c2a6ff; --note-soft: #221a36; --code-bg: #0f151d;
+  --hl: #3b3413; --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .7);
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 76px; -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16.5px/1.7 var(--sans); }
+a { color: var(--accent); text-underline-offset: 2px; }
+code, pre, kbd { font-family: var(--mono); }
+:not(pre) > code { font-size: .88em; background: var(--panel-2); border: 1px solid var(--line); padding: 1px 5px;
+  border-radius: 5px; overflow-wrap: anywhere; }
+kbd { font-size: .82em; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px;
+  background: var(--panel); }
+.progress-line { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 30; transform-origin: 0 50%;
+  transform: scaleX(0); background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+
+header.top { position: sticky; top: 0; z-index: 20; display: flex; gap: 14px; align-items: center;
+  padding: 10px 20px; background: color-mix(in oklab, var(--panel) 86%, transparent);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 750; letter-spacing: -.01em; white-space: nowrap;
+  color: var(--text); text-decoration: none; }
+.brand-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: #fff;
+  background: linear-gradient(135deg, #3fa34d, #2f5bd8); font-weight: 800; font-size: 15px; }
+.brand em { font-family: var(--serif); font-weight: 500; color: var(--accent); }
+.overall { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--muted); }
+.overall-bar { width: 120px; height: 7px; border-radius: 99px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--line); }
+.overall-bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--good), var(--accent));
+  transition: width .5s cubic-bezier(.22, 1, .36, 1); }
+.icon-btn { display: inline-grid; place-items: center; min-width: 36px; height: 36px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.icon-btn:hover { border-color: var(--accent); }
+.menu-btn { display: none; }
+
+.layout { display: grid; grid-template-columns: 310px minmax(0, 1fr); }
+nav.side { position: sticky; top: 57px; height: calc(100vh - 57px); overflow: auto; padding: 18px 14px 60px;
+  border-right: 1px solid var(--line); background: var(--panel); font-size: 14px; }
+nav.side input { width: 100%; padding: 8px 11px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--text); font: inherit; }
+nav.side ol { list-style: none; margin: 0; padding: 0; }
+.toc-level { margin-bottom: 14px; }
+.toc-level-name { display: block; padding: 4px 8px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--faint); }
+.toc-level-name b { color: var(--muted); }
+nav.side li li a { display: flex; gap: 8px; align-items: baseline; padding: 5px 8px; border-radius: 8px;
+  color: var(--text); text-decoration: none; line-height: 1.4; }
+nav.side li li a:hover { background: var(--panel-2); }
+nav.side li li a[aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.tick { flex: none; width: 13px; height: 13px; margin-top: 3px; border-radius: 50%; border: 1.5px solid var(--line); }
+a.is-done .tick { border-color: var(--good); background: var(--good) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/100% no-repeat; }
+
+main { padding: 32px 40px 120px; min-width: 0; }
+.hero { max-width: 900px; margin: 0 auto 40px; padding: 40px 36px; border-radius: 22px; color: #fff; position: relative;
+  overflow: hidden; background: radial-gradient(1200px 400px at 0% 0%, #3fa34d 0%, transparent 55%),
+  radial-gradient(900px 500px at 100% 100%, #7a3fe0 0%, transparent 55%), linear-gradient(135deg, #1b3a8a, #2f5bd8);
+  box-shadow: var(--shadow); }
+.hero h1 { margin: 0 0 10px; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.1; letter-spacing: -.025em; }
+.hero h1 em { font-family: var(--serif); font-weight: 400; }
+.hero p { max-width: 62ch; margin: 0 0 18px; color: rgba(255, 255, 255, .88); font-size: 17.5px; }
+.hero .facts { display: flex; flex-wrap: wrap; gap: 10px; }
+.hero .facts span { padding: 5px 12px; border-radius: 99px; background: rgba(255, 255, 255, .14);
+  border: 1px solid rgba(255, 255, 255, .22); font-size: 13.5px; }
+
+section.chapter { max-width: 900px; margin: 0 auto 80px; }
+.chapter-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 6px; font-size: 13.5px; color: var(--muted); }
+.level-chip { padding: 3px 10px; border-radius: 99px; font-weight: 650; font-size: 12.5px; background: var(--accent-soft); color: var(--accent); }
+.level-0 { background: var(--panel-2); color: var(--muted); }
+.level-1 { background: var(--good-soft); color: var(--good); }
+.level-2 { background: var(--deep-soft); color: var(--deep); }
+.level-3 { background: var(--warn-soft); color: var(--warn); }
+.level-4 { background: var(--note-soft); color: var(--note); }
+.done-toggle { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; cursor: pointer; user-select: none; }
+.done-toggle input { accent-color: var(--good); width: 16px; height: 16px; }
+section.chapter > h1 { font-size: clamp(26px, 3.4vw, 36px); line-height: 1.15; letter-spacing: -.02em; margin: 6px 0 18px; }
+h2 { font-size: 24px; letter-spacing: -.01em; margin: 48px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+h3 { font-size: 19px; margin: 32px 0 8px; }
+h4 { font-size: 16.5px; margin: 22px 0 6px; }
+p, li { max-width: 74ch; }
+li + li { margin-top: 4px; }
+.lead { font-size: 18.5px; color: var(--muted); }
+.in-chapter { margin: 0 0 28px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+  font-size: 14.5px; }
+.in-chapter ol { margin: 6px 0 0; padding-left: 20px; columns: 2; column-gap: 28px; }
+.in-chapter li { break-inside: avoid; }
+
+table { border-collapse: collapse; width: 100%; margin: 14px 0 20px; font-size: 14.5px; background: var(--panel);
+  border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { background: var(--panel-2); font-weight: 650; }
+tr:last-child td { border-bottom: 0; }
+.table-wrap { overflow-x: auto; }
+
+figure.code-block { position: relative; margin: 16px 0 22px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--code-bg); overflow: hidden; }
+.code-head { display: flex; gap: 12px; justify-content: space-between; align-items: center; padding: 7px 14px;
+  border-bottom: 1px solid var(--line); background: var(--panel-2); font: 12.5px/1.4 var(--mono); color: var(--muted); }
+.code-head a { font-family: var(--sans); font-size: 12.5px; white-space: nowrap; }
+figure.code-block pre { margin: 0; padding: 14px 16px; overflow-x: auto; font-size: 13.8px; line-height: 1.6; tab-size: 4; }
+figure.code-block .hll { display: block; width: max-content; min-width: calc(100% + 32px); margin: 0 -16px; padding: 0 16px; background: var(--hl); }
+button.copy { position: absolute; right: 8px; bottom: 8px; padding: 3px 9px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--muted); font: 12px var(--sans); cursor: pointer; opacity: 0; transition: opacity .15s; }
+figure.code-block:hover button.copy, button.copy:focus-visible { opacity: 1; }
+pre.diagram { margin: 16px 0 22px; padding: 16px 18px; border-radius: 12px; border: 1px dashed var(--line);
+  background: var(--panel); overflow-x: auto; font-size: 13.5px; line-height: 1.55; }
+
+.callout { margin: 18px 0 22px; padding: 14px 18px 14px 16px; border-radius: 12px; border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); background: var(--panel); }
+.callout > strong:first-child { display: block; margin-bottom: 4px; }
+.callout p:last-child, .callout ul:last-child, .callout ol:last-child { margin-bottom: 0; }
+.callout.note { border-left-color: var(--note); background: var(--note-soft); }
+.callout.tip { border-left-color: var(--good); background: var(--good-soft); }
+.callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.callout.deep { border-left-color: var(--deep); background: var(--deep-soft); }
+.callout.try { border-left-color: var(--accent-2); background: var(--panel); }
+.callout.note > strong:first-child::before { content: "🧸 "; }
+.callout.tip > strong:first-child::before { content: "✅ "; }
+.callout.warn > strong:first-child::before { content: "⚠️ "; }
+.callout.deep > strong:first-child::before { content: "🔬 "; }
+.callout.try > strong:first-child::before { content: "🛠 "; }
+
+details.quiz { margin: 10px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+details.quiz summary { cursor: pointer; padding: 11px 16px; font-weight: 600; list-style: none; }
+details.quiz summary::-webkit-details-marker { display: none; }
+details.quiz summary::before { content: "?"; display: inline-grid; place-items: center; width: 22px; height: 22px;
+  margin-right: 10px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 13px; }
+details.quiz[open] summary::before { content: "✓"; background: var(--good-soft); color: var(--good); }
+details.quiz > div { padding: 0 16px 12px 48px; color: var(--muted); }
+.quiz-title { margin-top: 40px; }
+
+.steps-list { counter-reset: step; list-style: none; padding-left: 0; }
+.steps-list > li { position: relative; padding-left: 40px; margin: 10px 0; }
+.steps-list > li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: 1px;
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft);
+  color: var(--accent); font-weight: 700; font-size: 13px; }
+
+footer.end { max-width: 900px; margin: 0 auto; padding: 30px 0; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.side { position: fixed; top: 57px; left: 0; bottom: 0; width: min(330px, 88vw); height: auto; z-index: 25;
+    transform: translateX(-102%); transition: transform .25s cubic-bezier(.22, 1, .36, 1); box-shadow: var(--shadow); }
+  body.menu-open nav.side { transform: none; }
+  .menu-btn { display: inline-grid; }
+  main { padding: 22px 16px 100px; }
+  .overall-bar, .overall-text { display: none; }
+  .in-chapter ol { columns: 1; }
+  .hero { padding: 28px 22px; }
+  header.top { gap: 10px; padding: 10px 12px; }
+  .brand { min-width: 0; font-size: 15px; }
+  .brand > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .overall { display: none; }
+  #theme-btn { margin-left: auto; }
+  table { display: block; overflow-x: auto; }
+  .done-toggle { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+@media print {
+  header.top, nav.side, .progress-line, button.copy, .done-toggle { display: none !important; }
+  .layout { display: block; } main { padding: 0; } details.quiz > div { display: block; }
+  section.chapter { break-before: page; }
+}
+{{PYGMENTS}}
+</style>
+</head>
+<body>
+<div class="progress-line" aria-hidden="true"></div>
+<header class="top">
+  <button type="button" class="icon-btn menu-btn" aria-label="Open the chapter list" aria-expanded="false">☰</button>
+  <a class="brand" href="#top"><span class="brand-mark">S</span><span>Spring Boot: <em>Zero to Pioneer</em></span></a>
+  <div class="overall" title="Chapters you have marked as done (remembered in this browser)">
+    <span class="overall-text"><b id="done-count">0</b> of {{CHAPTERS}} done</span>
+    <span class="overall-bar"><i id="done-bar"></i></span>
+  </div>
+  <button type="button" class="icon-btn" id="theme-btn" aria-label="Switch between light and dark">◐</button>
+</header>
+<div class="layout">
+  <nav class="side" aria-label="Chapters">
+    <input type="search" id="toc-filter" placeholder="Filter chapters…" aria-label="Filter chapters">
+    <ol>{{TOC}}</ol>
+  </nav>
+  <main id="top">
+    <div class="hero">
+      <h1>Spring Boot, from <em>zero</em> to <em>pioneer</em></h1>
+      <p>You know Java. You have never touched Spring. This course takes you from "what is a bean?" to how
+      auto-configuration, proxies and transactions work inside the framework, and every idea is shown in a real,
+      running application: the EduMate backend in this repository.</p>
+      <div class="facts"><span>{{CHAPTERS}} chapters</span><span>about {{HOURS}} hours of reading</span>
+        <span>Spring Boot 4.1 · Spring Framework 7 · Java 21</span><span>every snippet is real EduMate code</span></div>
+    </div>
+{{BODY}}
+    <footer class="end">Built by <code>docs/spring-guide/build_spring_guide.py</code> from the chapters in
+      <code>docs/spring-guide/chapters/</code> and the live source code of EduMate. The companion guide
+      <a href="EduMate-Zero-to-Hero.html">EduMate: Zero to Hero</a> explains every file of the project line by line.</footer>
+  </main>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+  function store(key, value) { try { if (value === undefined) return localStorage.getItem(key); localStorage.setItem(key, value); } catch (e) { return null; } }
+
+  // Theme: remembered choice, or the computer's setting.
+  var saved = store('springGuide.theme');
+  if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
+  document.getElementById('theme-btn').addEventListener('click', function () {
+    var dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    store('springGuide.theme', root.dataset.theme);
+  });
+
+  // "Mark as done": remembered per browser, shown as ticks in the menu and a bar in the header.
+  var done = {};
+  try { done = JSON.parse(store('springGuide.done') || '{}') || {}; } catch (e) { done = {}; }
+  var boxes = document.querySelectorAll('input[data-done]');
+  function refresh() {
+    var count = 0;
+    boxes.forEach(function (box) {
+      var id = box.getAttribute('data-done');
+      box.checked = !!done[id];
+      if (done[id]) count++;
+      var link = document.querySelector('nav.side a[data-chapter="' + id + '"]');
+      if (link) link.classList.toggle('is-done', !!done[id]);
+    });
+    document.getElementById('done-count').textContent = count;
+    document.getElementById('done-bar').style.width = (boxes.length ? count * 100 / boxes.length : 0) + '%';
+  }
+  boxes.forEach(function (box) {
+    box.addEventListener('change', function () {
+      var id = box.getAttribute('data-done');
+      if (box.checked) done[id] = true; else delete done[id];
+      store('springGuide.done', JSON.stringify(done));
+      refresh();
+    });
+  });
+  refresh();
+
+  // Filter the chapter list.
+  var filter = document.getElementById('toc-filter');
+  filter.addEventListener('input', function () {
+    var q = filter.value.trim().toLowerCase();
+    document.querySelectorAll('nav.side li li').forEach(function (li) {
+      li.hidden = q !== '' && li.textContent.toLowerCase().indexOf(q) === -1;
+    });
+  });
+
+  // Copy buttons.
+  document.querySelectorAll('button.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = btn.parentElement.querySelector('pre').innerText;
+      var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 1400); };
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () {});
+    });
+  });
+
+  // Highlight the chapter being read, and the reading progress line.
+  var links = {};
+  document.querySelectorAll('nav.side a[data-chapter]').forEach(function (a) { links[a.getAttribute('data-chapter')] = a; });
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        Object.keys(links).forEach(function (k) { links[k].removeAttribute('aria-current'); });
+        var a = links[entry.target.id];
+        if (a) { a.setAttribute('aria-current', 'true'); a.scrollIntoView({ block: 'nearest' }); }
+      });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    document.querySelectorAll('section.chapter').forEach(function (s) { io.observe(s); });
+  }
+  var line = document.querySelector('.progress-line');
+  function onScroll() {
+    var max = document.documentElement.scrollHeight - innerHeight;
+    line.style.transform = 'scaleX(' + (max > 0 ? scrollY / max : 0) + ')';
+  }
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Phone: the chapter list slides in.
+  var menuBtn = document.querySelector('.menu-btn');
+  menuBtn.addEventListener('click', function () {
+    var open = document.body.classList.toggle('menu-open');
+    menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.querySelectorAll('nav.side a').forEach(function (a) {
+    a.addEventListener('click', function () { document.body.classList.remove('menu-open'); menuBtn.setAttribute('aria-expanded', 'false'); });
+  });
+})();
+</script>
+</body>
+</html>

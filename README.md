@@ -7,8 +7,13 @@ and results, fees, timetable, library and the student/parent portal. It is multi
 defect fix described in the report is built in and covered by an automated test.
 
 > **New to programming?** Open [`docs/EduMate-Zero-to-Hero.html`](docs/EduMate-Zero-to-Hero.html) in a browser.
-> It explains every folder, every file and every line of this project from first principles.
+> It explains every folder, every file and every line of this project from first principles, including a chapter on
+> the Release 3.0 interface (design system, animations, smooth scrolling).
 > After changing code, regenerate it with `python docs/explainer/build_explainer.py --report` (Python 3 + Pygments).
+>
+> **Know Java but not Spring?** Open [`docs/Spring-Boot-Zero-to-Pioneer.html`](docs/Spring-Boot-Zero-to-Pioneer.html):
+> a 25-chapter course from "what is a bean?" to auto-configuration, proxies, transactions and native images, taught
+> with this project's real backend code. Rebuild it with `python docs/spring-guide/build_spring_guide.py`.
 
 ---
 
@@ -28,13 +33,27 @@ defect fix described in the report is built in and covered by an automated test.
 
 | Report says | Implemented as |
 |---|---|
-| React single-page application | `frontend/` – React 19, TypeScript 7, Vite 8, React Router 8 |
+| React single-page application | `frontend/` – React 19, TypeScript 7, Vite 8, React Router 8 (see "The interface" below) |
 | Spring Boot REST backend | `backend/` – Spring Boot 4.1, Java 21 bytecode (runs on JDK 21+) |
 | PostgreSQL transactional store | Flyway migration `V1__create_schema.sql`; H2 in PostgreSQL mode for development |
 | Redis for cache data | `@Cacheable("publishedResults")`; Redis in the `docker` profile |
 | Object store for scanned documents | `ObjectStore` interface + `LocalFileObjectStore` |
 | Payment gateway integration | `PaymentOrchestrator`, `GatewaySignature`, `MockPaymentGateway` |
 | SMS and e-mail gateway | `NotificationService` → outbox → `NotificationDispatcher` |
+
+### The interface (Release 3.0)
+
+Every screen was redesigned around a small design system and a consistent motion language, while keeping the strict
+Content-Security-Policy, keyboard access and "reduce motion" support.
+
+| Concern | Library / technique |
+|---|---|
+| Design tokens, light and dark themes | `styles/theme.css`: OKLCH colours with `light-dark()`, one file for colours, type, spacing, shadows, easing |
+| Animation | [motion](https://motion.dev) 13: page transitions, staggered reveals, shared-layout menu highlight, springs, count-up numbers, self-drawing charts |
+| Smooth scrolling and scroll effects | [Lenis](https://lenis.darkroom.engineering) 1.3, motion's `useScroll`, CSS scroll-driven animations (`animation-timeline: view()`) |
+| Accessible primitives | [Radix UI](https://www.radix-ui.com) (dialogs, menus, tooltips), [cmdk](https://cmdk.paco.me) command palette (Ctrl K), [Sonner](https://sonner.emilkowal.ski) toasts |
+| Icons and type | lucide-react; Geist, Geist Mono and Instrument Serif bundled with Fontsource (no third-party requests) |
+| Extras | a public welcome page (`/welcome`), skeleton loading, a request progress bar, SVG progress rings and an SGPA/CGPA trend chart, confetti after payment |
 
 ## 2. Run it (development, Windows)
 
@@ -54,6 +73,8 @@ cd frontend && npm install && npm run dev      # http://localhost:5173  (open th
 
 The database is recreated with demo data on every backend start. Browse it at
 http://localhost:8080/h2-console (JDBC URL `jdbc:h2:mem:edumate`, user `sa`, empty password).
+Signed out, http://localhost:5173 shows the welcome page; the login page lists every demo account (double-click one to
+sign in). Inside the app, **Ctrl K** opens the command palette.
 
 ### Demo accounts (password for all: `Edumate@2026`)
 
@@ -85,7 +106,7 @@ This starts PostgreSQL 17, Redis 7, the backend and nginx serving the built fron
 
 ```bash
 cd backend && ./mvnw test     # 64 JUnit tests: unit, integration (MockMvc + H2) and PostgreSQL 17 compatibility
-cd frontend && npm test       # 15 Vitest tests: upload checks, form validation, formatting
+cd frontend && npm test       # 33 Vitest tests: upload checks, form validation, formatting, visuals, navigation
 ```
 
 ## 5. Where each SQA finding lives in the code
@@ -130,11 +151,12 @@ cd frontend && npm test       # 15 Vitest tests: upload checks, form validation,
 backend/     Spring Boot REST API (Java)          frontend/   React single-page app (TypeScript)
   src/main/java/com/edumate/                        src/api/        how the app talks to the backend
     academic/  admissions/  attendance/             src/pages/      one file per screen
-    campus/    common/      config/                 src/components/ shared pieces (layout, toasts, upload)
-    consent/   dashboard/   documents/              src/i18n/messages.ts   EVERY piece of on-screen text
-    exam/      fees/        library/                src/styles/theme.css   EVERY colour and size
-    notifications/  security/  timetable/  admin/
+    campus/    common/      config/                 src/components/ the app shell and shared pieces
+    consent/   dashboard/   documents/              src/motion/     animation presets, smooth scroll, reveals
+    exam/      fees/        library/                src/i18n/messages.ts   EVERY piece of on-screen text
+    notifications/  security/  timetable/  admin/   src/styles/theme.css   EVERY colour, size and curve
   src/main/resources/db/migration/  database schema
-docs/        the zero-to-hero explainer             scripts/    start-up helper
+docs/        the zero-to-hero explainer and the     scripts/    start-up helper
+             Spring Boot zero-to-pioneer course
 docker-compose.yml   .env.example
 ```
