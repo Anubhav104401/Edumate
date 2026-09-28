@@ -42,7 +42,7 @@ Section 7: the folder layout, with the files beginners most need to know: `messa
 
 === FILE scripts/dev-start.ps1
 >>> SUMMARY
-A **PowerShell script** that starts EduMate for development on Windows with one command. It opens two new windows: the backend (port 8080) and the frontend (port 5173). The first time, it also installs the frontend's packages.
+A **PowerShell script** that starts EduMate for development on Windows with one command. It opens two new windows: the backend (port 8080) and the frontend (port 5173). On the first run, and again whenever the list of frontend packages has changed (for example after a `git pull`), it also installs the frontend's packages.
 
 Run it from the project folder:
 <pre class="block">powershell -ExecutionPolicy Bypass -File scripts\dev-start.ps1</pre>
@@ -51,11 +51,17 @@ Run it from the project folder:
 `$PSScriptRoot` is the folder holding this script (`scripts`); `Split-Path -Parent` goes one folder up, to the project root.
 >>> 9-10
 Prints a message, then opens a **new** PowerShell window (`Start-Process`) that goes into `backend` and runs `mvnw.cmd spring-boot:run`. `-NoExit` keeps the window open so its log stays visible.
->>> 12-17
-If `frontend\node_modules` does not exist yet (first run), go into `frontend`, run `npm install`, and come back (`Push-Location` / `Pop-Location`).
->>> 19-20
+>>> 12-13
+Why the next check exists: `npm install` must run not only the first time, but also after a `git pull` that added or upgraded packages; otherwise the frontend would start with old packages and fail with "Failed to resolve import".
+>>> 14
+The file npm writes inside `node_modules` at the end of every install: its date is "when the packages were last installed".
+>>> 15
+Install if that file does not exist (never installed), **or** if `package-lock.json` (the list of exact package versions, updated by `git pull`) is newer than the last install. `-or` stops at the first true part, so the dates are only compared when the file exists.
+>>> 16-20
+Then go into `frontend`, run `npm install`, and come back (`Push-Location` / `Pop-Location`).
+>>> 22-23
 Opens a second window running `npm run dev` in `frontend` (the Vite development server).
->>> 22-24
+>>> 25-27
 Tells the user which address to open and the demo password.
 
 === FILE backend/.mvn/wrapper/maven-wrapper.properties

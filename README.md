@@ -57,7 +57,7 @@ Content-Security-Policy, keyboard access and "reduce motion" support.
 
 ## 2. Run it (development, Windows)
 
-You need **JDK 21 or newer** and **Node.js 20 or newer**. Nothing else: Maven comes with the project (`mvnw`) and the
+You need **JDK 21 or newer** and **Node.js 20.19+ or 22.12+** (required by Vite 8). Nothing else: Maven comes with the project (`mvnw`) and the
 database runs in memory.
 
 ```powershell
