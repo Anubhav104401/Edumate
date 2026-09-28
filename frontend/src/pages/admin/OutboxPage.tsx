@@ -2,8 +2,9 @@
  * Every e-mail and SMS EduMate has queued, and whether the dispatcher has sent it yet.
  * Data: GET /api/notifications/outbox
  */
+import { Mail, MessageSquareText, RotateCw } from 'lucide-react';
 import { api } from '../../api/endpoints';
-import { Badge, ErrorBanner, Loading, PageHeader } from '../../components/ui';
+import { Badge, EmptyState, ErrorBanner, IconTile, Loading, PageHeader } from '../../components/ui';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
 import { formatDateTime } from '../../utils/format';
@@ -20,13 +21,14 @@ export function OutboxPage() {
         subtitle={t.admin.outboxSubtitle}
         actions={
           <button type="button" className="btn btn-secondary" onClick={reload}>
-            {t.common.refresh}
+            <RotateCw size={16} /> {t.common.refresh}
           </button>
         }
       />
       {loading && <Loading />}
       {error && <ErrorBanner message={error} onRetry={reload} />}
-      {data && (
+      {data && data.length === 0 && <EmptyState icon={Mail} />}
+      {data && data.length > 0 && (
         <div className="card table-wrap">
           <table>
             <thead>
@@ -41,11 +43,20 @@ export function OutboxPage() {
             <tbody>
               {data.map((m) => (
                 <tr key={m.id}>
-                  <td className="nowrap">{formatDateTime(m.createdAt)}</td>
-                  <td>{m.channel}</td>
-                  <td className="small">{m.recipient}</td>
+                  <td className="nowrap small">{formatDateTime(m.createdAt)}</td>
                   <td>
-                    {m.subject}
+                    <div className="btn-row" style={{ flexWrap: 'nowrap' }}>
+                      <IconTile
+                        icon={m.channel === 'EMAIL' ? Mail : MessageSquareText}
+                        size="sm"
+                        tone={m.channel === 'EMAIL' ? 'info' : 'accent'}
+                      />
+                      <span className="small">{m.channel}</span>
+                    </div>
+                  </td>
+                  <td className="small mono">{m.recipient}</td>
+                  <td>
+                    <strong>{m.subject}</strong>
                     <div className="small muted">{m.body}</div>
                   </td>
                   <td>

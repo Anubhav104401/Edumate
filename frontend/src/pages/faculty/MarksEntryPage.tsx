@@ -1,16 +1,20 @@
 /*
  * Internal-assessment marks entry for a teacher's course (FR-17).
  * Each row has its own Save button and needs a reason; the backend audits old and new value.
+ * A row that has been changed but not saved is highlighted, so nothing is forgotten.
  */
-import { useEffect, useState } from 'react';
+import { motion } from 'motion/react';
+import { Lock, PenLine, Save } from 'lucide-react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/http';
 import type { MarkLine, MarksSheet } from '../../api/types';
 import { useToast } from '../../components/Toast';
-import { Alert, Badge, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
+import { Alert, Avatar, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
 import { formatDateTime } from '../../utils/format';
+import { gradeHue } from '../../utils/visuals';
 
 export function MarksEntryPage() {
   const courses = useLoad(() => api.academic.myCourses(), []);
@@ -67,12 +71,14 @@ export function MarksEntryPage() {
       {sheet.error && <ErrorBanner message={sheet.error} onRetry={sheet.reload} />}
       {sheet.data && (
         <div className="card table-wrap">
+          <h2 className="card-title">
+            {sheet.data.locked ? <Lock size={18} /> : <PenLine size={18} />} {sheet.data.courseCode} {sheet.data.courseName}
+          </h2>
           {sheet.data.locked && <Alert tone="warn">{t.marks.locked}</Alert>}
           <table>
             <thead>
               <tr>
-                <th>{t.common.usn}</th>
-                <th>{t.common.name}</th>
+                <th>{t.common.student}</th>
                 <th>{t.marks.columns.internal}</th>
                 <th className="num">{t.marks.columns.external}</th>
                 <th className="num">{t.marks.columns.total}</th>
@@ -124,9 +130,16 @@ function MarkRow({ line, locked, onSaved }: { line: MarkLine; locked: boolean; o
   }
 
   return (
-    <tr>
-      <td className="mono">{line.usn}</td>
-      <td>{line.fullName}</td>
+    <tr className={changed ? 'row-changed' : undefined}>
+      <td>
+        <div className="btn-row" style={{ flexWrap: 'nowrap' }}>
+          <Avatar name={line.fullName} size="sm" />
+          <div>
+            <strong>{line.fullName}</strong>
+            <div className="small muted mono">{line.usn}</div>
+          </div>
+        </div>
+      </td>
       <td>
         <input
           type="number"
@@ -135,7 +148,7 @@ function MarkRow({ line, locked, onSaved }: { line: MarkLine; locked: boolean; o
           step={0.5}
           value={value}
           disabled={locked}
-          style={{ width: 80 }}
+          style={{ width: 88 }}
           aria-label={`${t.marks.columns.internal} ${line.usn}`}
           onChange={(e) => setValue(e.target.value)}
         />
@@ -144,24 +157,40 @@ function MarkRow({ line, locked, onSaved }: { line: MarkLine; locked: boolean; o
         {line.externalMarks ?? t.common.none}
         {line.revalued && <div className="small muted">{t.marks.revalued}</div>}
       </td>
-      <td className="num">{line.total ?? t.common.none}</td>
-      <td>{line.grade ? <Badge tone={line.grade === 'F' ? 'bad' : 'good'}>{line.grade}</Badge> : t.common.none}</td>
+      <td className="num">
+        <strong>{line.total ?? t.common.none}</strong>
+      </td>
+      <td>
+        {line.grade ? (
+          <span className="grade" style={{ '--hue': gradeHue(line.grade) } as CSSProperties}>
+            {line.grade}
+          </span>
+        ) : (
+          t.common.none
+        )}
+      </td>
       <td className="small muted">
         {line.updatedBy} <br /> {formatDateTime(line.updatedAt)}
       </td>
       <td>
         {changed && !locked && (
-          <div className="btn-row">
+          <motion.div
+            className="btn-row"
+            style={{ flexWrap: 'nowrap' }}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+          >
             <input
               placeholder={t.marks.reasonPlaceholder}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              style={{ width: 180 }}
+              style={{ width: 190 }}
+              aria-label={t.marks.reasonPlaceholder}
             />
             <button type="button" className="btn btn-small" disabled={busy} onClick={save}>
-              {t.marks.save}
+              <Save size={14} /> {t.marks.save}
             </button>
-          </div>
+          </motion.div>
         )}
       </td>
     </tr>

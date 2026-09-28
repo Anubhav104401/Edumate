@@ -2,13 +2,14 @@
  * A teacher's view of one class: everyone's attendance, who is below the minimum,
  * and a button to e-mail those students' guardians (FR-31).
  */
+import { Mail, UserCheck, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/http';
 import type { StudentAttendance } from '../../api/types';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { useToast } from '../../components/Toast';
-import { Badge, EmptyState, ErrorBanner, Field, Loading, PageHeader, PercentBar } from '../../components/ui';
+import { Avatar, Badge, EmptyState, ErrorBanner, Field, Loading, PageHeader, PercentBar } from '../../components/ui';
 import { ATTENDANCE_THRESHOLD } from '../../config';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
@@ -82,24 +83,29 @@ export function CourseAttendancePage() {
         </div>
       )}
 
-      <div className="card">
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>{t.courseAttendance.shortfallTitle}</h2>
+      <div className="card table-wrap">
+        <div className="card-header">
+          <h2 className="card-title">
+            {t.courseAttendance.shortfallTitle}
+            {shortfall.data && <Badge tone={shortfall.data.length > 0 ? 'bad' : 'good'}>{shortfall.data.length}</Badge>}
+          </h2>
           {shortfall.data && shortfall.data.length > 0 && (
             <button type="button" className="btn btn-small" onClick={notify}>
-              {t.courseAttendance.notify}
+              <Mail size={14} /> {t.courseAttendance.notify}
             </button>
           )}
         </div>
-        {shortfall.loading && <Loading />}
+        {shortfall.loading && <Loading inline rows={2} />}
         {shortfall.error && <ErrorBanner message={shortfall.error} />}
-        {shortfall.data && shortfall.data.length === 0 && <EmptyState text={t.courseAttendance.none} />}
+        {shortfall.data && shortfall.data.length === 0 && <EmptyState icon={UserCheck} text={t.courseAttendance.none} />}
         {shortfall.data && shortfall.data.length > 0 && <StudentTable rows={shortfall.data} />}
       </div>
 
-      <div className="card">
-        <h2>{t.courseAttendance.allTitle}</h2>
-        {summary.loading && <Loading />}
+      <div className="card table-wrap">
+        <h2 className="card-title">
+          <Users size={18} /> {t.courseAttendance.allTitle}
+        </h2>
+        {summary.loading && <Loading inline />}
         {summary.error && <ErrorBanner message={summary.error} />}
         {summary.data && <StudentTable rows={summary.data} />}
       </div>
@@ -109,36 +115,40 @@ export function CourseAttendancePage() {
 
 function StudentTable({ rows }: { rows: StudentAttendance[] }) {
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>{t.common.usn}</th>
-            <th>{t.common.name}</th>
-            <th className="num">{t.attendance.columns.attended}</th>
-            <th>{t.attendance.columns.percent}</th>
-            <th>{t.common.status}</th>
+    <table>
+      <thead>
+        <tr>
+          <th>{t.common.student}</th>
+          <th className="num">{t.attendance.columns.attended}</th>
+          <th>{t.attendance.columns.percent}</th>
+          <th>{t.common.status}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.studentId}>
+            <td>
+              <div className="btn-row" style={{ flexWrap: 'nowrap' }}>
+                <Avatar name={r.fullName} size="sm" />
+                <div>
+                  <strong>{r.fullName}</strong>
+                  <div className="small muted mono">{r.usn}</div>
+                </div>
+              </div>
+            </td>
+            <td className="num">{t.attendance.attendedOf(r.attended, r.held)}</td>
+            <td>
+              {formatPercent(r.percent)}
+              <PercentBar percent={r.percent} low={!r.meetsThreshold} />
+            </td>
+            <td>
+              <Badge tone={r.meetsThreshold ? 'good' : 'bad'}>
+                {r.meetsThreshold ? t.attendance.status.OK : t.attendance.status.SHORTFALL}
+              </Badge>
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.studentId}>
-              <td className="mono">{r.usn}</td>
-              <td>{r.fullName}</td>
-              <td className="num">{t.attendance.attendedOf(r.attended, r.held)}</td>
-              <td>
-                {formatPercent(r.percent)}
-                <PercentBar percent={r.percent} low={!r.meetsThreshold} />
-              </td>
-              <td>
-                <Badge tone={r.meetsThreshold ? 'good' : 'bad'}>
-                  {r.meetsThreshold ? t.attendance.status.OK : t.attendance.status.SHORTFALL}
-                </Badge>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
 }

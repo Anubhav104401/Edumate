@@ -1,9 +1,11 @@
 /*
  * Shows the backend's RoleMatrix: every address and exactly who may call it.
  * Data: GET /api/admin/role-matrix
+ * HTTP methods get their own colours (GET green, POST blue, PUT amber, DELETE red).
  */
+import { ShieldCheck } from 'lucide-react';
 import { api } from '../../api/endpoints';
-import { Badge, ErrorBanner, Loading, PageHeader } from '../../components/ui';
+import { Badge, EmptyState, ErrorBanner, Loading, PageHeader } from '../../components/ui';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
 
@@ -15,7 +17,8 @@ export function RoleMatrixPage() {
       <PageHeader title={t.admin.roleMatrixTitle} subtitle={t.admin.roleMatrixSubtitle} />
       {loading && <Loading />}
       {error && <ErrorBanner message={error} onRetry={reload} />}
-      {data && (
+      {data && data.length === 0 && <EmptyState icon={ShieldCheck} />}
+      {data && data.length > 0 && (
         <div className="card table-wrap">
           <table>
             <thead>
@@ -28,16 +31,22 @@ export function RoleMatrixPage() {
             <tbody>
               {data.map((rule, i) => (
                 <tr key={i}>
-                  <td className="mono">{rule.method ?? t.admin.anyMethod}</td>
-                  <td className="mono">{rule.pattern}</td>
                   <td>
-                    {rule.access === 'ROLES'
-                      ? rule.roles.map((r) => (
-                          <span key={r} style={{ marginRight: 4 }}>
-                            <Badge>{t.roles[r]}</Badge>
-                          </span>
-                        ))
-                      : <Badge tone={rule.access === 'PUBLIC' ? 'warn' : 'info'}>{t.admin.access[rule.access]}</Badge>}
+                    <span className={`method method-${rule.method ?? 'ANY'}`}>{rule.method ?? t.admin.anyMethod}</span>
+                  </td>
+                  <td className="mono small">{rule.pattern}</td>
+                  <td>
+                    {rule.access === 'ROLES' ? (
+                      <div className="role-badges">
+                        {rule.roles.map((r) => (
+                          <Badge key={r} plain>
+                            {t.roles[r]}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <Badge tone={rule.access === 'PUBLIC' ? 'warn' : 'info'}>{t.admin.access[rule.access]}</Badge>
+                    )}
                   </td>
                 </tr>
               ))}

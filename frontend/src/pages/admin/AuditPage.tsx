@@ -1,10 +1,12 @@
 /*
  * The audit trail: who changed what, when, with the value before and after (fix for DR-04).
  * Data: GET /api/audit?entityType=&entityId=
+ * The "before" value is shown struck through in red and the "after" value in green, like a diff.
  */
+import { Filter, RotateCw, ScrollText } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../api/endpoints';
-import { ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
+import { Avatar, EmptyState, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
 import { formatDateTime } from '../../utils/format';
@@ -31,15 +33,16 @@ export function AuditPage() {
           <input id="id" value={id} onChange={(e) => setId(e.target.value)} />
         </Field>
         <button type="submit" className="btn">
-          {t.common.search}
+          <Filter size={16} /> {t.common.search}
         </button>
         <button type="button" className="btn btn-secondary" onClick={reload}>
-          {t.common.refresh}
+          <RotateCw size={16} /> {t.common.refresh}
         </button>
       </form>
       {loading && <Loading />}
       {error && <ErrorBanner message={error} onRetry={reload} />}
-      {data && (
+      {data && data.length === 0 && <EmptyState icon={ScrollText} />}
+      {data && data.length > 0 && (
         <div className="card table-wrap">
           <table>
             <thead>
@@ -55,14 +58,21 @@ export function AuditPage() {
             <tbody>
               {data.map((e) => (
                 <tr key={e.id}>
-                  <td className="nowrap">{formatDateTime(e.occurredAt)}</td>
-                  <td>{e.actor}</td>
-                  <td className="mono small">{e.action}</td>
-                  <td className="small">
-                    {e.entityType} #{e.entityId}
+                  <td className="nowrap small">{formatDateTime(e.occurredAt)}</td>
+                  <td>
+                    <div className="btn-row" style={{ flexWrap: 'nowrap' }}>
+                      <Avatar name={e.actor} size="sm" />
+                      <span>{e.actor}</span>
+                    </div>
                   </td>
-                  <td className="small">{e.oldValue ?? t.common.none}</td>
-                  <td className="small">{e.newValue ?? t.common.none}</td>
+                  <td>
+                    <span className="chip mono">{e.action}</span>
+                  </td>
+                  <td className="small">
+                    {e.entityType} <span className="mono muted">#{e.entityId}</span>
+                  </td>
+                  <td className="small">{e.oldValue ? <span className="diff-old">{e.oldValue}</span> : t.common.none}</td>
+                  <td className="small">{e.newValue ? <span className="diff-new">{e.newValue}</span> : t.common.none}</td>
                 </tr>
               ))}
             </tbody>

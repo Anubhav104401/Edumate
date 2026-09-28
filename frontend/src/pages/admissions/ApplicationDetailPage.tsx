@@ -1,21 +1,30 @@
 /*
- * One application as the admissions officer sees it: details, documents, consent history,
- * and one button per action the state machine allows for the officer's role.
+ * One application as the admissions officer sees it: where it is in the process, details,
+ * documents, consent history, and one button per action the state machine allows for the officer.
  */
+import { ArrowLeft, GraduationCap, ShieldCheck, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/http';
-import type { AdmissionAction, DocumentType } from '../../api/types';
+import type { AdmissionAction, AdmissionStatus, DocumentType } from '../../api/types';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { DocumentUpload } from '../../components/DocumentUpload';
 import { useToast } from '../../components/Toast';
-import { Alert, Badge, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
+import { Alert, Badge, ErrorBanner, Field, IconTile, Loading, PageHeader, Steps } from '../../components/ui';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
+import { Stagger, StaggerItem } from '../../motion/Reveal';
 import { formatDate, formatDateTime } from '../../utils/format';
+import { admissionTone } from '../../utils/visuals';
 
 const ALL_TYPES = Object.keys(t.documentTypes) as DocumentType[];
+
+/** The normal road of an application, in order. Rejected / withdrawn / reversed leave this road. */
+const ROAD: AdmissionStatus[] = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'OFFERED', 'ENROLLED'];
+
+/** Actions that end or undo something are shown in red and confirmed as dangerous. */
+const DANGEROUS: AdmissionAction[] = ['REJECT', 'REVERSE_ENROLMENT', 'WITHDRAW'];
 
 export function ApplicationDetailPage() {
   const id = Number(useParams().id);
@@ -29,7 +38,8 @@ export function ApplicationDetailPage() {
 
   async function act(action: AdmissionAction) {
     const label = t.admissions.actions[action];
-    if (!(await confirm(t.admissions.confirmAction(label), label))) return;
+    const tone = DANGEROUS.includes(action) ? 'danger' : 'normal';
+    if (!(await confirm(t.admissions.confirmAction(label), label, tone))) return;
     setBusy(true);
     try {
       const updated = await api.admissions.transition(id, action, reason);
@@ -47,48 +57,107 @@ export function ApplicationDetailPage() {
   if (app.error) return <ErrorBanner message={app.error} onRetry={app.reload} />;
   const a = app.data;
   if (!a) return null;
+  const onRoad = ROAD.indexOf(a.status);
 
   return (
     <>
       <PageHeader
         title={t.admissions.detailTitle(a.applicationNo)}
-        subtitle={<Badge>{t.admissions.statuses[a.status]}</Badge>}
+        subtitle={<Badge tone={admissionTone(a.status)}>{t.admissions.statuses[a.status]}</Badge>}
         actions={
           <Link className="btn btn-secondary" to="/admissions">
-            {t.common.back}
+            <ArrowLeft size={16} /> {t.common.back}
           </Link>
         }
       />
+
+      {onRoad >= 0 ? (
+        <div className="card">
+          <h2 className="card-title">{t.admissions.journeyTitle}</h2>
+          {/* ENROLLED is the last step, so once there every step shows as done. */}
+          <Steps labels={ROAD.map((s) => t.admissions.statuses[s])} current={a.status === 'ENROLLED' ? ROAD.length : onRoad} />
+        </div>
+      ) : (
+        <Alert tone="bad" title={t.admissions.statuses[a.status]} />
+      )}
       {a.statusReason && <Alert tone="info">{a.statusReason}</Alert>}
 
-      <div className="grid">
-        <div className="card">
-          <h3>{t.admissions.personal}</h3>
-          <p>
-            <strong>{a.fullName}</strong> {a.minor && <Badge tone="warn">{t.admissions.minorBadge(a.age)}</Badge>}
-          </p>
-          <p className="small">
-            {formatDate(a.dateOfBirth)} · {a.email} · {a.phone ?? t.common.none}
-          </p>
-        </div>
-        <div className="card">
-          <h3>{t.admissions.academic}</h3>
-          <p>{a.programName}</p>
-          <p className="small">
-            {t.admissions.categories[a.category]} · {t.admissions.columns.entrance} {a.entranceScore ?? t.common.none} ·{' '}
-            {t.admissions.columns.qualifying} {a.qualifyingPercent ?? t.common.none}
-          </p>
-        </div>
-        <div className="card">
-          <h3>{t.admissions.guardian}</h3>
-          <p className="small">
-            {a.guardianName ?? t.common.none} · {a.guardianEmail ?? t.common.none}
-          </p>
-          <p className="small">{t.admissions.consentStatus[a.consentStatus]}</p>
-        </div>
-      </div>
+      <Stagger className="info-grid" gap={0.07}>
+        <StaggerItem>
+          <div className="card">
+            <div className="info-card-head">
+              <IconTile icon={UserRound} size="sm" />
+              <h3>{t.admissions.personal}</h3>
+            </div>
+            <p style={{ margin: '0 0 8px' }}>
+              <strong>{a.fullName}</strong> {a.minor && <Badge tone="warn">{t.admissions.minorBadge(a.age)}</Badge>}
+            </p>
+            <dl className="dl">
+              <div>
+                <dt>{t.apply.fields.dateOfBirth}</dt>
+                <dd>{formatDate(a.dateOfBirth)}</dd>
+              </div>
+              <div>
+                <dt>{t.apply.fields.email}</dt>
+                <dd>{a.email}</dd>
+              </div>
+              <div>
+                <dt>{t.apply.fields.phone}</dt>
+                <dd>{a.phone ?? t.common.none}</dd>
+              </div>
+            </dl>
+          </div>
+        </StaggerItem>
+        <StaggerItem>
+          <div className="card">
+            <div className="info-card-head">
+              <IconTile icon={GraduationCap} size="sm" tone="accent" />
+              <h3>{t.admissions.academic}</h3>
+            </div>
+            <p style={{ margin: '0 0 8px' }}>{a.programName}</p>
+            <dl className="dl">
+              <div>
+                <dt>{t.apply.fields.category}</dt>
+                <dd>{t.admissions.categories[a.category]}</dd>
+              </div>
+              <div>
+                <dt>{t.admissions.columns.entrance}</dt>
+                <dd>{a.entranceScore ?? t.common.none}</dd>
+              </div>
+              <div>
+                <dt>{t.admissions.columns.qualifying}</dt>
+                <dd>{a.qualifyingPercent ?? t.common.none}</dd>
+              </div>
+            </dl>
+          </div>
+        </StaggerItem>
+        <StaggerItem>
+          <div className="card">
+            <div className="info-card-head">
+              <IconTile icon={ShieldCheck} size="sm" tone={a.consentStatus === 'GRANTED' ? 'good' : 'warn'} />
+              <h3>{t.admissions.guardian}</h3>
+            </div>
+            <dl className="dl">
+              <div>
+                <dt>{t.common.name}</dt>
+                <dd>{a.guardianName ?? t.common.none}</dd>
+              </div>
+              <div>
+                <dt>{t.apply.fields.email}</dt>
+                <dd>{a.guardianEmail ?? t.common.none}</dd>
+              </div>
+              <div>
+                <dt>{t.common.status}</dt>
+                <dd>{t.admissions.consentStatus[a.consentStatus]}</dd>
+              </div>
+            </dl>
+          </div>
+        </StaggerItem>
+      </Stagger>
 
-      <h2>{t.admissions.documentsTitle}</h2>
+      <div className="section-title">
+        <h2>{t.admissions.documentsTitle}</h2>
+      </div>
       {docs.error && <ErrorBanner message={docs.error} />}
       <div className="doc-grid" style={{ marginBottom: 24 }}>
         {ALL_TYPES.map((type) => (
@@ -105,7 +174,7 @@ export function ApplicationDetailPage() {
 
       {consents.data && consents.data.length > 0 && (
         <div className="card table-wrap">
-          <h2>{t.admissions.consentTitle}</h2>
+          <h2 className="card-title">{t.admissions.consentTitle}</h2>
           <table>
             <tbody>
               {consents.data.map((c) => (
@@ -116,9 +185,7 @@ export function ApplicationDetailPage() {
                   <td>
                     {c.guardianName} ({c.guardianContact})
                   </td>
-                  <td className="small muted">
-                    {formatDateTime(c.grantedAt ?? c.revokedAt ?? c.otpExpiresAt)}
-                  </td>
+                  <td className="small muted">{formatDateTime(c.grantedAt ?? c.revokedAt ?? c.otpExpiresAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -127,9 +194,11 @@ export function ApplicationDetailPage() {
       )}
 
       <div className="card">
-        <h2>{t.admissions.decisionTitle}</h2>
+        <h2 className="card-title">{t.admissions.decisionTitle}</h2>
         {a.allowedActions.length === 0 ? (
-          <p className="muted">{t.admissions.noActions}</p>
+          <p className="muted" style={{ margin: 0 }}>
+            {t.admissions.noActions}
+          </p>
         ) : (
           <>
             <Field id="reason" label={t.admissions.reasonPrompt}>
@@ -140,7 +209,7 @@ export function ApplicationDetailPage() {
                 <button
                   key={action}
                   type="button"
-                  className={action === 'REJECT' || action === 'REVERSE_ENROLMENT' ? 'btn btn-danger' : 'btn'}
+                  className={DANGEROUS.includes(action) ? 'btn btn-danger' : 'btn'}
                   disabled={busy}
                   onClick={() => act(action)}
                 >

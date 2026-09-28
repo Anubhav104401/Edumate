@@ -1,85 +1,122 @@
 /*
  * ============================================================
- *  THEME = every colour, font, size and corner radius in ONE place.
- *  Change a value here and it changes everywhere in the app.
- *  Example: to make the main blue darker, edit --color-primary.
+ *  THEME = every colour, font, size, corner, shadow and motion
+ *  setting in ONE place. Change a value here and it changes everywhere.
+ *
+ *  Colours are written as  light-dark(<light mode>, <dark mode>):
+ *  the browser picks the first value in light mode and the second
+ *  in dark mode. Example: to make the main blue darker in light mode,
+ *  lower the first number of the first oklch(...) in --color-primary.
+ *
+ *  oklch(L C H) = Lightness 0-1, Chroma (colourfulness) 0-0.37,
+ *  Hue 0-360 degrees (25 red, 65 amber, 155 green, 264 blue, 300 violet).
  * ============================================================
  */
 :root {
+  /* Which themes this page supports. theme-init.js / ThemeContext narrow it to one. */
+  color-scheme: light dark;
+
   /* ---- Brand colours ---- */
-  --color-primary: #1f4e79;          /* buttons, links, active menu item */
-  --color-primary-hover: #173c5e;    /* button when the mouse is over it */
-  --color-primary-soft: #e3eef8;     /* pale blue backgrounds, selected rows */
-  --color-on-primary: #ffffff;       /* text written on top of the primary colour */
+  --color-primary: light-dark(oklch(0.52 0.2 264), oklch(0.74 0.14 262));
+  --color-primary-hover: light-dark(oklch(0.46 0.2 264), oklch(0.8 0.12 262));
+  --color-primary-soft: color-mix(in oklab, var(--color-primary) 12%, transparent);
+  --color-on-primary: light-dark(oklch(0.99 0 0), oklch(0.17 0.03 264));
+  --color-accent: light-dark(oklch(0.55 0.23 298), oklch(0.74 0.16 298));   /* violet */
+  --color-accent-2: light-dark(oklch(0.66 0.14 212), oklch(0.8 0.12 205));  /* cyan */
+  --color-accent-3: light-dark(oklch(0.65 0.21 354), oklch(0.76 0.15 354)); /* pink */
+  --gradient-brand: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%);
+  --gradient-text: linear-gradient(100deg, var(--color-primary) 10%, var(--color-accent) 55%, var(--color-accent-3) 95%);
 
   /* ---- Page and surfaces ---- */
-  --color-page: #f4f6f9;             /* the grey page behind everything */
-  --color-surface: #ffffff;          /* cards, tables, dialogs */
-  --color-surface-muted: #f8fafc;    /* table headers, striped rows */
-  --color-sidebar: #10263d;          /* left navigation bar */
-  --color-sidebar-text: #c9d6e3;
-  --color-sidebar-active: #ffffff;
+  --color-page: light-dark(oklch(0.984 0.004 264), oklch(0.145 0.012 264));
+  --color-surface: light-dark(oklch(1 0 0), oklch(0.185 0.014 264));
+  --color-surface-muted: light-dark(oklch(0.968 0.006 264), oklch(0.215 0.015 264));
+  --color-surface-raised: light-dark(oklch(1 0 0), oklch(0.225 0.016 264));
+  --color-glass: light-dark(oklch(1 0 0 / 0.72), oklch(0.18 0.014 264 / 0.72));
+  --color-sidebar: light-dark(oklch(0.974 0.006 264), oklch(0.165 0.013 264));
+  --color-sidebar-text: var(--color-text-muted);
+  --color-sidebar-active: var(--color-text);
+  --color-backdrop: light-dark(oklch(0.25 0.03 264 / 0.32), oklch(0.05 0.01 264 / 0.6));
 
-  /* ---- Text ---- */
-  --color-text: #1b2430;             /* normal text */
-  --color-text-muted: #5b6878;       /* hints, labels, secondary text */
-  --color-border: #d8dee6;           /* lines around boxes and inputs */
+  /* ---- Text and lines ---- */
+  --color-text: light-dark(oklch(0.21 0.02 264), oklch(0.95 0.006 264));
+  --color-text-muted: light-dark(oklch(0.5 0.02 264), oklch(0.72 0.015 264));
+  --color-text-faint: light-dark(oklch(0.63 0.015 264), oklch(0.57 0.015 264));
+  --color-border: light-dark(oklch(0.915 0.008 264), oklch(0.285 0.015 264));
+  --color-border-strong: light-dark(oklch(0.85 0.01 264), oklch(0.36 0.018 264));
 
   /* ---- Status colours (alerts, badges, dashboard cards) ---- */
-  --color-good: #1e7a46;
-  --color-good-soft: #e3f4ea;
-  --color-warn: #9a6200;
-  --color-warn-soft: #fdf1dc;
-  --color-bad: #b42318;
-  --color-bad-soft: #fde8e6;
-  --color-info: #1f4e79;
-  --color-info-soft: #e3eef8;
+  --color-good: light-dark(oklch(0.52 0.13 155), oklch(0.8 0.15 158));
+  --color-warn: light-dark(oklch(0.56 0.13 62), oklch(0.84 0.14 80));
+  --color-bad: light-dark(oklch(0.53 0.2 25), oklch(0.74 0.16 22));
+  --color-info: var(--color-primary);
+  --color-good-soft: color-mix(in oklab, var(--color-good) 12%, transparent);
+  --color-warn-soft: color-mix(in oklab, var(--color-warn) 14%, transparent);
+  --color-bad-soft: color-mix(in oklab, var(--color-bad) 12%, transparent);
+  --color-info-soft: var(--color-primary-soft);
 
-  /* ---- Typography ---- */
-  --font-body: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+  /* ---- Chart series (a colour-blind-safe pair, checked with a palette validator for both themes) ---- */
+  --chart-1: light-dark(#2a78d6, #3987e5);
+  --chart-2: light-dark(#eb6834, #d95926);
+
+  /* ---- Typography (the fonts are bundled with the app, see main.tsx) ---- */
+  --font-body: "Geist Variable", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --font-mono: "Geist Mono Variable", "Cascadia Mono", Consolas, "Courier New", monospace;
   --text-xs: 12px;
   --text-sm: 13px;
   --text-md: 15px;
   --text-lg: 18px;
-  --text-xl: 24px;
-  --text-2xl: 30px;
+  --text-xl: 26px;
+  --text-2xl: 32px;
+  --text-3xl: 44px;
+  --text-display: clamp(44px, 7vw, 92px);
 
-  /* ---- Spacing, corners, shadows ---- */
+  /* ---- Spacing, corners ---- */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --shadow-card: 0 1px 2px rgba(16, 38, 61, 0.06), 0 2px 8px rgba(16, 38, 61, 0.06);
-  --sidebar-width: 248px;
+  --space-7: 48px;
+  --space-8: 72px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 26px;
+  --radius-full: 999px;
+
+  /* ---- Shadows: several soft layers look more natural than one hard one ---- */
+  --shadow-ink: light-dark(oklch(0.25 0.04 264 / 0.08), oklch(0 0 0 / 0.45));
+  --shadow-xs: 0 1px 2px var(--shadow-ink);
+  --shadow-card: 0 1px 2px var(--shadow-ink), 0 6px 20px -8px var(--shadow-ink);
+  --shadow-lg: 0 2px 6px var(--shadow-ink), 0 24px 60px -16px light-dark(oklch(0.25 0.05 264 / 0.22), oklch(0 0 0 / 0.7));
+  --shadow-glow: 0 10px 30px -10px color-mix(in oklab, var(--color-primary) 55%, transparent);
+  --highlight-top: inset 0 1px 0 light-dark(oklch(1 0 0 / 0.9), oklch(1 0 0 / 0.06));
+
+  /* ---- Motion: how things move ---- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /* A spring written as a curve: overshoots a little, then settles. */
+  --ease-spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.4%, 1.067, 1.089 25.4%, 1.089 28.4%, 1.041 36.1%, 1.008 45.1%, 0.993 54.9%, 1.001 76.2%, 1);
+  --duration-fast: 150ms;
+  --duration: 260ms;
+  --duration-slow: 600ms;
+
+  /* ---- Layout sizes and stacking order ---- */
+  --sidebar-width: 264px;
+  --sidebar-collapsed: 76px;
+  --topbar-height: 64px;
+  --content-max: 1320px;
+  --z-topbar: 40;
+  --z-sidebar: 50;
+  --z-overlay: 80;
+  --z-dialog: 90;
+  --z-toast: 100;
+  --z-loader: 110;
 }
 
-/* ---- Dark mode: used automatically when the computer is set to dark. ---- */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-primary: #6ea8d8;
-    --color-primary-hover: #8dbde3;
-    --color-primary-soft: #1d3247;
-    --color-on-primary: #0d1b28;
-    --color-page: #0f141a;
-    --color-surface: #171e26;
-    --color-surface-muted: #1c242e;
-    --color-sidebar: #0b1118;
-    --color-text: #e3e8ee;
-    --color-text-muted: #9aa7b6;
-    --color-border: #2c3744;
-    --color-good: #5cc98a;
-    --color-good-soft: #15321f;
-    --color-warn: #e8b44e;
-    --color-warn-soft: #3a2c10;
-    --color-bad: #f07b72;
-    --color-bad-soft: #3d1714;
-    --color-info: #6ea8d8;
-    --color-info-soft: #1d3247;
-  }
-}
+/* A choice made with the theme switch overrides the computer's setting. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }

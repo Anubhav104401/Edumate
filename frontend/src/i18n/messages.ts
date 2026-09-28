@@ -10,19 +10,13 @@
  *  Messages that come FROM THE BACKEND (for example "Only computed results
  *  can be approved") are written in the Java code of the backend instead.
  */
-import type {
-  AdmissionAction,
-  AdmissionStatus,
-  DocumentType,
-  ResultStatus,
-  Role,
-} from '../api/types';
+import type { AdmissionAction, AdmissionStatus, DocumentType, ResultStatus, Role } from '../api/types';
 
 export const t = {
   app: {
     name: 'EduMate',
-    tagline: 'Automation platform for an educational organisation',
-    footer: 'EduMate (EduAutomate) Release 2.0',
+    footer: 'EduMate (EduAutomate) Release 3.0',
+    release: 'Release 3.0',
   },
 
   roles: {
@@ -59,6 +53,16 @@ export const t = {
     audit: 'Audit log',
     outbox: 'Message outbox',
     roleMatrix: 'Role matrix',
+    sections: {
+      overview: 'Overview',
+      studies: 'My studies',
+      teaching: 'Teaching',
+      exams: 'Examinations',
+      admissions: 'Admissions',
+      finance: 'Finance',
+      library: 'Library',
+      admin: 'Administration',
+    },
   },
 
   common: {
@@ -93,6 +97,37 @@ export const t = {
     amount: 'Amount',
     reason: 'Reason',
     choose: 'Choose…',
+    print: 'Print',
+    confirmTitle: 'Please confirm',
+    openMenu: 'Open menu',
+    collapse: 'Collapse the menu',
+    expand: 'Expand the menu',
+    backToTop: 'Back to top',
+    skipToContent: 'Skip to content',
+    mainMenu: 'Main menu',
+    breadcrumb: 'You are here',
+    notifications: 'Notifications',
+    of: (part: number, whole: number) => `${part} of ${whole}`,
+  },
+
+  theme: {
+    label: 'Theme',
+    light: 'Light',
+    dark: 'Dark',
+    system: 'Same as my computer',
+    toggle: 'Switch between light and dark',
+  },
+
+  palette: {
+    open: 'Search or jump to…',
+    placeholder: 'Type a page or an action…',
+    pages: 'Pages',
+    actions: 'Actions',
+    empty: 'Nothing matches that.',
+    move: 'move',
+    select: 'open',
+    close: 'close',
+    title: 'Command menu',
   },
 
   errors: {
@@ -102,7 +137,152 @@ export const t = {
     sessionExpired: 'Your session has ended. Please log in again.',
     forbiddenPage: 'You do not have access to this page.',
     pageCrashedTitle: 'This page could not be displayed.',
-    pageCrashedBody: 'Something unexpected happened while drawing it. Choose another page from the menu, or reload the browser tab.',
+    pageCrashedBody:
+      'Something unexpected happened while drawing it. Choose another page from the menu, or reload the browser tab.',
+    reload: 'Reload the page',
+  },
+
+  landing: {
+    nav: { modules: 'Modules', journey: 'How it works', roles: 'Roles', quality: 'Quality', signIn: 'Sign in' },
+    badge: 'Release 3.0 · built from an SQA activity report',
+    titleA: 'The whole campus,',
+    titleAccent: 'beautifully',
+    titleB: 'in one place.',
+    body: 'Admissions, attendance, examinations, fees, timetables and the library, for every campus and every role, with every defect from the quality report fixed and tested.',
+    ctaPrimary: 'Sign in to EduMate',
+    ctaSecondary: 'Explore the modules',
+    scrollHint: 'Scroll to explore',
+    stats: {
+      modules: 'modules',
+      roles: 'roles, each with its own view',
+      findings: 'SQA findings fixed and tested',
+      campuses: 'campuses, fully separated',
+    },
+    marquee: [
+      'Admissions',
+      'Attendance',
+      'Hall tickets',
+      'SGPA & CGPA',
+      'Online fees',
+      'Timetables',
+      'Library',
+      'Audit trail',
+      'Merit lists',
+      'Guardian consent',
+      'Role matrix',
+      'Two-person approval',
+    ],
+    modulesEyebrow: 'Modules',
+    modulesTitle: 'Seven modules. One calm interface.',
+    modulesBody: 'Every part of university paperwork, redesigned around the people who do it every day.',
+    modules: {
+      admissions: {
+        title: 'Admissions',
+        body: 'Online applications, scanned documents checked byte by byte, guardian consent for minors, and a merit list with reserved seats.',
+      },
+      attendance: {
+        title: 'Attendance',
+        body: 'Registers per lecture with protection against lost updates, and a live “classes you can still miss” for every student.',
+      },
+      exams: {
+        title: 'Examinations',
+        body: 'Marks with an audit trail, hall-ticket eligibility from a decision table, SGPA and CGPA, and two-person approval.',
+      },
+      fees: {
+        title: 'Fees',
+        body: 'Bills, receipts and statements, with a bank gateway whose repeated confirmations never credit a fee twice.',
+      },
+      timetable: {
+        title: 'Timetable',
+        body: 'Clash-free timetables generated automatically, adjustable by hand, and refused for publication while any clash remains.',
+      },
+      library: { title: 'Library', body: 'Catalogue search, issue and return at the desk, and fines that calculate themselves.' },
+      admin: {
+        title: 'Administration',
+        body: 'An audit log with old and new values, the message outbox, and the complete role matrix.',
+      },
+    },
+    journeyEyebrow: 'How it works',
+    journeyTitle: 'A student’s year, start to finish',
+    journeyBody: 'Scroll through the path every student takes. Each step is a screen in EduMate.',
+    journey: {
+      apply: {
+        title: 'Apply',
+        body: 'One form, scanned documents checked in the browser and again on the server, and guardian consent by one-time code for anyone under 18.',
+      },
+      attend: {
+        title: 'Attend',
+        body: 'Teachers mark attendance per lecture. Students see their percentage and exactly how many classes they can still miss.',
+      },
+      examine: {
+        title: 'Sit the exams',
+        body: 'The hall ticket is issued only when every course meets the rules of the decision table, including medical exemptions.',
+      },
+      results: {
+        title: 'Get results',
+        body: 'Results are computed in one pass, approved by two different superintendents, then published exactly once.',
+      },
+      pay: {
+        title: 'Pay fees',
+        body: 'Pay through the gateway and get a receipt at once. A replayed bank confirmation is recognised and ignored.',
+      },
+    },
+    rolesEyebrow: 'Roles',
+    rolesTitle: 'Nine roles. Each sees exactly what it needs.',
+    rolesBody: 'The menu, the dashboard and even the backend’s answers change with the person who is signed in.',
+    roleBlurbs: {
+      STUDENT: 'Attendance with “classes you can still miss”, hall-ticket eligibility, results, fees and library loans.',
+      GUARDIAN: 'The same view of their child’s progress, and the consent step for applicants under 18.',
+      FACULTY: 'Take attendance in seconds, see who is below 75%, and amend marks with a full audit trail.',
+      EXAM_SUPERINTENDENT: 'Compute results, give one of the two approvals, and publish them exactly once.',
+      ADMISSIONS_OFFICER: 'Review applications and documents, and generate the merit list with its seat matrix.',
+      ACCOUNTS_OFFICER: 'Every gateway payment, receipt and student ledger, replay-safe by design.',
+      LIBRARIAN: 'Search the catalogue, issue and return books; fines calculate themselves.',
+      APPLICANT: 'Apply online, upload scanned documents safely and follow every status change.',
+      ADMIN: 'Generate clash-free timetables, read the audit log, and watch the outbox and the role matrix.',
+    } satisfies Record<Role, string>,
+    qualityEyebrow: 'Quality',
+    qualityTitle: 'Every finding fixed. Every fix tested.',
+    qualityBody: 'The SQA report found real defects. Each one is fixed in the code and proved by an automated test.',
+    quality: {
+      rbac: {
+        title: 'Deny by default',
+        body: 'Every backend address is listed in one role matrix. Anything not listed is refused for everyone.',
+      },
+      locking: {
+        title: 'No lost updates',
+        body: 'Optimistic locking stops two teachers from silently overwriting each other’s attendance.',
+      },
+      payments: {
+        title: 'Replay-safe payments',
+        body: 'A row lock and a unique transaction reference make duplicate bank callbacks harmless.',
+      },
+      approval: {
+        title: 'Two-person rule',
+        body: 'Results need two different approvers, and publishing is one atomic database update.',
+      },
+      audit: { title: 'Before and after', body: 'The audit log keeps the old and the new value of every important change.' },
+      lockout: {
+        title: 'Account lockout',
+        body: 'Five wrong passwords lock an account for fifteen minutes. Passwords are stored as bcrypt hashes.',
+      },
+    },
+    ctaTitle: 'Ready when you are.',
+    ctaBody: 'Sign in with your campus account, or use any demo account while developing.',
+    ctaButton: 'Sign in',
+    footer: 'EduMate (EduAutomate) · Software Quality Assurance, 23CSE701',
+  },
+
+  preview: {
+    name: 'Priya',
+    attendance: 'Attendance',
+    cgpa: 'CGPA',
+    sgpa: 'SGPA this semester',
+    feesDue: 'Fees due',
+    paid: 'Fee paid',
+    paidHint: 'Receipt issued instantly',
+    approved: 'Results approved',
+    approvedHint: 'Two different superintendents',
   },
 
   login: {
@@ -112,6 +292,18 @@ export const t = {
     password: 'Password',
     submit: 'Sign in',
     submitting: 'Signing in…',
+    welcome: 'Welcome back',
+    heroEyebrow: 'EduMate for campuses',
+    heroTitleA: 'Run the whole campus',
+    heroTitleAccent: 'without the paperwork.',
+    heroBody: 'Attendance, examinations, fees, admissions and timetables for every role, on every campus.',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
+    capsLock: 'Caps Lock is on.',
+    demoSearch: 'Filter by name or role…',
+    demoInstant: 'Double-click one to sign in straight away.',
+    about: 'About EduMate',
+    secure: 'Protected by role-based access and account lockout.',
     missingFields: 'Enter both your username and your password.',
     demoTitle: 'Demo accounts (development only)',
     demoHint: (password: string) => `Every demo account uses the password ${password}. Click a name to fill the form.`,
@@ -139,12 +331,17 @@ export const t = {
     campus: (code: string) => `Campus ${code}`,
     logout: 'Log out',
     loggedOut: 'You have been logged out.',
+    account: 'Your account',
   },
 
   dashboard: {
-    greeting: (name: string) => `Welcome, ${name}`,
+    timeOfDay: { morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening' },
     subtitle: 'Here is what needs your attention today.',
     empty: 'Nothing to report right now.',
+    glanceTitle: 'At a glance',
+    quickTitle: 'Jump back in',
+    quickHint: 'Every page you can open',
+    searchHint: 'Press Ctrl K to jump anywhere',
   },
 
   attendance: {
@@ -153,11 +350,9 @@ export const t = {
     subtitle: (threshold: number) =>
       `You need at least ${threshold}% attendance in every course to sit its examination. Exactly ${threshold}% is enough.`,
     columns: {
-      course: 'Course',
       attended: 'Attended',
       percent: 'Attendance',
       canMiss: 'Can still miss',
-      status: 'Status',
     },
     status: { OK: 'On track', WARNING: 'Careful', SHORTFALL: 'Below minimum' },
     canMiss: (n: number) => (n === 1 ? '1 class' : `${n} classes`),
@@ -167,6 +362,9 @@ export const t = {
     attendedOf: (attended: number, held: number) => `${attended} of ${held}`,
     shortfallAlert: (count: number) =>
       `You are below the minimum in ${count} course(s). Attend every remaining class and speak to your teacher.`,
+    overall: 'Overall',
+    courses: 'Courses',
+    classesHeld: 'Classes held',
   },
 
   hallTicket: {
@@ -178,11 +376,9 @@ export const t = {
     feeDue: 'Fees: dues outstanding',
     examsStart: (date: string) => `Examinations start on ${date}`,
     columns: {
-      course: 'Course',
       attendance: 'Attendance',
       assessment: 'Internal assessment',
       exemption: 'Medical exemption',
-      decision: 'Decision',
       rule: 'Rule',
       reasons: 'Why',
     },
@@ -191,6 +387,13 @@ export const t = {
     complete: 'Complete',
     pending: 'Pending',
     ruleHint: 'Rules R1–R5 are the decision table of the SQA report (Table 3.9).',
+    candidate: 'Candidate',
+    usn: 'USN',
+    session: 'Session',
+    startsOn: 'Examinations start',
+    stampYes: 'Eligible',
+    stampNo: 'Not yet',
+    coursesTitle: 'Course-by-course decision',
   },
 
   results: {
@@ -198,19 +401,30 @@ export const t = {
     subtitle: 'Only results approved by two examination superintendents and published are shown here.',
     none: 'No results have been published yet.',
     semester: (n: number) => `Semester ${n}`,
+    semShort: (n: number) => `Sem ${n}`,
     sgpa: 'SGPA',
     cgpa: 'CGPA',
     credits: (earned: number, registered: number) => `Credits earned: ${earned} of ${registered}`,
     outcome: { PASS: 'Pass', FAIL: 'Fail' },
-    columns: { code: 'Code', course: 'Course', credits: 'Credits', marks: 'Marks (of 100)', grade: 'Grade', points: 'Grade points' },
+    columns: {
+      code: 'Code',
+      course: 'Course',
+      credits: 'Credits',
+      marks: 'Marks (of 100)',
+      grade: 'Grade',
+      points: 'Grade points',
+    },
     noCourseDetail: 'Course-wise grades are not available for this semester.',
+    trendTitle: 'Grade point trend',
+    creditsTitle: 'Credits earned',
+    trendHint: 'SGPA of each semester, and the CGPA after it',
+    latest: 'Current CGPA',
   },
 
   fees: {
     title: 'My fees',
     guardianTitle: "Your child's fees",
     outstanding: 'Amount outstanding',
-    nothingDue: 'No fees are due.',
     demandsTitle: 'Bills',
     paymentsTitle: 'Payments',
     ledgerTitle: 'Account statement',
@@ -219,6 +433,9 @@ export const t = {
     demandStatus: { PAID: 'Paid', DUE: 'Due', OVERDUE: 'Overdue' },
     paymentStatus: { INITIATED: 'Started', SUCCESS: 'Successful', FAILED: 'Failed' },
     ledgerType: { DEBIT: 'Bill', CREDIT: 'Payment' },
+    paidOf: (paid: string, total: string) => `${paid} paid of ${total} billed`,
+    allPaid: 'Everything is paid. Thank you!',
+    noPayments: 'No payments yet.',
     columns: {
       description: 'Description',
       amount: 'Amount',
@@ -241,7 +458,8 @@ export const t = {
     amount: 'Amount to pay',
     status: 'Current status',
     deliveries: 'Send the bank’s confirmation',
-    deliveriesHint: 'Real gateways sometimes send the same confirmation twice. Choose 2 or 3 to test that EduMate credits the fee only once (test case TC-006).',
+    deliveriesHint:
+      'Real gateways sometimes send the same confirmation twice. Choose 2 or 3 to test that EduMate credits the fee only once (test case TC-006).',
     deliveryOption: (n: number) => (n === 1 ? 'once (normal)' : `${n} times (replay test)`),
     pay: 'Approve payment',
     decline: 'Decline payment',
@@ -254,12 +472,16 @@ export const t = {
     receipt: (no: string) => `Receipt number: ${no}`,
     failed: (reason: string) => `Payment failed: ${reason}`,
     backToFees: 'Back to my fees',
+    secure: 'Secured with a signed (HMAC) callback',
+    successTitle: 'Payment successful',
+    failedTitle: 'Payment declined',
   },
 
   timetable: {
     myTitle: 'My weekly timetable',
     manageTitle: 'Timetable planning',
-    manageSubtitle: 'Generate a clash-free draft, adjust it if needed, then publish it. Publishing is refused while any clash remains.',
+    manageSubtitle:
+      'Generate a clash-free draft, adjust it if needed, then publish it. Publishing is refused while any clash remains.',
     empty: 'No timetable has been published yet.',
     days: ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
     periodLabel: (p: number) => `P${p}`,
@@ -286,6 +508,9 @@ export const t = {
     workloadTitle: 'Teaching workload (published timetables)',
     hoursPerWeek: 'Hours / week',
     teaching: 'Teaching',
+    todayTitle: 'Today',
+    noneToday: 'No lectures today. Enjoy the break.',
+    weekTitle: 'The whole week',
   },
 
   library: {
@@ -301,7 +526,16 @@ export const t = {
     issuedToast: (title: string, due: string) => `“${title}” issued. Due back on ${due}.`,
     returnedToast: (fine: string) => `Book returned. Fine charged: ${fine}.`,
     confirmReturn: (title: string, fine: string) => `Return “${title}”? Fine to collect: ${fine}.`,
-    columns: { title: 'Title', author: 'Author', available: 'Available', issued: 'Issued', due: 'Due', late: 'Days late', fine: 'Fine', student: 'Student' },
+    columns: {
+      title: 'Title',
+      author: 'Author',
+      available: 'Available',
+      issued: 'Issued',
+      due: 'Due',
+      late: 'Days late',
+      fine: 'Fine',
+      student: 'Student',
+    },
     none: 'No books borrowed.',
     overdue: 'Overdue',
     onLoan: 'On loan',
@@ -327,9 +561,11 @@ export const t = {
     existingRegister: (version: number) => `Saved register (version ${version}). Changes will update it.`,
     savedToast: 'Attendance saved.',
     staleTitle: 'Someone else saved this register while you were editing.',
-    staleBody: 'Your changes were not saved, so nothing was overwritten. Reload to see the latest register, then make your changes again.',
+    staleBody:
+      'Your changes were not saved, so nothing was overwritten. Reload to see the latest register, then make your changes again.',
     reload: 'Reload register',
     futureDate: 'Attendance cannot be taken for a future date.',
+    tapHint: 'Tap a student to mark them absent; tap again to mark them present.',
   },
 
   courseAttendance: {
@@ -339,7 +575,8 @@ export const t = {
     shortfallTitle: 'Below the minimum',
     allTitle: 'Whole class',
     notify: 'E-mail guardians of students below the minimum',
-    confirmNotify: (n: number) => `Queue an e-mail to the guardians of ${n} student(s)? Each guardian is e-mailed at most once a week per course.`,
+    confirmNotify: (n: number) =>
+      `Queue an e-mail to the guardians of ${n} student(s)? Each guardian is e-mailed at most once a week per course.`,
     notifiedToast: (queued: number, skipped: number) =>
       `${queued} e-mail(s) queued. ${skipped} guardian(s) had already been told this week.`,
     none: 'No student is below this threshold.',
@@ -350,7 +587,14 @@ export const t = {
     subtitle: 'Internal assessment marks are out of 40. Every change is written to the audit log with the old and new value.',
     examSession: 'Exam session',
     load: 'Open marks sheet',
-    columns: { internal: 'Internal (40)', external: 'External (60)', total: 'Total', grade: 'Grade', lastChange: 'Last change', change: 'Change' },
+    columns: {
+      internal: 'Internal (40)',
+      external: 'External (60)',
+      total: 'Total',
+      grade: 'Grade',
+      lastChange: 'Last change',
+      change: 'Change',
+    },
     reasonPlaceholder: 'Reason for the change',
     save: 'Save',
     locked: 'Results for this course are approved or published. Marks can no longer be changed here.',
@@ -385,9 +629,9 @@ export const t = {
       APPROVED: 'Approved: ready to publish',
       PUBLISHED: 'Published',
     } satisfies Record<ResultStatus, string>,
-    approvals: (first: string | null, second: string | null) =>
-      `Approvals: ${first ?? '—'} / ${second ?? '—'}`,
+    approvals: (first: string | null, second: string | null) => `Approvals: ${first ?? '—'} / ${second ?? '—'}`,
     reportTitle: (programme: string, semester: number) => `Consolidated marks: ${programme}, semester ${semester}`,
+    steps: { computed: 'Computed', first: '1st approval', second: '2nd approval', published: 'Published' },
   },
 
   reports: {
@@ -403,7 +647,15 @@ export const t = {
     filterStatus: 'Status',
     anyStatus: 'Any status',
     searchPlaceholder: 'Name or application number',
-    columns: { number: 'Application', name: 'Applicant', programme: 'Programme', category: 'Category', entrance: 'Entrance', qualifying: 'Qualifying %', status: 'Status', submitted: 'Submitted' },
+    columns: {
+      name: 'Applicant',
+      programme: 'Programme',
+      category: 'Category',
+      entrance: 'Entrance',
+      qualifying: 'Qualifying %',
+      status: 'Status',
+      submitted: 'Submitted',
+    },
     detailTitle: (no: string) => `Application ${no}`,
     personal: 'Applicant',
     academic: 'Programme and scores',
@@ -445,15 +697,26 @@ export const t = {
       REVOKED: 'Revoked',
     },
     categories: { GEN: 'General', OBC: 'OBC', SC: 'SC', ST: 'ST' },
+    journeyTitle: 'Where this application is',
   },
 
   merit: {
     title: 'Merit list',
-    subtitle: 'Merit score = 60% entrance + 40% qualifying examination. Ties: entrance, then qualifying %, then older applicant, then earlier submission.',
+    subtitle:
+      'Merit score = 60% entrance + 40% qualifying examination. Ties: entrance, then qualifying %, then older applicant, then earlier submission.',
     generate: 'Generate merit list',
     seats: 'Seat matrix',
     filled: (filled: number, total: number) => `${filled} of ${total} filled`,
-    columns: { rank: 'Rank', application: 'Application', name: 'Name', category: 'Category', entrance: 'Entrance', qualifying: 'Qualifying %', score: 'Merit score', seat: 'Seat' },
+    columns: {
+      rank: 'Rank',
+      application: 'Application',
+      name: 'Name',
+      category: 'Category',
+      entrance: 'Entrance',
+      qualifying: 'Qualifying %',
+      score: 'Merit score',
+      seat: 'Seat',
+    },
     waitlist: (n: number) => `Wait-list #${n}`,
     empty: 'No submitted applications with scores for this programme.',
   },
@@ -464,12 +727,12 @@ export const t = {
     startTitle: 'Start your application',
     status: 'Status',
     number: 'Application number',
-    sectionPersonal: '1. About you',
-    sectionProgramme: '2. Programme and scores',
-    sectionGuardian: '3. Parent or guardian',
-    sectionDocuments: '4. Documents',
-    sectionConsent: '5. Guardian consent',
-    sectionSubmit: '6. Submit',
+    sectionPersonal: 'About you',
+    sectionProgramme: 'Programme and scores',
+    sectionGuardian: 'Parent or guardian',
+    sectionDocuments: 'Documents',
+    sectionConsent: 'Guardian consent',
+    sectionSubmit: 'Submit',
     fields: {
       fullName: 'Full name (as on marks card)',
       dateOfBirth: 'Date of birth',
@@ -513,6 +776,8 @@ export const t = {
     consentGranted: 'Guardian consent has been given.',
     consentRevoked: 'Guardian consent was withdrawn. The application cannot proceed until consent is given again.',
     otpInvalid: 'The code has exactly 6 digits.',
+    progress: (done: number, total: number) => `${done} of ${total} steps done`,
+    stepShort: ['About you', 'Programme', 'Guardian', 'Documents', 'Consent', 'Submit'],
     validation: {
       required: 'This field is required.',
       email: 'Enter a valid e-mail address.',
@@ -574,6 +839,7 @@ export const t = {
   },
 
   notFound: {
+    code: '404',
     title: 'Page not found',
     body: 'The page you asked for does not exist.',
     home: 'Go to the dashboard',

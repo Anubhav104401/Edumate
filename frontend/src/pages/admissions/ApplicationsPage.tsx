@@ -2,14 +2,16 @@
  * The admissions officer's list of applications, with a status filter and a search box.
  * Data: GET /api/admissions/applications?status=&q=
  */
+import { ArrowRight, Inbox, Search } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { api } from '../../api/endpoints';
 import type { AdmissionStatus } from '../../api/types';
-import { Badge, EmptyState, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
+import { Avatar, Badge, EmptyState, ErrorBanner, Field, Loading, PageHeader } from '../../components/ui';
 import { useLoad } from '../../hooks/useLoad';
 import { t } from '../../i18n/messages';
 import { formatDateTime } from '../../utils/format';
+import { admissionTone } from '../../utils/visuals';
 
 const STATUSES = Object.keys(t.admissions.statuses) as AdmissionStatus[];
 
@@ -39,22 +41,24 @@ export function ApplicationsPage() {
           </select>
         </Field>
         <Field id="q" label={t.common.search}>
-          <input id="q" value={typed} placeholder={t.admissions.searchPlaceholder} onChange={(e) => setTyped(e.target.value)} />
+          <div className="input-icon">
+            <Search size={16} />
+            <input id="q" value={typed} placeholder={t.admissions.searchPlaceholder} onChange={(e) => setTyped(e.target.value)} />
+          </div>
         </Field>
         <button type="submit" className="btn">
-          {t.common.search}
+          <Search size={16} /> {t.common.search}
         </button>
       </form>
 
       {loading && <Loading />}
       {error && <ErrorBanner message={error} onRetry={reload} />}
-      {data && data.length === 0 && <EmptyState />}
+      {data && data.length === 0 && <EmptyState icon={Inbox} />}
       {data && data.length > 0 && (
         <div className="card table-wrap">
           <table>
             <thead>
               <tr>
-                <th>{t.admissions.columns.number}</th>
                 <th>{t.admissions.columns.name}</th>
                 <th>{t.admissions.columns.programme}</th>
                 <th>{t.admissions.columns.category}</th>
@@ -62,25 +66,44 @@ export function ApplicationsPage() {
                 <th className="num">{t.admissions.columns.qualifying}</th>
                 <th>{t.admissions.columns.status}</th>
                 <th>{t.admissions.columns.submitted}</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {data.map((a) => (
                 <tr key={a.id}>
-                  <td className="mono">
-                    <Link to={`/admissions/${a.id}`}>{a.applicationNo}</Link>
+                  <td>
+                    <div className="btn-row" style={{ flexWrap: 'nowrap' }}>
+                      <Avatar name={a.fullName} size="sm" />
+                      <div>
+                        {/* React writes names as plain text, never as HTML, so a name like
+                            <script>...</script> is shown harmlessly (fix for DEF-036, reflected XSS). */}
+                        <strong>{a.fullName}</strong>
+                        <div className="small mono">
+                          <Link to={`/admissions/${a.id}`}>{a.applicationNo}</Link>
+                        </div>
+                      </div>
+                    </div>
                   </td>
-                  {/* React writes names as plain text, never as HTML, so a name like
-                      <script>...</script> is shown harmlessly (fix for DEF-036, reflected XSS). */}
-                  <td>{a.fullName}</td>
                   <td>{a.programName}</td>
-                  <td>{a.category}</td>
+                  <td>
+                    <span className="chip">{a.category}</span>
+                  </td>
                   <td className="num">{a.entranceScore ?? t.common.none}</td>
                   <td className="num">{a.qualifyingPercent ?? t.common.none}</td>
                   <td>
-                    <Badge>{t.admissions.statuses[a.status]}</Badge>
+                    <Badge tone={admissionTone(a.status)}>{t.admissions.statuses[a.status]}</Badge>
                   </td>
-                  <td>{formatDateTime(a.submittedAt)}</td>
+                  <td className="small muted">{formatDateTime(a.submittedAt)}</td>
+                  <td className="right">
+                    <Link
+                      to={`/admissions/${a.id}`}
+                      className="icon-btn plain"
+                      aria-label={t.admissions.detailTitle(a.applicationNo)}
+                    >
+                      <ArrowRight size={16} />
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -58,3 +58,10 @@ export function todayIso(): string {
   const day = String(now.getDate()).padStart(2, '0');
   return `${now.getFullYear()}-${month}-${day}`;
 }
+
+const longDayFormat = new Intl.DateTimeFormat(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
+
+/** A moment as a friendly day: "Monday, 28 September". */
+export function formatLongDay(value: Date): string {
+  return longDayFormat.format(value);
+}
