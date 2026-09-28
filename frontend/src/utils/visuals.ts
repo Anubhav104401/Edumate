@@ -23,9 +23,18 @@ export function hueFor(text: string): number {
   return Math.floor(fraction * 360);
 }
 
-/** "Aarav Sharma" -> "AS", "Meera" -> "M", "" -> "?" */
-export function initials(name: string): string {
+/** Titles written before a name ("Dr. Meera Nair"); they are not part of the name itself. */
+const TITLE = /^(dr|prof|mr|mrs|ms|miss|shri|smt)\.?$/i;
+
+/** The words of a name, without extra spaces or a leading title. */
+function nameWords(name: string): string[] {
   const words = name.trim().split(/\s+/).filter(Boolean);
+  return words.length > 1 && TITLE.test(words[0]) ? words.slice(1) : words;
+}
+
+/** "Aarav Sharma" -> "AS", "Dr. Meera Nair" -> "MN", "Meera" -> "M", "" -> "?" */
+export function initials(name: string): string {
+  const words = nameWords(name);
   if (words.length === 0) {
     return '?';
   }
@@ -34,9 +43,9 @@ export function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
-/** "Aarav Sharma" -> "Aarav" */
+/** "Aarav Sharma" -> "Aarav", "Dr. Meera Nair" -> "Meera" */
 export function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] ?? name;
+  return nameWords(name)[0] ?? name;
 }
 
 /** Hues for the letter grades of the 10-point scale: S and A green, B-C blue, D-E amber, F red. */

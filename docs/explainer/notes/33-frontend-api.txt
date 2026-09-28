@@ -206,8 +206,8 @@ Small **pure functions that decide how things look**. "Pure" means: same input, 
 | Function | Example | Used for |
 |---|---|---|
 | `hueFor(text)` | `hueFor('23CS501')` → 54, and `'23CS502'` → 276 | a stable colour per course, person or book |
-| `initials(name)` | "Aarav Sharma" → "AS" | the round avatars |
-| `firstName(name)` | "Aarav Sharma" → "Aarav" | "Good evening, Aarav" |
+| `initials(name)` | "Aarav Sharma" → "AS", "Dr. Meera Nair" → "MN" | the round avatars |
+| `firstName(name)` | "Dr. Meera Nair" → "Meera" | "Good evening, Aarav" and the name in the top bar |
 | `gradeHue(grade)` | "S" → 150 (green) | coloured grade letters |
 | `timeOfDay(hour)` | 19 → "evening" | the dashboard greeting |
 | `splitNumber(text)` | "Rs 62500.00" → "Rs " + 62500 + 2 decimals | the numbers that count up |
@@ -220,43 +220,47 @@ Small **pure functions that decide how things look**. "Pure" means: same input, 
 For every character: multiply the running number by 31 and add the character's code number. This is the classic "string hash" (Java's `String.hashCode()` works the same way). `>>> 0` keeps the result a positive whole number that fits in 32 bits.
 >>> 22-23
 Turn the hash into an angle on the colour wheel. Multiplying by the golden ratio (0.618…) and keeping only the part after the decimal point (`% 1`) spreads **neighbouring** numbers far apart: two course codes that differ only in their last character end up about 222° apart instead of 1° apart. (An earlier version gave every course in the timetable almost the same orange; the test "gives codes that differ in one character clearly different hues" now guards against that.)
->>> 28
-Split the name into words: trim the ends, split on runs of spaces, drop empty pieces.
->>> 29-30
+>>> 27
+Titles that people write before their name. The pattern matches the whole word (`^…$`), with or without the full stop (`\.?`), in any capitals (`i`), so "Dr.", "PROF" and "Mrs" match but "Drishti" does not.
+>>> 30-33
+The shared first step of `initials` and `firstName`: split the name into words (trim the ends, split on runs of spaces, drop empty pieces) and drop a leading title. The title is only dropped when something follows it, so a name that is just "Dr." is kept as it is. Without this, "Dr. Meera Nair" was greeted as "Dr." and her avatar read "DN".
+>>> 37
+The words of the name, title already removed.
+>>> 38-39
 No words at all → a question mark.
->>> 32-34
+>>> 41-43
 The first letter of the first word and of the last word (if there is more than one word), in capitals.
->>> 39
-The first word of the name (or the name itself if something is odd).
->>> 43
+>>> 48
+The first word after any title (or the name itself if there are no words at all).
+>>> 52
 A hue per grade letter on the 10-point scale: S and A green, B and C blue, D and E amber, F red.
->>> 46
+>>> 55
 The hue for a grade, or the brand blue (264) for anything unexpected.
->>> 49
+>>> 58
 The three possible answers of `timeOfDay`.
->>> 53-55
+>>> 62-64
 Before 12:00 is morning, before 17:00 afternoon, anything later evening.
->>> 58-62
+>>> 67-71
 The four parts of a number inside text: the words before it, the number, how many decimals it had, and the words after it.
->>> 65
+>>> 74
 A **regular expression** (a text pattern). Read it as: from the start (`^`), any non-digits, as few as possible (`\D*?`) = the prefix; then an optional minus sign, digits, and optionally a dot and more digits = the number (the decimals are captured separately); then any non-digits to the end (`\D*$`) = the suffix.
->>> 73-75
+>>> 82-84
 Try the pattern on the trimmed text. No match (the text is not "words, one number, words", like "Not yet" or "1,25,000") → `null`, and the caller shows the text unchanged.
->>> 77-81
+>>> 86-90
 Build the parts from the pattern's captured groups. `match[3]?.length ?? 0` is the number of decimals, or 0 if there was no decimal point.
->>> 87
+>>> 96
 `Math.max(min, value)` lifts values below the minimum; `Math.min(max, …)` then lowers values above the maximum.
->>> 95-97
+>>> 104-106
 Look at each period from 1 onwards: if the time is at or after its start but before its end (start + length), that is the period running now.
->>> 100
+>>> 109
 No lecture is running at this time.
->>> 105-108
+>>> 114-117
 `switch` picks a branch by value. An offer or an enrolment is good news: green.
->>> 109-112
+>>> 118-121
 Rejected, withdrawn or reversed: the end of that road, red.
->>> 113-115
+>>> 122-124
 Submitted or under review: waiting for the office, amber.
->>> 116-117
+>>> 125-126
 Anything else (a draft, shortlisted): the neutral blue.
 
 === FILE frontend/src/utils/visuals.test.ts
@@ -270,21 +274,23 @@ Five course codes that differ only in their last character must all be at least 
 Initials: first and last word, extra spaces ignored, a single name gives one letter, and an empty name gives "?".
 >>> 33-34
 The first name of "Aarav Sharma" is "Aarav".
->>> 38-44
+>>> 37-42
+A title before the name is skipped for both the first name and the initials, with or without its full stop; a "name" that is only a title is left alone.
+>>> 45-51
 The greeting changes exactly at 12:00 and at 17:00, the **boundaries**, which is where mistakes like `<` versus `<=` would show.
->>> 48-52
+>>> 55-59
 Numbers inside text are found with their words and their number of decimals.
->>> 55-58
+>>> 62-65
 Text that is not "words, one number, words" is refused, including Indian digit grouping (1,25,000), which would otherwise count up wrongly.
->>> 62-66
+>>> 69-73
 Grade letters get their colours, and an unknown letter gets the brand blue.
->>> 69-72
+>>> 76-79
 `clamp` lifts, lowers, or leaves the number as it is.
->>> 76-77
+>>> 83-84
 A short made-up day for testing `periodAt`: P1 at 9:00, P2 at 10:00, P3 at 11:15.
->>> 79-82
+>>> 86-89
 The first minute of a lecture, its last minute (9:54) and a time in the middle of P3 are all recognised.
->>> 85-88
+>>> 92-95
 The break after P1 (9:55), early morning and evening all give "no lecture".
->>> 92-97
+>>> 99-104
 Admission statuses get the right colour family.

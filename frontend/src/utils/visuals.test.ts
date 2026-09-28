@@ -33,6 +33,13 @@ describe('initials and firstName', () => {
   it('finds the first name', () => {
     expect(firstName('Aarav Sharma')).toBe('Aarav');
   });
+
+  it('skips a title written before the name', () => {
+    expect(firstName('Dr. Meera Nair')).toBe('Meera');
+    expect(initials('Dr. Meera Nair')).toBe('MN');
+    expect(firstName('Prof Arjun Shetty')).toBe('Arjun');
+    expect(firstName('Dr.')).toBe('Dr.');
+  });
 });
 
 describe('timeOfDay', () => {

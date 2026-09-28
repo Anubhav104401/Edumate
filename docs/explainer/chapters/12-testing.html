@@ -9,7 +9,7 @@ prove each fix, and keep proving it every time the tests run.</p>
 ./mvnw test          (Windows: mvnw.cmd test)      → 64 tests, about a minute
 
 cd frontend
-npm test                                           → 33 tests, a few seconds</pre>
+npm test                                           → 34 tests, a few seconds</pre>
 <p>Maven prints <code>Tests run: 64, Failures: 0, Errors: 0</code> when everything passes. A failing test prints what
 it expected and what it got.</p>
 
@@ -58,7 +58,7 @@ it expected and what it got.</p>
 <tr><td>RR-08</td><td>revaluation must supersede</td><td><code>Mark.effectiveExternal()</code></td><td>computation</td></tr>
 <tr><td>A03 (DEF-036), A05, A07; A02 passed</td><td>reflected XSS, error leaks, no lockout; password storage had no finding</td><td>React escaping + CSP, <code>GlobalExceptionHandler</code>, <code>LoginAttemptService</code>; bcrypt kept</td><td><code>SecurityIntegrationTest</code></td></tr>
 <tr><td>Compatibility objective</td><td>runs on PostgreSQL</td><td>portable SQL</td><td><code>PostgresCompatibilityTest</code></td></tr>
-<tr><td>Release 3.0 interface</td><td>colours from names, grade colours, greetings, number splitting for count-up, the current period; every menu item has an icon, sections are grouped, the right page is highlighted</td><td><code>utils/visuals.ts</code>, <code>navigation.ts</code></td><td><code>visuals.test.ts</code>, <code>navigation.test.ts</code> (plus screenshots of every screen in light, dark and phone width, and a scripted click-through)</td></tr>
+<tr><td>Release 3.0 interface</td><td>colours from names, grade colours, greetings (a title such as "Dr." is skipped), number splitting for count-up, the current period; every menu item has an icon, sections are grouped, the right page is highlighted</td><td><code>utils/visuals.ts</code>, <code>navigation.ts</code></td><td><code>visuals.test.ts</code>, <code>navigation.test.ts</code> (plus screenshots of every screen in light, dark and phone width, and a scripted click-through)</td></tr>
 <tr><td>Recommendation 1</td><td>SGPA routine too complex (19)</td><td>small methods</td><td><code>SgpaCalculatorTest</code></td></tr>
 </tbody></table>
 
