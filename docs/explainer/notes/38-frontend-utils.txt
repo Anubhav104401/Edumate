@@ -1,0 +1,111 @@
+=== FILE frontend/src/utils/format.ts
+>>> SUMMARY
+Turns **raw values from the backend into text for people**. The backend sends machine-friendly values: dates as `"2026-09-28"`, times as `"2026-09-28T04:45:00Z"` (UTC), money as `62500.00`. This file turns them into "28 Sept 2026", "28 Sept 2026, 10:15 am" and "₹62,500.00".
+
+It uses the browser's built-in **`Intl`** formatters with the locale **`en-IN`** (English as used in India). That gives Indian digit grouping (`1,25,000`, not `125,000`) and the ₹ sign. To show another country's style, change `LOCALE`.
+
+**Why does the backend send times in UTC?** Everyone's clock agrees on UTC. The browser converts the time to the viewer's own time zone when showing it (Asia/Kolkata for users in India), so nothing is ever stored shifted.
+>>> 7
+The locale: Indian English.
+>>> 9
+A date formatter: day, short month name, year → "28 Sept 2026". Creating a formatter is relatively slow, so each one is made once and reused.
+>>> 10-15
+A date-and-time formatter: date plus hour and 2-digit minutes → "28 Sept 2026, 10:15 am".
+>>> 17
+A money formatter in Indian rupees → "₹62,500.00".
+>>> 21-22
+Nothing given → "—" (`t.common.none`).
+>>> 24-25
+Splits "2026-09-28" into the numbers 2026, 9 and 28, and builds a **local** date. Using `new Date("2026-09-28")` instead would read it as midnight UTC, which in some time zones (for example in America) is still the day before. Building the date from its parts avoids that. `month - 1` because JavaScript counts months from 0 (January = 0).
+>>> 30
+A full date-time from the backend (UTC), shown in the viewer's own time zone.
+>>> 35
+Money, or "—" if missing.
+>>> 40
+A percentage with exactly two decimals: `75` → "75.00%". `toFixed(2)` always writes two decimal places.
+>>> 45-46
+Under 1024 bytes: "512 B".
+>>> 48-49
+Under 1 MB: kilobytes with one decimal, "1.5 KB".
+>>> 51
+Otherwise megabytes: "4.8 MB".
+>>> 56-59
+Today as "YYYY-MM-DD" in the viewer's time zone, the format `<input type="date">` needs. `padStart(2, '0')` turns 9 into "09".
+
+=== FILE frontend/src/utils/format.test.ts
+>>> SUMMARY
+Tests of the formatters: percentages with two decimals and a dash for "no value", Indian digit grouping for rupees, dates not shifted by time zone, and file sizes in B, KB and MB.
+>>> 4-7
+`75` → "75.00%", and `null` → "—".
+>>> 10-11
+₹1,25,000 is written with Indian grouping (`1,25,000`).
+>>> 14-16
+"2026-09-28" still shows day 28 of 2026 in any time zone.
+>>> 19-22
+512 → "512 B", 1536 → "1.5 KB", 5 MB → "5.0 MB".
+
+=== FILE frontend/src/utils/validation.ts
+>>> SUMMARY
+**Form checks run in the browser** as the applicant presses "Save changes" (or "Create application"). They mirror the rules written on `ApplicationForm.java` (`@NotBlank`, `@Email`, `@DecimalMax`…) so mistakes are shown immediately, under the right field, without waiting for the server. The server checks again anyway.
+
+The messages come from `messages.ts` (`t.apply.validation`), for example "This field is required." and "Enter a valid e-mail address."
+
+It also has `ageOn`, which works out whether the applicant is under 18, and so whether the guardian section and the consent step are shown.
+>>> 8
+The type of the result: for any field of the form, optionally one message. `Partial` means "some or none of the fields".
+>>> 10
+A **regular expression** (a text pattern) for e-mail: some characters without spaces or `@`, then `@`, more such characters, a dot, and more. It is deliberately simple; the backend's `@Email` is the final judge.
+>>> 11
+The phone pattern: 7 to 20 characters made of digits, `+`, spaces and dashes (the same as the backend's `@Pattern`).
+>>> 14-15
+Starts with no errors, and `v` is a short name for the messages.
+>>> 16
+Full name empty (or only spaces) → "required".
+>>> 17-18
+Date of birth missing → "required"; today or later → "must be in the past". Dates written as "YYYY-MM-DD" can be compared as plain text, because that order is also date order.
+>>> 19-20
+E-mail missing → "required"; not matching the pattern → "Enter a valid e-mail address."
+>>> 21
+A phone was typed but does not match the pattern.
+>>> 22
+No programme chosen.
+>>> 23-24
+Scores outside 0–100.
+>>> 25-26
+The guardian's e-mail and phone, if typed, must be valid.
+>>> 27
+Returns every problem at once, so the applicant can fix them all in one go.
+>>> 31
+A score is fine if it is empty (allowed in a draft), or a real number from 0 to 100.
+>>> 36-37
+Splits both dates into year, month and day numbers.
+>>> 38
+The difference in years …
+>>> 39-40
+… minus one if this year's birthday has not come yet. Someone born on 15 June 2009 is 16 on 14 June 2026 and 17 on 15 June 2026. This is the same rule as the backend's `Period.between(...).getYears()`.
+>>> 42
+The age in whole years.
+
+=== FILE frontend/src/utils/validation.test.ts
+>>> SUMMARY
+Tests of the form checks: a complete form has no errors; a form with four problems reports **all four** at once; and the age calculation handles the day before and the day of a birthday (a boundary-value test).
+>>> 5-17
+A correctly filled form, used as the starting point.
+>>> 19-21
+The valid form gives no errors (`{}`).
+>>> 24-27
+The same form with a blank name, a wrong e-mail, a score of 101 and a birth date in the future. `{ ...valid, … }` copies the valid form and replaces those four fields.
+>>> 29
+Exactly those four fields have errors.
+>>> 33-36
+The day before the 17th birthday → 16; the birthday itself → 17.
+
+=== FILE frontend/src/i18n/messages.ts
+>>> 21
+`export const t = {`: the start of the one big object holding every text on screen. Pages write `t.fees.title` instead of the text itself, so changing a text here changes it everywhere it is used.
+>>> 581
+`} as const;`: the end of the object. `as const` makes every text fixed (read-only) and lets TypeScript know each exact key, so a typo such as `t.fees.titel` is a build error rather than an empty spot on screen.
+
+=== FILE frontend/src/styles/app.css
+>>> 470
+`@keyframes spin`: an animation named "spin" that ends at a full turn (360°). `.spinner` above plays it every 0.8 seconds, forever (`infinite`), which gives the loading circle.

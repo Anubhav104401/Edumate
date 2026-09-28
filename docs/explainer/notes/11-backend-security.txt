@@ -1,0 +1,265 @@
+=== FILE backend/src/main/java/com/edumate/security/Role.java
+>>> SUMMARY
+The nine **kinds of user** EduMate knows. Every login account has exactly one role, and permissions are given to roles (never to individual people): "FACULTY may take attendance", "STUDENT may see their own results".
+
+`enum` means the list is fixed: code can only ever say `Role.FACULTY`, never a misspelt text like "Facutly", because the compiler would refuse it.
+
+The SQA requirement review found defect **RR-07**: "Access rights of the Examination Superintendent role are undefined". Here the role exists as `EXAM_SUPERINTENDENT`, and the RoleMatrix gives it an exact list of rights (results workflow, reports, audit log).
+
+In the database the role is stored as its name (for example the text `FACULTY`) in the `app_user.role` column.
+
+=== FILE backend/src/main/java/com/edumate/security/AppUser.java
+>>> SUMMARY
+A **login account**: one row of the `app_user` table. It holds the username, a bcrypt **hash** of the password (never the password itself), the person's name, their role, their campus, and three fields for the lockout rule.
+
+**Why only a hash?** A hash is a one-way scramble. When you log in, the server scrambles what you typed the same way and compares the two scrambles. If the database is ever stolen, the thief gets scrambles that cannot be turned back into passwords. Bcrypt is also deliberately slow (about 0.25 seconds per check), so trying millions of guesses would take years.
+
+The `studentId` field links an account to a student record: a STUDENT account points to its own student row; a GUARDIAN account points to their child's row. That is how a parent sees their child's attendance without being able to see anybody else's.
+>>> 61-62
+The constructor used when creating an account (only the demo seeder does this in this project). New accounts start enabled, with 0 failed attempts and no lock.
+>>> 74-75
+Answers "is this account locked right now?". It is locked only if a lock time was set AND that time is still in the future. After 15 minutes `lockedUntil` is in the past, so the account unlocks by itself; nobody has to do anything.
+
+=== FILE backend/src/main/java/com/edumate/security/AppUserRepository.java
+>>> SUMMARY
+Reads and writes login accounts. Two extra finder methods are declared; Spring writes their SQL from their names:
+- `findByUsername("student")` for login;
+- `findByRoleAndCampusCodeOrderByFullName(FACULTY, "JGC")` for the teaching-workload table.
+
+=== FILE backend/src/main/java/com/edumate/security/CurrentUser.java
+>>> SUMMARY
+Answers the question every controller asks: **"Who is making this request?"**
+
+When a user logs in, the backend gives them a signed token (a JWT) that contains their id, username, name, role, campus and (for students/guardians) their student id. The browser sends that token with every request. Spring Security checks the signature, and this record copies the facts out of the token into a neat Java object.
+
+Because the token is signed with a secret only the server knows, the browser **cannot** change "role: STUDENT" into "role: ADMIN": the signature would no longer match and the request would be rejected with 401 before reaching any controller.
+>>> 12-13
+The six facts about the logged-in user. Record fields become read-only accessor methods: `me.id()`, `me.role()`, `me.studentId()` …
+>>> 16
+`static` factory method: build a `CurrentUser` from a verified token (`Jwt`). Called only by `CurrentUserArgumentResolver`.
+>>> 17
+The `sid` (student id) claim is optional, since staff accounts have none, so it is read first and checked on line 24.
+>>> 18-24
+Builds the record from the token's "claims" (named facts):
+- `uid` → the account id. JSON numbers arrive as a general `Number`; `.longValue()` turns it into a Java `long`.
+- `sub` (the "subject", read with `getSubject()`) → the username.
+- `name` → the full name.
+- `role` → the text "FACULTY" etc., turned back into the enum with `Role.valueOf`.
+- `campus` → the campus code.
+- `sid` → the student id, or `null` for staff (the `? :` on line 24 means "if sid is null then null, otherwise its number").
+>>> 27-28
+A convenience check: `me.is(Role.FACULTY)` reads better than `me.role() == Role.FACULTY`.
+>>> 32-36
+For pages that only make sense for a student or guardian ("my attendance", "my fees"): gives back the linked student id, or stops the request with 403 if this account has none. This is also what makes a guardian see **their own child** only: the id comes from the signed token, never from the URL, so it cannot be swapped for another student's id.
+
+=== FILE backend/src/main/java/com/edumate/security/CurrentUserArgumentResolver.java
+>>> SUMMARY
+Explains to Spring MVC how to fill a controller parameter of type `CurrentUser`. Without it, every controller method would have to repeat three lines to dig the token out of the security context. With it, a method just writes `public List<CourseAttendance> mine(CurrentUser me)` and receives the logged-in person.
+
+It is registered in `config/WebConfig.java`.
+>>> 24-25
+Spring asks this for every parameter of every controller method: "is this one yours?". We answer yes only when the parameter's type is `CurrentUser`.
+>>> 29-30
+For those parameters, Spring calls this to get the value. The four arguments are Spring's standard ones; we do not need them.
+>>> 31
+Asks Spring Security who is logged in for the current request. By the time a controller runs, the security filter has already checked the token and stored the result here.
+>>> 32-34
+Safety check: if there is no login, or the login is not a JWT (should never happen for `/api` URLs that require login), stop with 401 "Please log in first." `instanceof Jwt jwt` both checks the type and gives it the name `jwt` in one step.
+>>> 35
+Converts the verified token into our `CurrentUser` record.
+
+=== FILE backend/src/main/java/com/edumate/security/JwtTokenService.java
+>>> SUMMARY
+Creates the **login token** handed to a user after a correct password. A JWT (JSON Web Token) looks like three blocks of letters separated by dots:
+
+<pre class="block">eyJhbGciOiJIUzI1NiJ9 . eyJpc3MiOiJlZHVtYXRlLWJhY2tlbmQiLCJzdWIiOiJzdHVkZW50Ii... . 3q8f0Zb9...
+      header                           payload (the facts)                       signature</pre>
+
+- The **header** says how it is signed (`HS256` = HMAC with SHA-256).
+- The **payload** holds the facts (claims) as JSON, only Base64url-encoded, **not encrypted**. Anyone can read it, which is why we never put secrets such as passwords in it.
+- The **signature** is HMAC-SHA256(header + "." + payload, secret key). Only the server knows the key, so only the server can make a valid signature. If anybody changes a single letter of the payload, the signature no longer matches.
+
+Decoded, EduMate's payload looks like:
+
+<pre class="block">{ "iss": "edumate-backend", "sub": "student", "iat": 1790590000, "exp": 1790618800,
+  "uid": 13, "name": "Aarav Sharma", "role": "STUDENT", "campus": "JGC", "sid": 7 }</pre>
+
+`iat` = issued at, `exp` = expires at (8 hours later), both as seconds since 1 January 1970.
+>>> 34
+`issue(user)` builds a token for a user who has just proved their password.
+>>> 35-36
+Now, and "now + 8 hours" (the hours come from `edumate.security.token-validity-hours`). After that moment the token is refused and the user must log in again.
+>>> 38-46
+Builds the list of claims one by one (this "builder" style is like filling a form field by field): who issued it, whose it is (`subject` = username), when it was issued and expires, plus our own facts: `uid`, `name`, `role` (as text) and `campus`.
+>>> 47-49
+Only student and guardian accounts get the `sid` claim (the linked student id).
+>>> 51
+The header: sign with HMAC-SHA256.
+>>> 52
+Asks the `JwtEncoder` (created in `SecurityConfig` with our secret key) to encode header + claims and sign them. `getTokenValue()` gives the finished `xxx.yyy.zzz` text.
+>>> 53
+Hands back the token text and its expiry time.
+
+=== FILE backend/src/main/java/com/edumate/security/LoginAttemptService.java
+>>> SUMMARY
+Checks a username and password, and enforces **account lockout**. The SQA security testing (OWASP A07) found "no account lockout after repeated failures". Now: 5 wrong passwords in a row lock the account for 15 minutes. A locked account cannot log in even with the right password until the time passes.
+
+The rules, in the order the code checks them:
+1. Unknown username (or disabled account) → "Invalid username or password." To avoid giving a hint, a fake bcrypt check still runs, so the answer takes as long as for a real account (otherwise an attacker could measure response times to learn which usernames exist).
+2. Account currently locked → 423 "Too many failed attempts. Your account is locked until 06:14 pm."
+3. Wrong password → count one more failure; at 5, set the lock time. Answer "Invalid username or password." (the same words as rule 1, again so attackers learn nothing).
+4. Right password → reset the counter, record LOGIN_SUCCESS, return the user.
+
+Every outcome is written to the audit log.
+>>> 28
+A formatter that writes a time as "06:14 PM" (hh = hour 01-12, mm = minutes, a = AM/PM), used in the lockout message.
+>>> 39-40
+Constructor: Spring hands in the account repository, the password hasher, the audit logger, the settings and the clock.
+>>> 46
+Makes the fake hash used by rule 1: bcrypt of a random UUID. It is created once when the service starts (taking about 0.25 s) and reused.
+>>> 53
+`@Transactional(noRollbackFor = ApiException.class)`: normally throwing an exception undoes (rolls back) every database change of the method. Here we WANT the increased failure counter and the lock time to be saved even though we then throw "Invalid username or password.", so we tell Spring not to roll back for our `ApiException`.
+>>> 54
+`authenticate` returns the `AppUser` when the password is right.
+>>> 55
+The current moment, from the shared clock.
+>>> 56
+Finds the account. Spaces are trimmed and the name is lower-cased, so "Student " and "student" are the same account. `orElse(null)` = the account, or `null` if none.
+>>> 58-61
+Rule 1 (see summary). `passwordEncoder.matches(...)` is called only to spend the same time as a real check; its answer is ignored. Then the request stops with 401.
+>>> 63-66
+Rule 2: the account is locked. Record the blocked attempt and stop with 423 LOCKED, saying until when.
+>>> 68-71
+Rule 3: `matches` hashes what the user typed with the salt stored inside the saved hash and compares. If it does not match, record the failure (method below) and stop with 401.
+>>> 73-76
+Rule 4: correct password. Reset the counter and any old lock (Hibernate saves these changes automatically at the end of the transaction), write LOGIN_SUCCESS to the audit log, and return the user to `AuthController`.
+>>> 79-89
+`registerFailure` adds one to the counter.
+- If that makes 5 (the setting `max-failed-logins`), lines 82-85 reset the counter to 0, set `lockedUntil` to now + 15 minutes, and write ACCOUNT_LOCKED to the audit log.
+- Otherwise lines 87-89 store the new count and write LOGIN_FAILED ("failed attempt 3").
+>>> 93-94
+Builds the 401 error used by rules 1 and 3. The same words are used in both cases on purpose.
+>>> 97-100
+Builds the 423 LOCKED error. Line 98 converts the lock time (an `Instant`) into an Indian clock time and formats it, so the message says "locked until 06:14 PM" in local time.
+
+=== FILE backend/src/main/java/com/edumate/security/AuthController.java
+>>> SUMMARY
+The two login-related web addresses:
+
+- **POST /api/auth/login**: the login form sends `{"username":"student","password":"Edumate@2026"}`. If correct, the answer is:
+<pre class="block">{ "token": "eyJhbGciOiJIUzI1NiJ9.eyJ...",
+  "expiresAt": "2026-09-29T02:41:07Z",
+  "user": { "id": 13, "username": "student", "fullName": "Aarav Sharma", "role": "STUDENT",
+            "campusCode": "JGC", "studentId": 7 } }</pre>
+- **GET /api/auth/me**: the frontend calls this after a page refresh to ask "who does this saved token belong to?".
+
+The request and answer shapes are three small records at the bottom of the file. `@Valid` makes Spring check the `@NotBlank` / `@Size` rules before the method runs; if they fail, `GlobalExceptionHandler` answers 400 VALIDATION_FAILED.
+>>> 32
+`@Valid @RequestBody LoginRequest request`: Jackson turns the JSON body into a `LoginRequest` object, then the rules on its fields are checked.
+>>> 33
+Checks the password (and lockout). If wrong, this line throws and the rest never runs.
+>>> 34
+Creates the signed token for this user.
+>>> 35-36
+Collects the public facts about the user (no password hash, no lockout fields).
+>>> 37
+Returns token + expiry + user. Spring/Jackson turns this record into the JSON shown above.
+>>> 41-42
+`me(CurrentUser me)`: the token was already checked by the security filter; we just copy its facts into the answer.
+>>> 47
+The `username` field of the login JSON. `@NotBlank(message = "Username is required.")`: it must contain at least one visible character, otherwise the answer is 400 with that message. `@Size(max = 60)`: at most 60 characters (the database column is VARCHAR(60)).
+>>> 48
+The `password` field: required, at most 100 characters. It is only held in memory for the check and is never stored or logged.
+
+=== FILE backend/src/main/java/com/edumate/security/RoleMatrix.java
+>>> SUMMARY
+The **single, complete list** of which role may call which backend address. The SQA report calls this design element **RoleMatrix**.
+
+**The story behind it.** Design review found defect **DR-06**: "Two reporting endpoints fall outside the role matrix and default to authenticated-only". Security testing confirmed it as **DEF-031**: any logged-in student could download the consolidated marks of the entire cohort. The cause was a *default*: anything not in the list was allowed for any logged-in user.
+
+**The fix: deny by default.** Every rule is listed here, and the very last instruction (line 151, `auth.anyRequest().denyAll()`) refuses everything else, for everyone, even administrators. A developer who adds a new URL and forgets this file gets a 403 on their new page (and the automated test `RoleMatrixCoverageTest` fails the build), instead of silently leaking data.
+
+**How to read a rule.** `allow(GET, "/api/fees/me", STUDENT, GUARDIAN);` means: an HTTP GET to /api/fees/me is allowed only when the token's role is STUDENT or GUARDIAN. `*` in a pattern matches one part of the address (like an id): `/api/fees/payments/*` matches `/api/fees/payments/ORD-1A2B`.
+
+**What this list does NOT do.** It only knows roles. It cannot know that teacher A must not open teacher B's course. Those "is this YOUR record?" checks happen inside the services (see `CourseAccess`, `AdmissionService.requireVisible`, `CurrentUser.requireStudentId`).
+>>> 38
+The three kinds of rule: `PUBLIC` (no login needed), `ANY_AUTHENTICATED` (any logged-in user), `ROLES` (only the listed roles).
+>>> 41
+One line of the matrix as data: method (GET/POST…, or null = any), URL pattern, kind of access, and the allowed roles.
+>>> 44
+The list of rules, filled by the constructor below.
+>>> 46
+The constructor adds every rule in order. It receives the settings so it can decide whether the H2 console is allowed (development only).
+>>> 53-55
+Only if `edumate.security.h2-console-enabled` is true (the dev profile): allow the H2 database console at /h2-console. In Docker this rule does not exist, so the console is unreachable.
+>>> 140
+`applyTo` is called by `SecurityConfig` while Spring Security is being set up. `auth` is Spring Security's rule builder.
+>>> 141-150
+For each rule: choose the matcher (with or without an HTTP method, lines 142-144; `? :` means "if … then … else …"), then attach the access decision (lines 145-149): `permitAll()` for PUBLIC, `authenticated()` for any logged-in user, or `hasAnyRole(...)` with the role names for ROLES. Spring Security checks rules in this order and uses the **first** one that matches the request.
+>>> 151
+**Deny by default.** Any request that matched none of the rules above is refused with 403, whoever sends it.
+>>> 155-156
+Gives out a read-only copy of the rules (`List.copyOf`), so nobody can change the matrix while the app runs. The admin "Role matrix" page shows this list.
+>>> 159-160
+Helper used by the constructor: add a PUBLIC rule.
+>>> 163-164
+Helper: add an "any logged-in user" rule.
+>>> 167-168
+Helper: add a rule for specific roles. `Role... roles` means "any number of roles", written one after another.
+
+=== FILE backend/src/main/java/com/edumate/security/RestAuthHandlers.java
+>>> SUMMARY
+Spring Security stops some requests **before** they reach any controller: requests without a valid token, and requests whose role is not in the RoleMatrix. By default it would answer with an empty page. This class makes those answers look exactly like every other EduMate error (the `ApiError` JSON), so the frontend can show a clear message:
+- **401 UNAUTHENTICATED**: "Your session has expired or you are not logged in." The frontend reacts by logging the user out.
+- **403 FORBIDDEN**: "You do not have permission to do this." Every 403 is also written to the audit log (the expected result of test case TC-017: "Request rejected with 403; attempt recorded in the audit log").
+>>> 28
+Implements two Spring Security "hooks": `AuthenticationEntryPoint` (what to do when nobody is logged in) and `AccessDeniedHandler` (what to do when the role is not allowed).
+>>> 33
+Constructor: Spring hands in the JSON converter (Jackson's `JsonMapper`) and the audit logger.
+>>> 39-41
+`commence` = "the request needs a login but has none (or an invalid/expired token)". Answer 401.
+>>> 45-50
+`handle` = "logged in, but this role may not call this URL". Line 47 finds the username, lines 48-49 write an ACCESS_DENIED audit line with the method and URL they tried, and line 50 answers 403.
+>>> 53-58
+Writes the JSON answer by hand (these handlers run outside Spring MVC, so we cannot simply `return` an object): build an `ApiError` (line 55), set the status (line 56), say the body is JSON (line 57), convert the object to JSON text with Jackson and write it (line 58).
+
+=== FILE backend/src/main/java/com/edumate/security/SecurityConfig.java
+>>> SUMMARY
+The **security guard** at the door of every request. The SQA report names this design element **SecurityFilterChain**. Before any controller runs, every request passes through a chain of checks set up here:
+
+1. **Read the token.** The frontend sends `Authorization: Bearer eyJhbGciOi...`. Spring's "OAuth2 resource server" support reads it.
+2. **Verify the token.** The `JwtDecoder` checks the HMAC-SHA256 signature with our secret key, and checks that it has not expired. A forged, altered or expired token → 401.
+3. **Turn the role into a permission.** The token's `role` claim ("FACULTY") becomes the Spring authority "ROLE_FACULTY".
+4. **Ask the RoleMatrix.** Is this role allowed to call this method + URL? No → 403.
+
+It also creates the password hasher (bcrypt, cost 12) and the token encoder/decoder.
+
+**Why tokens instead of login cookies and sessions?** The server keeps no memory of who is logged in (it is *stateless*). Any copy of the backend can answer any request, which is how the report's three application nodes behind a load balancer can share the result-day load. It also removes the need for CSRF protection, because the browser never sends the token automatically.
+>>> 40-42
+`@Bean` method that builds the filter chain. Spring gives it the builder `http` and the three helpers it needs.
+>>> 43
+Starts describing the rules on the `http` builder. Each `.something(...)` below adds one setting.
+>>> 46
+Switches off CSRF protection (the reason is in the comment above it). CSRF attacks rely on the browser sending login cookies automatically; our token is added by our own JavaScript, so a malicious site cannot make the browser send it.
+>>> 48
+STATELESS: never create a server-side session. Every request must carry its own token.
+>>> 49
+Hands the URL rules to the RoleMatrix. `roleMatrix::applyTo` is a "method reference": "call roleMatrix.applyTo with the rule builder".
+>>> 50-53
+Enables "resource server" mode: expect a JWT in the Authorization header, verify it with our `JwtDecoder` bean, convert it with our converter (method below), and answer problems with our JSON handlers.
+>>> 54-56
+Uses the same JSON handlers for any other authentication/authorisation problem.
+>>> 58-61
+Development only: the H2 console draws itself in frames. The browser's default protection forbids frames, so we allow frames from the same site when the console is switched on.
+>>> 62
+Finishes the description and returns the finished filter chain to Spring.
+>>> 66-72
+Builds the converter used at line 51. By default Spring would look for a claim called "scope"; we tell it to use our `role` claim (line 68) and to put "ROLE_" in front (line 69), because Spring's `hasAnyRole("FACULTY")` checks for an authority named "ROLE_FACULTY".
+>>> 77-83
+Creates the secret key that both **signs** and **checks** tokens. The text from `edumate.security.jwt-secret` is turned into bytes (line 78). HMAC-SHA256 needs at least 32 bytes to be safe, so a shorter secret stops the application from starting at all (lines 79-81): better a clear start-up error than weak security. Line 82 wraps the bytes as an HMAC-SHA256 key.
+>>> 86-87
+The encoder used by `JwtTokenService` to create and sign tokens with that key. `ImmutableSecret` is how the Nimbus JWT library receives a fixed key.
+>>> 91-92
+The decoder used by the filter chain to check incoming tokens: same key, and only the HS256 algorithm is accepted (a token claiming another algorithm is refused).
+>>> 97-98
+The password hasher: bcrypt with **cost factor 12**, meaning 2¹² = 4096 rounds of work, about 0.25 seconds per check on a normal computer. That delay is harmless for one login but makes guessing millions of passwords impractical (OWASP A02, cryptographic failures: the report records "bcrypt with cost 12; no finding").

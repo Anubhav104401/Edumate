@@ -9,8 +9,7 @@ frontend/dist/
 frontend/.vite/
 *.tsbuildinfo
 
-# ---------- Python (ai-service) ----------
-ai-service/.venv/
+# ---------- Python (the docs/explainer generator) ----------
 __pycache__/
 *.pyc
 .pytest_cache/

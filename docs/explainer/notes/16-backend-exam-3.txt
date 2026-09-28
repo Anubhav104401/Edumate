@@ -1,0 +1,260 @@
+=== FILE backend/src/main/java/com/edumate/exam/ResultPublicationService.java
+>>> SUMMARY
+The **two-person gate** in front of result publication, and the publication itself.
+
+- **approve** (called twice): the first approval moves COMPUTED → AWAITING_SECOND_APPROVAL. The second moves AWAITING_SECOND_APPROVAL → APPROVED, but only if it comes from a **different** superintendent. If the same person clicks Approve twice, they get "You gave the first approval. A second, different exam superintendent must approve."
+- **publish**: APPROVED → PUBLISHED, done with the one-statement atomic update in `ResultSetRepository` (fix for DEF-027). After a successful publish, one e-mail per student is **queued** in the outbox (sent later by the dispatcher), the cache of published results is cleared, and an audit line is written.
+
+Why two people? The SQA Plan's Safety objective: wrong results reach thousands of students instantly and cannot be "un-seen". Requiring two independent people to look at the numbers makes a single person's mistake (or misuse) much less likely to reach students. Banks use the same "four-eyes principle" for large payments.
+>>> 42-45
+Constructor: the repositories, the notification service, the audit logger and the clock.
+>>> 57
+`approve` a result set, as the logged-in superintendent `me`.
+>>> 58-59
+Loads the set (404 if missing) and takes the current time.
+>>> 60-71
+A `switch` chooses what to do by the current stage:
+- **COMPUTED** (line 61): this is the first approval; record it.
+- **AWAITING_SECOND_APPROVAL** (lines 62-68): this would be the second approval. Lines 63-66 refuse (409 SAME_APPROVER) if it is the same person who gave the first. Otherwise line 67 records the second approval, and the stage becomes APPROVED.
+- **Any other stage** (lines 69-70): DRAFT, APPROVED or PUBLISHED cannot be approved, so refuse with 409 and say the current stage.
+>>> 72
+`flush` writes the change to the database now. The set has a `@Version`, so if two superintendents approve at the very same moment, one of them fails here with the "someone else changed this" error instead of both succeeding.
+>>> 73-74
+Audit line: who approved, and the new stage.
+>>> 75
+Returns the updated set in its browser-friendly form.
+>>> 79
+`@CacheEvict(cacheNames = "publishedResults", allEntries = true)`: after publishing, throw away every remembered "my results" answer, so students immediately see the newly published semester instead of an old cached list.
+>>> 80
+`publish` a result set.
+>>> 81-83
+The atomic publish: one UPDATE that succeeds only if the set is still APPROVED. `changed` is 1 if this call published it, or 0.
+>>> 84
+Reloads the set to see its real current state.
+>>> 85-92
+If nothing changed, explain why:
+- it is already PUBLISHED (someone clicked a moment earlier, or it was published long ago) → 409 ALREADY_PUBLISHED, naming who published it;
+- otherwise it is not approved yet → 409 NOT_APPROVED.
+>>> 94-96
+Loads all student results of the set, then all those students **in one query** (`findAllById`), and makes a lookup table id → student.
+>>> 97-104
+Queues one e-mail per student in the outbox: subject "Semester 5 results published", a body with their SGPA and CGPA, and a "dedup key" `result:<set>:<student>` that makes sure the same student is never queued twice for the same results. Nothing is actually sent here; the `NotificationDispatcher` sends queued messages every few seconds.
+>>> 105-106
+Audit line: from APPROVED to PUBLISHED, for how many students.
+>>> 107
+Returns the published set.
+>>> 111-112
+All result sets, newest first, each turned into its browser-friendly view. Used by the Results workflow and Reports pages.
+>>> 115-118
+Builds a view: looks up the exam session's code and the programme's name (or "?" if somehow missing).
+>>> 121-122
+Loads a result set by id or stops with 404 "Result set was not found."
+
+=== FILE backend/src/main/java/com/edumate/exam/ResultQueryService.java
+>>> SUMMARY
+Reads **one student's published results** for the "My results" page, with the course-wise grades of each semester.
+
+Two important points:
+- **Only PUBLISHED sets** are read. Whatever a student does, they cannot see results that are still being computed or approved.
+- **Caching.** On results morning thousands of students open this page within minutes, often pressing refresh repeatedly. The report's performance objective (NFR-01) is a response under 2 seconds at 3,000 users. `@Cacheable` remembers each student's answer the first time it is worked out; later requests get the remembered answer without touching the database. In development the cache is an in-memory map; in Docker it is **Redis**, a fast memory store shared by all backend copies. The cache is cleared whenever results are published.
+
+The answer is built with three queries whatever the number of semesters: the published rows, then all their course grades, then all the courses involved.
+>>> 33-34
+Constructor: the three repositories it reads from.
+>>> 40
+`@Cacheable(cacheNames = "publishedResults", key = "#studentId")`: remember answers in the cache called publishedResults, filed under the student's id. `#studentId` refers to the method parameter of that name.
+>>> 42
+`publishedFor(studentId)`: the student's published semesters, oldest first.
+>>> 43
+Query 1: the student's published semester rows.
+>>> 44-46
+Query 2: the course grades of all those semesters at once, grouped into a map: student-result id → its list of course grades.
+>>> 47-49
+Query 3: every course mentioned in those grades (each id once), as a map id → course, so each grade line can show the course code and name.
+>>> 51-62
+Builds the answer: for each semester row, a `SemesterResult` with its numbers plus a list of `CourseLine`s made from that semester's course grades (lines 55-61). `getOrDefault(…, List.of())` gives an empty list for semesters stored without course detail (the demo's history semesters).
+>>> 66-68
+One published semester as the browser receives it. `implements Serializable` allows the object to be turned into bytes, which is how Redis stores cached values.
+>>> 71-72
+One course of that semester: code, name, credits, total marks, letter grade and grade point.
+
+=== FILE backend/src/main/java/com/edumate/exam/MarksEntryService.java
+>>> SUMMARY
+Lets a teacher see and **amend internal-assessment marks** of their own course (FR-17; the RTM names MarksEntryService and AuditLogger for this requirement).
+
+Every amendment:
+1. must come from the course's own teacher (`CourseAccess.requireTaughtBy`);
+2. must be based on the latest version of the mark (otherwise 409 STALE_UPDATE);
+3. is refused once the cohort's results are approved or published (409 RESULTS_LOCKED);
+4. must carry a **reason** (the frontend asks for one; the request rules require it);
+5. writes an audit line with the **old value and the new value**, who, when and why.
+
+Point 5 is the fix for design defect **DR-04** / test defect **DEF-022** ("audit record stores the new mark only; the prior value is lost, defeating dispute resolution"). Test case **TC-012** in the report: "Amend an internal assessment mark from 18 to 22: change applied and audit record written with prior value, new value, actor and timestamp". In the demo data, student 23BTRCS003 has 18 in DBMS so this can be shown live.
+
+If the cohort's results were already **computed** (but not yet approved), changing a mark sends the result set back to DRAFT, because the computed SGPAs are now out of date.
+>>> 46-47
+Constructor: marks, students and result-set repositories, the course access checker, audit logger and clock.
+>>> 57
+`sheet`: the marks sheet of one course for one exam session.
+>>> 58
+Only the course's own teacher may open it.
+>>> 59-61
+All students of the course's programme and semester (every section), as a lookup table id → student.
+>>> 62-64
+Is the sheet locked? Find this cohort's result set; if there is one, ask whether it is locked for mark changes; if there is none, not locked (`orElse(false)`).
+>>> 66-70
+The marks of this course and session: keep only students of this cohort (line 67), turn each into a display line (line 68), and sort by USN (line 69). `(a, b) -> a.usn().compareTo(b.usn())` compares two lines by USN alphabetically.
+>>> 71
+Returns the sheet: course details, whether it is locked, and the lines.
+>>> 75
+`amendInternal`: change one mark's internal part.
+>>> 76-77
+Loads the mark (404 if missing) and checks the caller teaches its course (403 otherwise).
+>>> 78-81
+The version check: the browser sends the version it loaded. If the mark has changed since (someone else saved it), refuse with 409 instead of overwriting their change.
+>>> 82-87
+Finds the cohort's result set; if it is approved or published, marks are frozen → 409 RESULTS_LOCKED.
+>>> 89-90
+The old value, and the new value rounded to 2 decimals (so 22 and 22.00 count as the same).
+>>> 91
+Loads the student, for their USN in the audit text.
+>>> 92-94
+Nothing actually changed (same number): return the line without writing anything or auditing a non-change. `compareTo(...) == 0` compares BigDecimals by value (22.0 equals 22.00).
+>>> 96
+Changes the mark, recording who and when.
+>>> 97
+Writes it to the database now, so a lost race on the `@Version` is detected inside this request.
+>>> 98-101
+The audit line (fix for DR-04), for example: old `internal=18.00`, new `internal=22.00 (23BTRCS003, 23CS502; reason: Re-evaluation of IA-2 script)`.
+>>> 102-104
+If the results were computed with the old mark, send the set back to DRAFT so they must be recomputed.
+>>> 105
+Returns the updated line for the table on screen.
+>>> 108-116
+`toLine` turns a mark and its student into one row of the sheet: internal, effective external, total and grade (only when both parts exist, otherwise empty), whether it was revalued, and who changed it last and when.
+>>> 118-119
+The sheet as JSON: course facts, `locked`, and the lines.
+>>> 122-124
+One line as JSON: ids, version, student, the marks, total, grade, and last change.
+>>> 128-134
+What the Save button of one row sends, with its rules:
+- `internalMarks` must be present and between 0 and 40 (lines 129-132, each rule with the message the teacher sees if it is broken);
+- `version` must be present (line 133);
+- `reason` must be given, at most 200 characters (line 134).
+
+=== FILE backend/src/main/java/com/edumate/exam/HallTicketService.java
+>>> SUMMARY
+Answers **"may this student sit the exams, course by course?"** for the Hall ticket page. It gathers the four inputs of the report's eligibility **decision table** for each course and asks `EligibilityEvaluator` for the decision:
+1. attendance in that course at or above 75 % (exact, whole-number comparison);
+2. fees fully paid (the fee ledger's balance is 0 or less);
+3. internal assessment complete (the internal mark for the current exam session is present);
+4. an approved medical exemption for that course.
+
+The hall ticket is **issued** only if every course is eligible. The page shows, per course, the decision, the rule that applied (R1–R5 or "derived") and the reasons.
+
+The "current exam session" is the campus's session with the latest start date.
+>>> 38-39
+Constructor continuation: the fee ledger, the mark repository and the evaluator.
+>>> 48
+`forStudent`: the hall-ticket view of one student.
+>>> 49
+Loads the student (404 if missing).
+>>> 50-52
+The current exam session of the student's campus: sessions sorted newest first, take the first. If there is none, 404.
+>>> 53
+Input 2 (the same for every course): are the fees fully paid?
+>>> 54-55
+Input 3 per course: a map course id → "is the internal mark present?", built from the student's marks in the current session.
+>>> 57-65
+For each course in the student's attendance summary (which already contains input 1 and input 4):
+- line 59: input 3, false if there is no mark row at all;
+- lines 60-61: the decision from the table;
+- lines 62-63: one row for the page, with every input, the decision, the rule and the reasons.
+>>> 66
+Issued only if there is at least one course and **all** are eligible.
+>>> 67-69
+Returns the whole hall-ticket view: student, session, when exams start, the threshold, fee status, the overall decision and the course rows.
+
+=== FILE backend/src/main/java/com/edumate/exam/ExamController.java
+>>> SUMMARY
+The examination web addresses, under `/api/exams`:
+
+| URL | Who (RoleMatrix) | Does |
+|---|---|---|
+| GET /marks?courseId=&examSessionId= | FACULTY | marks sheet of my course |
+| PUT /marks/{markId} | FACULTY | amend one internal mark |
+| GET /hall-ticket/me | STUDENT, GUARDIAN | hall-ticket eligibility |
+| GET /results/me | STUDENT, GUARDIAN | my published results |
+| GET /result-sets | EXAM_SUPERINTENDENT, ADMIN | all result sets |
+| POST /result-sets/compute | EXAM_SUPERINTENDENT | compute a cohort |
+| POST /result-sets/{id}/approve | EXAM_SUPERINTENDENT | approve (1st or 2nd) |
+| POST /result-sets/{id}/publish | EXAM_SUPERINTENDENT | publish |
+
+Controllers stay thin on purpose: each method only takes the input from the request and calls one service method. All rules live in the services, where they can be tested without HTTP.
+>>> 33
+Constructor continuation: the computation and publication services.
+>>> 42-44
+GET /api/exams/marks?courseId=…&examSessionId=…: both values come from the URL (`@RequestParam`). Returns the marks sheet.
+>>> 48-50
+PUT /api/exams/marks/{markId}: the id from the address, the new value, version and reason from the JSON body (checked by `@Valid`).
+>>> 54-55
+GET /api/exams/hall-ticket/me: the student comes from the token (`requireStudentId`), never from the URL.
+>>> 59-60
+GET /api/exams/results/me: my published results (cached).
+>>> 64-65
+GET /api/exams/result-sets: every result set, newest first.
+>>> 70-71
+POST /api/exams/result-sets/compute with body `{"examSessionId": 5, "programId": 1, "semester": 5}`.
+>>> 75-76
+POST /api/exams/result-sets/{id}/approve.
+>>> 80-81
+POST /api/exams/result-sets/{id}/publish.
+>>> 84-85
+The compute request's JSON and its rules: both ids required, semester between 1 and 10.
+
+=== FILE backend/src/main/java/com/edumate/exam/ReportService.java
+>>> SUMMARY
+The two **cohort-wide reports**:
+- **Consolidated marks** of a result set: every student's grade in every course, SGPA, CGPA, credits and outcome, as JSON for the screen or as a **CSV** file for Excel.
+- **Attendance shortfall**: every course of a programme-semester with the students of a section below the minimum.
+
+Both contain every student's data, so the RoleMatrix restricts them to EXAM_SUPERINTENDENT and ADMIN. This is the fix for test defect **DEF-031** (test case TC-017): in the old system any logged-in student could download the consolidated marks of the entire cohort. The report also checks the campus: a superintendent cannot read another campus's report.
+
+**CSV safety.** A CSV cell that starts with `=`, `+`, `-` or `@` is treated by Excel as a **formula**. A malicious name such as `=HYPERLINK("http://evil…")` could run when the file is opened. This is called CSV (or formula) injection. The `cell` method puts an apostrophe in front of such values so Excel shows them as plain text, and wraps every cell in quotes (doubling any quote inside) so commas in names do not break the columns.
+>>> 44-46
+Constructor continuation.
+>>> 57-59
+Loads the result set (404 if missing) and checks it belongs to the caller's campus.
+>>> 61-70
+Four queries: the semester's courses (for the column order), the set's student results, all their course grades grouped by result, and all the students; plus a lookup course id → code.
+>>> 72-80
+Builds one report row per student: a small map course code → "grade (total)", e.g. `"23CS502" → "A (84.00)"` (lines 75-78), then the row with USN, name, those grades, SGPA, CGPA, credits and outcome (lines 79-80).
+>>> 82
+Sorts the rows by USN.
+>>> 83-84
+Returns the report object: the result set's view, the course codes (the column headings) and the rows.
+>>> 88-99
+Turns the report into CSV text: a header row (USN, Name, one column per course, SGPA, CGPA, credits, outcome), then one line per student. Every value goes through `cell` for quoting and formula protection. `\r\n` ends each line (the line ending Excel expects).
+>>> 101
+Returns the finished CSV text.
+>>> 105-110
+The shortfall report: after the campus check, for every course of the programme-semester, list the students of the section below 75 %, using the same `AttendanceSummaryService.shortfall` the teachers' page uses.
+>>> 117-120
+`cell`: an empty value becomes empty text; a value starting with = + - or @ gets an apostrophe in front (formula-injection defence).
+>>> 122
+Wraps the value in double quotes and doubles any double quote inside it (CSV's rule for quotes), so `Rao, Kavya` stays one cell.
+>>> 125-128
+Loads a programme and refuses (403) if it is not on the caller's campus.
+
+=== FILE backend/src/main/java/com/edumate/exam/ReportController.java
+>>> SUMMARY
+The report web addresses under `/api/reports` (both restricted to EXAM_SUPERINTENDENT and ADMIN by the RoleMatrix):
+- `GET /consolidated-marks?resultSetId=1` → JSON;
+- `GET /consolidated-marks?resultSetId=1&format=csv` → a CSV file download;
+- `GET /attendance-shortfall?programId=1&semester=5&section=A` → JSON.
+>>> 31-35
+Builds the report. If `format` is not "csv" (the default is "json"), return it as JSON. `ResponseEntity<?>` means "an HTTP answer whose body can be of any type": here either the report object or CSV text.
+>>> 37-41
+For CSV: a file name, a `Content-Disposition: attachment; filename="consolidated-marks-1.csv"` header (which tells the browser to download instead of showing it), the content type `text/csv`, and the CSV text as the body.
+>>> 45-48
+GET /api/reports/attendance-shortfall with programme, semester and section (default "A") from the URL.

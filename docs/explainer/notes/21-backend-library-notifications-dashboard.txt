@@ -1,0 +1,304 @@
+=== FILE backend/src/main/java/com/edumate/library/Book.java
+>>> SUMMARY
+A **title in the library catalogue**: ISBN (the book's worldwide unique number), title, author, how many copies the library owns, how many are on the shelf right now, and which campus it belongs to.
+
+It has a `@Version` counter. Two librarians at two desks might both try to issue the **last** copy at the same moment. Both read "1 available", both subtract one… The second save then finds that the version has changed and is refused (409), so the book can never be issued twice or reach −1 copies. This is the same *optimistic locking* used for marks and attendance (DR-01).
+>>> 48-55
+A new title with `copies` copies, all of them on the shelf.
+>>> 57-62
+`takeCopy`: one copy leaves the shelf. If none is left, stop with an error. This is a last safety net; the service checks first and gives a friendlier message.
+>>> 64-68
+`returnCopy`: one copy comes back, but never more than the library owns.
+
+=== FILE backend/src/main/java/com/edumate/library/BookLoan.java
+>>> SUMMARY
+**One copy of a book lent to one student**: when it was issued, when it is due back, when it actually came back (empty while the student still has it), and the fine charged on return.
+>>> 44-49
+A new loan: which book, which student, issue date and due date.
+>>> 51-54
+`close`: the book came back on `returnedOn`, and this fine was charged.
+>>> 56-58
+A loan is **open** while it has no return date.
+
+=== FILE backend/src/main/java/com/edumate/library/BookLoanRepository.java
+>>> SUMMARY
+Reads loans: a student's loans (newest first), how many books a student has right now (for the 3-book limit), and every open loan ordered by due date (the librarian's desk, most overdue at the top).
+
+=== FILE backend/src/main/java/com/edumate/library/BookRepository.java
+>>> SUMMARY
+Searches the catalogue of one campus. An empty search lists every book; otherwise the typed text may appear anywhere in the title or author (ignoring capital letters) or in the ISBN.
+>>> 12-18
+The search query: this campus's books whose title, author or ISBN contains the text, sorted by title. `concat('%', :q, '%')` means "anything, then the text, then anything".
+>>> 19
+The method running it.
+
+=== FILE backend/src/main/java/com/edumate/library/FineCalculator.java
+>>> SUMMARY
+**Library fine = days late × fine per day, but never more than the maximum.** With the settings in `application.yml` (₹2.00 per day, at most ₹200.00):
+
+| Returned | Days late | Fine |
+|---|---|---|
+| on or before the due date | 0 | ₹0.00 |
+| 3 days late | 3 | ₹6.00 |
+| 100 days late | 100 | ₹200.00 (capped) |
+| 150 days late | 150 | ₹200.00 (capped) |
+
+To change the rules, edit `edumate.library.fine-per-day` and `max-fine` in `application.yml`. No code change is needed.
+>>> 21-24
+Reads the two amounts from the settings once, when the calculator is created.
+>>> 26-29
+`fine`:
+- line 27: the days from the due date to the return date (or today). Returning early would give a negative number, so `Math.max(0, …)` turns it into 0;
+- line 28: days × per-day amount, then `.min(max)` keeps whichever is smaller (the fine or the cap), with 2 decimal places.
+>>> 31-33
+Days late on a given day, never below 0.
+
+=== FILE backend/src/main/java/com/edumate/library/LibraryService.java
+>>> SUMMARY
+**Library circulation**: search, issue, return and fines.
+
+Rules when issuing:
+- the book and the student must belong to the librarian's campus;
+- a copy must be available;
+- a student may hold at most **3 books** at a time;
+- the loan is due after **14 days** (`edumate.library.loan-days`).
+
+When a book comes back, the fine is calculated and stored on the loan, and the copy returns to the shelf. While a loan is still open, the fine shown is "what it would be if returned today", so students can see it growing.
+
+Every issue and return is written to the audit log.
+>>> 25
+The limit of books a student may hold at the same time.
+>>> 35-36
+Constructor: repositories, fine calculator, audit logger, settings and clock.
+>>> 47-49
+Searches this campus's catalogue. An empty search text means "all books".
+>>> 52-54
+`issue`: the book must exist on this campus, otherwise 404.
+>>> 55-57
+Finds the student by USN (written in capitals, spaces removed from the ends), also on this campus.
+>>> 58-60
+No copy on the shelf → 409 "All copies of this book are currently issued."
+>>> 61-64
+Already 3 open loans → 409, e.g. "Aarav Sharma already has 3 books. Return one first."
+>>> 65-68
+Takes a copy off the shelf and saves the loan: issued today, due in 14 days.
+>>> 69
+Writes the book change **now**. If another librarian took the last copy a moment ago, the version check fails here with 409, and the whole issue is undone.
+>>> 70-72
+Audit line, e.g. "9780132350884 to 23BTRCS007", then returns the loan.
+>>> 76-80
+`returnLoan`: the loan must exist and still be open. A second "return" → 409 "This book was already returned."
+>>> 81-84
+The book must belong to the librarian's campus; otherwise the loan is treated as not found.
+>>> 85-88
+Calculates today's fine, closes the loan with it, and puts the copy back on the shelf.
+>>> 89-92
+Audit line with the fine, then returns the closed loan.
+>>> 96-100
+A student's loans ("My library"), with the book details added.
+>>> 103-109
+The librarian's desk: every open loan, keeping only students of the librarian's campus.
+>>> 111-118
+Adds book details to a list of loans, loading all needed books in **one** query.
+>>> 121-127
+Builds the JSON of one loan. For an open loan, days late and fine are counted up to today; for a closed loan, up to the return date, and the stored fine is used.
+>>> 129-132
+The JSON of one loan.
+
+=== FILE backend/src/main/java/com/edumate/library/LibraryController.java
+>>> SUMMARY
+The library web addresses:
+
+| Method and URL | Who | Does |
+|---|---|---|
+| GET /api/library/books?q= | student, librarian, admin | search the catalogue |
+| GET /api/library/loans/me | student | my loans |
+| GET /api/library/loans | librarian, admin | all open loans |
+| POST /api/library/loans | librarian | issue: body `{"bookId": 3, "usn": "23BTRCS007"}` |
+| POST /api/library/loans/{id}/return | librarian | return a book |
+>>> 26-28
+Constructor: the library service.
+>>> 31-32
+GET the catalogue search. `q` is optional.
+>>> 36-37
+GET the logged-in student's own loans. `requireStudentId()` fails if the caller is not linked to a student.
+>>> 41-42
+GET all open loans for the librarian's desk.
+>>> 46-47
+POST a new loan.
+>>> 51-52
+POST a return.
+>>> 55
+The body of an issue: a book id and a USN, which must not be empty ("Enter the student's USN.").
+
+=== FILE backend/src/main/java/com/edumate/notifications/NotificationMessage.java
+>>> SUMMARY
+**One e-mail or SMS in the outbox.** An *outbox* works like the tray on an office desk: whoever wants a letter sent puts it in the tray, and a messenger comes by regularly to take the letters to the post office. Here the "tray" is the database table `notification_outbox`, and the messenger is `NotificationDispatcher`.
+
+Each row records the channel (EMAIL or SMS), recipient, subject, text, status (PENDING → SENT, or FAILED after 3 failed tries), how many tries so far, and a **deduplication key** that is UNIQUE in the database.
+
+**Why an outbox instead of sending at once?**
+1. **Speed and safety (DR-08).** Writing a row takes microseconds, while talking to an SMS provider can take seconds or fail. Business work (for example publishing results) is never slowed down or broken by a slow provider.
+2. **All or nothing.** The row is written in the *same transaction* as the business change. If the change is undone, the message disappears with it. If it succeeds, the message is guaranteed to be sent eventually. Sending directly could send "Your results are published" even though publishing failed a moment later.
+3. **Retries** happen by themselves.
+>>> 59-67
+A new PENDING message.
+>>> 69-73
+Sent successfully: status SENT, the time, and one more try counted.
+>>> 75-80
+A try failed: count it. After the maximum number of tries, give up (FAILED) so the message is not retried forever.
+
+=== FILE backend/src/main/java/com/edumate/notifications/NotificationRepository.java
+>>> SUMMARY
+Reads the outbox: "is there already a message with this deduplication key?", the oldest pending messages (a page at a time), and the newest messages for the admin's outbox page.
+
+=== FILE backend/src/main/java/com/edumate/notifications/NotificationService.java
+>>> SUMMARY
+**The only way business code queues a message.** Every module (results, attendance shortfall, admissions, consent, payments) calls `enqueue`.
+
+The **deduplication key** makes sure the same message is never queued twice, however many times the caller asks. Examples:
+- `admission:7:SHORTLISTED:3`: application 7 reached SHORTLISTED (version 3);
+- `consent-otp:12`: the code for consent record 12.
+
+If the key already exists, `enqueue` does nothing and returns false. The database's UNIQUE rule on `dedup_key` is a second safety net.
+>>> 17-18
+The two channels.
+>>> 23-26
+Constructor: the outbox repository and the clock.
+>>> 30
+`enqueue`: channel, recipient, subject, text and deduplication key.
+>>> 31-33
+No recipient, or a message with this key already queued → do nothing and return false.
+>>> 34-35
+Otherwise writes a new PENDING row and returns true.
+
+=== FILE backend/src/main/java/com/edumate/notifications/NotificationGateway.java
+>>> SUMMARY
+The **promise** "I can deliver one message". This is an interface, like `ObjectStore`. In production, a class would keep this promise by calling an SMS or e-mail provider. In this project, `LoggingNotificationGateway` keeps it by writing to the log. The report lists the SMS/e-mail gateway as an external system, so it is simulated here.
+>>> 11
+`send`: deliver one message, or throw an exception if the provider refused it.
+
+=== FILE backend/src/main/java/com/edumate/notifications/LoggingNotificationGateway.java
+>>> SUMMARY
+The development **stand-in for a real SMS / e-mail provider**: it only prints the message in the backend's console, like this:
+
+<pre class="block">[EMAIL] to priya.nair@example.com | Application APP-2026-000003: SHORTLISTED | Dear Priya Nair, the status of …</pre>
+
+This is how the demo can show "messages were sent" without a real provider or account.
+>>> 14-17
+Writes one line to the log: channel, recipient, subject and text.
+
+=== FILE backend/src/main/java/com/edumate/notifications/NotificationDispatcher.java
+>>> SUMMARY
+**The messenger that empties the outbox** (the report's design element NotificationDispatcher). Every 5 seconds it takes up to 50 PENDING messages, oldest first, and hands each one to the gateway:
+- delivered → SENT;
+- refused → one more try is counted, and after 3 tries the message becomes FAILED.
+
+The admin's **Outbox** page shows all of these with their status and tries.
+
+**Why every 5 seconds and 50 at a time?** Messages are not urgent to the second, and a small batch keeps each run short. If 11,400 result messages are queued at once, they drain steadily over a few minutes without overloading the provider. A real provider's rate limit would set these numbers.
+>>> 26
+At most 3 tries per message.
+>>> 32-36
+Constructor: the outbox repository, the gateway and the clock.
+>>> 38
+`@Scheduled`: Spring runs this method automatically, first 10 seconds after start-up (`PT10S`), then 5 seconds (`PT5S`) after each run finishes. `PT5S` is the ISO-8601 way to write "a period of 5 seconds". `@EnableScheduling` in `EduMateApplication` switches scheduling on.
+>>> 39
+All changes of one run are saved together.
+>>> 40-42
+Fetches the 50 oldest PENDING messages.
+>>> 43-46
+For each one: try to send; if it works, mark it SENT with the time.
+>>> 47-50
+If sending threw an error: log a warning and count the failed try. One bad message does not stop the rest of the batch.
+
+=== FILE backend/src/main/java/com/edumate/notifications/NotificationController.java
+>>> SUMMARY
+`GET /api/notifications/outbox`: the latest 200 outbox messages, newest first, for the admin's Outbox page. Only ADMIN may call it (RoleMatrix).
+>>> 17-19
+Constructor: the outbox repository.
+>>> 21-24
+Returns the first "page" of 200 messages (page 0, size 200), newest first. Limiting the size stops the page from ever trying to load millions of rows.
+
+=== FILE backend/src/main/java/com/edumate/dashboard/DashboardService.java
+>>> SUMMARY
+Builds the **home-page cards** for whoever is logged in. Each role sees the few numbers that matter to its daily work, and every card links to the page where the number can be acted on.
+
+| Role | Cards |
+|---|---|
+| Student / guardian | lowest attendance, courses below 75%, fee outstanding, hall ticket, CGPA (or "Not published"), books borrowed and fines |
+| Faculty | courses taught, students below 75% across them, lectures today |
+| Exam superintendent | result sets waiting for approval, approved but not published, published |
+| Admissions officer | new, under review, shortlisted, enrolled |
+| Accounts officer | collected, failed, awaiting gateway |
+| Librarian | books on loan, overdue |
+| Applicant | application status, documents missing, guardian consent (for minors) |
+| Admin | messages waiting, number of teachers, audit trail |
+
+Each card has a **tone** that decides its colour: `good` (green), `warn` (amber), `bad` (red) or `neutral`. The colours are defined in `frontend/src/styles/theme.css`.
+
+**To change a card's words**, edit the text in this file (the label, and the hint such as "Pay before the due date"). These texts are written in Java rather than `messages.ts` because they are built together with the numbers on the server.
+
+**Why build cards on the server?** The alternative is that the home page calls five or six different URLs and works out the numbers itself. Doing it here means one request and one place for the rules, and the numbers are calculated by the same services the detailed pages use, so the home page and the detail pages always agree.
+>>> 57-61
+Constructor: the services and repositories the cards read from. The dashboard only reads; it never changes anything (`readOnly = true` on line 40).
+>>> 77-88
+`cardsFor`: picks the right set of cards for the caller's role. The `switch` must cover every role, so if a new role is ever added, Java refuses to compile until someone decides its cards.
+>>> 90-99
+Student: finds the course with the lowest attendance percentage and shows it, and counts courses under 75%. The card is red if any course is under 75%, otherwise green. The numbers come from the attendance summary service.
+>>> 101-104
+Fee outstanding: "Rs 62500.00" in amber if something is due, otherwise "Nil" in green. `signum()` is 1 for positive, 0 for zero, −1 for negative.
+>>> 106-112
+Hall ticket: "Eligible" or "Not yet", with the exam session's name. If there is no exam session at all, the hall-ticket service raises an error and the card is simply left out.
+>>> 114-121
+Results: "Not published" if the student has no published semester yet; otherwise the latest CGPA, with that semester's SGPA as the hint.
+>>> 123-128
+Library: the number of books held right now and the fines building up on them. `reduce(ZERO, add)` adds up the list of fines.
+>>> 129
+Returns the student's cards.
+>>> 132-136
+Faculty: the courses they teach, listed by code.
+>>> 137-140
+Adds up the students below 75% over every section of every course they teach.
+>>> 141-142
+The "Students below 75%" card, amber if any.
+>>> 143-146
+Lectures today: today's weekday number (Monday = 1) compared with their published timetable. On Saturday or Sunday this is 0.
+>>> 147
+Returns the teacher's cards.
+>>> 150-164
+Exam superintendent: counts result sets by status. "Waiting for approval" = COMPUTED + AWAITING_SECOND_APPROVAL.
+>>> 166-178
+Admissions officer: counts this campus's applications by status.
+>>> 180-193
+Accounts officer: from the latest 500 payments, the total successfully collected, how many failed, and how many are still waiting for the gateway.
+>>> 195-202
+Librarian: open loans and how many of them are overdue.
+>>> 204-217
+Applicant: application status (red if rejected), missing documents (amber if any), and, for a minor, the consent status (green only if GRANTED).
+>>> 218-221
+No application yet (the service answered "not found"): a single "Not started" card.
+>>> 224-234
+Admin: messages waiting in the outbox, the number of teachers, and a link to the audit trail.
+>>> 237-238
+The JSON of one card: `{"key": "fees", "label": "Fee outstanding", "value": "Rs 62500.00", "hint": "Pay before the due date", "tone": "warn", "link": "/fees"}`.
+
+=== FILE backend/src/main/java/com/edumate/dashboard/DashboardController.java
+>>> SUMMARY
+`GET /api/dashboard`: the home-page cards for the logged-in user. Every logged-in role may call it.
+>>> 18-20
+Constructor: the dashboard service.
+>>> 22-25
+Returns the caller's cards as a JSON list.
+
+=== FILE backend/src/main/java/com/edumate/admin/AdminController.java
+>>> SUMMARY
+`GET /api/admin/role-matrix`: shows administrators **exactly who may call which URL**. The Role matrix page draws this as a table. The data comes from the very same `RoleMatrix` that Spring Security enforces, so the page can never show a rule different from the real one.
+
+**A bug found while building this page.** In Spring Framework 7, `HttpMethod` (GET, POST…) is a class rather than an enum. Jackson turned it into an empty object `{}`, so the page received no method names and crashed. The fix is the small `RuleView` record, which sends the method as plain text such as `"GET"`. The frontend also got an ErrorBoundary, so a page that crashes shows a friendly message instead of a blank screen.
+>>> 19-21
+Constructor: the role matrix.
+>>> 24-29
+Turns every rule into a `RuleView`. A rule without a method (it applies to every method) gets `null`, which the page shows as "any".
+>>> 32-33
+One row of the matrix as JSON: `{"method": "GET", "pattern": "/api/admin/**", "access": "ROLES", "roles": ["ADMIN"]}`.

@@ -1,0 +1,123 @@
+=== FILE backend/src/main/java/com/edumate/exam/Mark.java
+>>> SUMMARY
+The **marks** of one student in one course for one examination session. Two parts:
+- `internalMarks`: continuous internal assessment, out of **40**, entered by the course teacher;
+- `externalMarks`: the semester-end examination, out of **60**.
+Total = internal + external, out of 100.
+
+Two report findings are fixed here:
+- **DR-05** "No unique constraint on (student, subject, exam session) permits duplicate mark rows". The database table has `UNIQUE (student_id, course_id, exam_session_id)`, so a second row for the same student, course and session is impossible.
+- **RR-08** "Revaluation outcome is not stated to supersede the original mark". There is a separate `revaluedExternalMarks` field, and `effectiveExternal()` always prefers it. Every calculation calls `effectiveExternal()`, never `externalMarks` directly, so the revalued mark is used everywhere at once.
+
+`@Version` protects against two people changing the same mark at the same moment, exactly as for attendance registers.
+>>> 60-61
+The constructor used by the demo seeder: student, course, session, internal and external marks, and who entered them when.
+>>> 72-73
+The external mark that counts. `a != null ? a : b` reads "if a is present use a, otherwise b": if a revalued mark exists, use it; otherwise use the original.
+>>> 76-80
+Changes the internal marks and records who changed them and when. This is the only way our code changes a mark; `MarksEntryService` calls it after checking permissions and writing the audit line.
+>>> 82-83
+Sets a revalued external mark (kept for completeness: the revaluation workflow itself is not part of this project).
+
+=== FILE backend/src/main/java/com/edumate/exam/MarkRow.java
+>>> SUMMARY
+One row of the **single query** that loads a whole cohort's marks for result computation: which student, which course, the course's credits, and the three mark values. It is a record, not an entity, because it is never saved: it only carries the query's answer.
+
+It repeats the two small helper rules of `Mark`: the revalued external mark wins, and a row is "complete" only when both parts are present.
+>>> 9-10
+The six values each row carries, in the same order as the `select new …MarkRow(...)` in `MarkRepository`.
+>>> 12-13
+The external mark that counts (revalued if present).
+>>> 16-17
+True when both the internal and the effective external mark are present. Result computation refuses to run if any row is incomplete.
+
+=== FILE backend/src/main/java/com/edumate/exam/MarkRepository.java
+>>> SUMMARY
+Reads marks. The important method is `findRowsForCohort`, the fix for design defect **DR-03**.
+
+**The N+1 problem in simple words.** Imagine a teacher who must collect 60 answer sheets. The slow way: walk to the store room, fetch one sheet, walk back, and repeat 60 times (1 trip for the list + 60 trips = N+1). The fast way: fetch all 60 sheets in one trip. A database "trip" (a query) takes time even when it is small, so 11,400 students × 1 query each was what made the results page take **4.80 s** under load in the report's performance test. After the fix it took **1.90 s**.
+
+`findRowsForCohort` fetches every mark of the cohort, together with each course's credits, in **one** query.
+>>> 20-29
+The single cohort query, in JPQL:
+- `select new com.edumate.exam.MarkRow(...)` builds one `MarkRow` per result row directly (a "constructor expression").
+- `from Mark m, Course c, Student s where c.id = m.courseId and s.id = m.studentId` joins three tables: each mark with its course (for the credits) and its student (for the programme).
+- The three filters pick the exam session, the programme and the semester.
+- `order by m.studentId, m.courseId` returns each student's rows together, which keeps the grouping simple.
+>>> 30-32
+The method that runs this query. The three `@Param` arguments fill `:examSessionId`, `:programId` and `:semester`.
+
+=== FILE backend/src/main/java/com/edumate/exam/GradeScale.java
+>>> SUMMARY
+The **grade bands** of regulation R-2023: total marks out of 100 → letter grade → grade point.
+
+| Total | Grade | Points |
+|---|---|---|
+| 90 – 100 | S | 10 |
+| 80 – 89.99 | A | 9 |
+| 70 – 79.99 | B | 8 |
+| 60 – 69.99 | C | 7 |
+| 50 – 59.99 | D | 6 |
+| 40 – 49.99 | E | 5 |
+| below 40, or external below 21 | F | 0 |
+
+An extra rule: whatever the total, the student fails (F) if the semester-end part is below **21 out of 60** (35 %). So internal 40 + external 20 = 60 is still F.
+
+This is written as an **enum** so the whole scale lives in one place: changing a band means changing one number here.
+>>> 18-24
+The seven grades. Each is written as `NAME(minimum total, grade point)`, so `S(90, 10)` means "S needs at least 90 and gives 10 points". They are listed from highest to lowest because the search on lines 42-46 checks them in this order.
+>>> 32-35
+The enum's constructor: stores the two numbers given in brackets above. Enum constructors are always private; only the list above can create grades.
+>>> 38
+Finds the grade for a total, given also the external part (for the minimum rule).
+>>> 39-41
+The external minimum first: below 21 out of 60 → F, whatever the total.
+>>> 42-46
+Walks through the grades from S downwards (`values()` gives them in the order they are written) and returns the first one whose minimum the total reaches. For a total of 84: not ≥ 90 (S), but ≥ 80, so A.
+>>> 47
+Only reached if nothing matched (a total below 0, which cannot really happen): F.
+>>> 50-52
+The grade point of this grade, e.g. `GradeScale.A.gradePoint()` is 9.
+>>> 54-55
+Every grade except F is a pass.
+
+=== FILE backend/src/main/java/com/edumate/exam/SgpaCalculator.java
+>>> SUMMARY
+The **SGPA and CGPA formulas**, in small pieces that each do one thing.
+
+- **SGPA** (Semester Grade Point Average) = (sum of credits × grade point) ÷ (sum of credits), for one semester.
+- **CGPA** (Cumulative GPA) = the same formula over every course of every semester so far.
+- Both are rounded **half-up** to 2 decimals (8.625 → 8.63).
+
+**Worked example (test case TC-013):** grades S, A, B, B, C in courses of 4, 4, 3, 3, 2 credits:
+
+<pre class="block">points  = 4×10 + 4×9 + 3×8 + 3×8 + 2×7 = 40 + 36 + 24 + 24 + 14 = 138
+credits = 4 + 4 + 3 + 3 + 2 = 16
+SGPA    = 138 ÷ 16 = 8.625  →  8.63</pre>
+
+(The SQA report states 8.25 for this case. On this 10-point scale 8.25 cannot come out of these grades; 8.63 is the correct value, and the automated test checks for 8.63.)
+
+**Why so many small methods?** The report measured the old SGPA method's cyclomatic complexity at **19** against a target of 10, and recommended splitting it (Recommendation 1). Cyclomatic complexity counts the separate paths through a method (every `if` and loop adds one). Each method here has 3 paths or fewer, so each can be understood and tested completely.
+
+`BigDecimal` is used everywhere so the arithmetic is exact: no 8.6249999 surprises.
+>>> 20-21
+A private, empty constructor: nobody can create a `SgpaCalculator` object. All its methods are `static`, used as `SgpaCalculator.sgpa(...)`.
+>>> 31-32
+Total marks = internal + external. `add` is how you add two BigDecimals.
+>>> 35-36
+The grade for a pair of marks: work out the total, then ask `GradeScale` (which also applies the external minimum).
+>>> 39-45
+SGPA of one semester:
+- Line 40 adds up the credits: `stream()` walks the list, `mapToInt(GradedCourse::credits)` takes each course's credits, `sum()` adds them.
+- Lines 41-43: no credits at all → 0.00, instead of dividing by zero (which would crash).
+- Line 44: points ÷ credits, rounded to 2 decimals (helpers below).
+>>> 47-58
+CGPA over this semester plus all earlier published semesters:
+- Lines 48-49: start with this semester's points and credits.
+- Lines 50-53: for every earlier semester, add its SGPA × its credits to the points, and its credits to the credits. Earlier semesters are stored as (SGPA, credits), so SGPA × credits gives back their original points.
+- Lines 54-56: guard against dividing by zero.
+- Line 57: divide and round.
+>>> 60-61
+Credits × grade point for every course, all added up. `c -> c.credits() * c.gradePoint()` is a small function ("lambda"): for course c, give credits times points.
+>>> 64-65
+Divides with exactly 2 decimals, rounding half-up (…5 goes up), the rounding the university uses.

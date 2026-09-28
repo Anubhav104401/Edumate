@@ -1,0 +1,133 @@
+=== FILE backend/src/main/java/com/edumate/academic/Program.java
+>>> SUMMARY
+A **degree programme** offered on a campus, for example "B.Tech Computer Science and Engineering" (code BTCSE, level UG, 60 seats) or "M.Tech Computer Science and Engineering" (MTCSE, PG, 18 seats). Students, courses, applications and result sets all point to a programme by its id.
+
+`totalSeats` is used by the merit-list generator to build the seat matrix (how many open and reserved seats there are). `campusCode` ties the programme to one campus, which is how a City Campus administrator sees only City Campus programmes.
+
+This is an **entity**: an ordinary Java class whose objects Hibernate stores as rows of the `program` table. Every entity in EduMate follows the same pattern: `@Entity` + `@Table`, an `@Id` field, one field per column with `@Column`, an empty `protected` constructor for Hibernate, a public constructor for our code, and getters.
+>>> 39
+The constructor used by the demo seeder to create a programme. The id is not passed in: the database assigns it on save.
+
+=== FILE backend/src/main/java/com/edumate/academic/ProgramRepository.java
+>>> SUMMARY
+Reads programmes. The one extra method, `findByCampusCodeOrderByName`, returns the programmes of one campus in alphabetical order; it feeds every "Programme" drop-down list in the frontend.
+
+=== FILE backend/src/main/java/com/edumate/academic/Student.java
+>>> SUMMARY
+One **enrolled student**: their USN (University Seat Number, e.g. 23BTRCS007, unique), name, date of birth, contact details, programme, semester, section and their guardian's contact details (used for attendance-shortfall e-mails).
+
+**A design choice worth knowing:** the link to the programme is stored as a plain number (`programId`), not as a Java reference to a `Program` object. With object references, Hibernate may silently run an extra database query every time code touches `student.getProgram()`. Across 11,400 students that becomes the **N+1 query problem** that made the report's results page take 4.80 seconds (design defect DR-03). Plain ids make every database access explicit: when code needs programmes, it loads them in one deliberate query.
+>>> 63-64
+The constructor used to create a student (the demo seeder uses it). The guardian's details are set separately with `setGuardian` because they are optional.
+>>> 76-80
+Sets all three guardian details together: name, e-mail and phone. The e-mail is where attendance-shortfall notices go.
+
+=== FILE backend/src/main/java/com/edumate/academic/StudentRepository.java
+>>> SUMMARY
+Finds students in the ways the screens need: by USN (library desk, accounts office), by programme + semester + section (attendance registers, rosters), by programme + semester (marks sheets), the list of section letters of a cohort, and a text search.
+
+Two methods have their query written out with `@Query` because a method name cannot express them. These queries are written in **JPQL**, which looks like SQL but uses Java class and field names (`Student`, `fullName`) instead of table and column names (`student`, `full_name`). Hibernate translates JPQL into the exact SQL of whichever database is running (H2 or PostgreSQL).
+>>> 20-21
+Lists the distinct section letters of one programme-semester, e.g. `["A", "B"]`. `distinct` removes repeats (60 students but only 2 sections). The `:programId` and `:semester` placeholders are filled from the method's arguments marked `@Param`. The values are sent to the database separately from the query text, which makes **SQL injection** impossible.
+>>> 24-31
+**Search by name or USN** within one campus (used by staff screens):
+- `s.campusCode = :campus` keeps the search inside the caller's campus (multi-tenancy).
+- `lower(...) like lower(concat('%', :q, '%'))` means "contains the typed text, ignoring capital letters": `%` matches any characters, so searching "shar" finds "Aarav Sharma".
+- Either the name or the USN may match (`or`).
+- Results are sorted by USN.
+
+=== FILE backend/src/main/java/com/edumate/academic/Course.java
+>>> SUMMARY
+A **course** (subject) taught in one semester of one programme, e.g. `23CS502 Database Management Systems`, 4 credits, 4 lectures a week, semester 5 of B.Tech CSE, taught by Prof. Arjun Shetty.
+
+- `credits` is used in the SGPA formula (a 4-credit course counts twice as much as a 2-credit one).
+- `weeklyHours` is used twice: by the timetable generator (how many lecture slots to place each week) and by attendance maths (planned classes = weekly hours × 16 weeks).
+- `facultyId` is the id of the teacher's login account. The check "may this teacher take attendance for this course?" compares it with the logged-in user's id.
+>>> 46-47
+The constructor used by the demo seeder: code, name, credits, weekly hours, programme, semester and teacher.
+
+=== FILE backend/src/main/java/com/edumate/academic/CourseRepository.java
+>>> SUMMARY
+Finds courses: the ones a teacher teaches, the ones of a programme-semester (a student's current courses), and the ones of several programmes at once (all courses of a campus). The last one uses `In`: "programId is one of this list", which becomes a single SQL query with `WHERE program_id IN (1, 2, 3)`.
+
+=== FILE backend/src/main/java/com/edumate/academic/ExamSession.java
+>>> SUMMARY
+An **examination session**, for example `2026-ODD` ("Odd semester examinations 2026", starting 18 October 2026). Marks and result sets belong to an exam session. The **current** session of a campus is simply the one with the latest `startsOn` date; the hall-ticket page uses it.
+
+=== FILE backend/src/main/java/com/edumate/academic/ExamSessionRepository.java
+>>> SUMMARY
+Finds exam sessions by code, or all sessions of a campus with the newest first (the first item is the "current" one).
+
+=== FILE backend/src/main/java/com/edumate/academic/CourseAccess.java
+>>> SUMMARY
+Answers the question **"may THIS person touch THIS course?"**.
+
+The RoleMatrix only knows roles: it can say "FACULTY may call `/api/attendance/sessions`". It cannot know that Dr. Meera Nair teaches Operating Systems but not Databases. Without this class, a teacher could type another course's id into the address and open (or change!) another teacher's register. Security people call this **horizontal privilege escalation**, the first item (A01, broken access control) of the OWASP Top 10.
+
+Two checks are offered:
+- `requireTaughtBy`: for changing things (taking attendance, entering marks). Only the course's own teacher passes.
+- `requireViewable`: for looking at things (summaries, reports). The course's own teacher passes, and so do administrators and exam staff **of the same campus**.
+>>> 27
+Checks a course for someone who wants to change something in it; gives back the course if allowed.
+>>> 28
+Loads the course, or stops with 404 "Course was not found." `orElseThrow(() -> …)` means "take the value out of the Optional box, or, if the box is empty, throw the exception made by this little function".
+>>> 29-31
+Refuses (403) unless the caller is FACULTY **and** is this course's teacher. `!` means "not", `||` means "or": "if not faculty, or not the teacher, then refuse". `.equals` compares the two id numbers (for `Long` objects `==` would compare the boxes, not the numbers, so `.equals` is the safe choice).
+>>> 32
+Allowed: hand the course back to the caller, so it does not need to load it again.
+>>> 36-37
+Checks a course for someone who only wants to look at it. Loads the course first (404 if missing).
+>>> 38-40
+Teachers are held to the strict rule: only their own courses.
+>>> 41-45
+Everyone else (administrators, exam superintendents): load the course's programme to find its campus, and refuse if it is not the caller's campus. This keeps one campus's staff out of another campus's data.
+>>> 46
+Allowed.
+
+=== FILE backend/src/main/java/com/edumate/academic/AcademicController.java
+>>> SUMMARY
+The **look-up lists** the screens need, under `/api/academic`:
+
+| URL | Gives | Used by |
+|---|---|---|
+| GET /programs | programmes of my campus | every programme drop-down |
+| GET /courses/mine | a teacher's courses, or a student's current courses | attendance, marks, timetable pages |
+| GET /courses | all courses of my campus | administrators |
+| GET /courses/{id}/students?section=A | a class list | teachers |
+| GET /exam-sessions | exam sessions of my campus, newest first | marks entry, results workflow |
+| GET /students?q=shar | search students by name or USN | staff |
+
+`@Transactional(readOnly = true)` on the class makes every method one read-only database transaction, which is slightly faster and guarantees nothing is changed by accident.
+
+Courses are returned as `CourseView` objects instead of raw `Course` entities, because the screens also need the programme name, the teacher's name and the list of sections. The helper `views(...)` gathers these with a fixed, small number of queries.
+>>> 25
+Every method of this controller runs in a read-only transaction.
+>>> 35-37
+Constructor: Spring hands in the four repositories this controller reads from, plus the user repository (for teacher names) and `CourseAccess`.
+>>> 47-48
+GET /api/academic/programs: the programmes of the caller's own campus, alphabetically. The list of `Program` entities is turned into JSON directly.
+>>> 53-59
+GET /api/academic/courses/mine: different answers for different people.
+- Lines 54-56: a teacher gets the courses where `facultyId` is their own id.
+- Lines 57-58: a student or guardian gets the courses of the student's programme and current semester. `requireStudentId()` refuses accounts with no linked student.
+>>> 62-65
+GET /api/academic/courses: all courses of the caller's campus. First the ids of the campus's programmes are collected (`stream().map(Program::getId).toList()` = "for each programme take its id, make a list"), then all courses of those programmes are loaded in one query.
+>>> 69-73
+GET /api/academic/courses/{courseId}/students?section=A: a class list. `@PathVariable` takes the id from the address; `@RequestParam(defaultValue = "A")` takes `?section=` or uses "A". Line 71 checks the caller may view this course. Lines 72-73 load the section's students in USN order and turn each into a small `StudentSummary` (no guardian details: staff lists do not need them, so they are not sent. This is the "least privilege" idea applied to data).
+>>> 77-78
+GET /api/academic/exam-sessions: the caller's campus sessions, newest first.
+>>> 83-86
+GET /api/academic/students?q=…: the text is trimmed; fewer than 2 characters is refused with 400 (searching for "a" would return almost everyone).
+>>> 88
+Runs the campus-limited search, keeps at most 50 results (`limit(50)`), and converts each to a `StudentSummary`.
+>>> 91-104
+`views` turns a list of courses into `CourseView`s efficiently:
+- Lines 92-93: collect the distinct programme ids, load all those programmes **in one query** (`findAllById`), and build a lookup table id → name.
+- Lines 94-96: the same for teachers: the distinct, non-empty teacher ids → one query → id → full name.
+- Line 97: a small memory for section lists, so the section query runs once per programme-semester, not once per course.
+- Lines 98-104: build one `CourseView` per course, filling names from the lookup tables. `computeIfAbsent(key, …)` means "if the memory has this key, use it; otherwise run the query once and remember the answer".
+So whether there are 5 courses or 500, this takes about 3 queries (1 + 1 + one per cohort), never one query per course.
+>>> 107-109
+The JSON shape of a course as the screens receive it: the course's own facts plus `programName`, `facultyName` and `sections` (e.g. ["A","B"]).
+>>> 113-116
+The JSON shape of a student in staff lists: id, USN, name, semester, section. `of(s)` is a small factory that copies those five facts out of a `Student`.

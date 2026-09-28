@@ -1,0 +1,36 @@
+<h1>Map of every file</h1>
+
+<p>Every file in the project, with one line saying what it is for. Click a name to open its line-by-line
+explanation.</p>
+
+{{STATS}}
+
+<h2>How the folders are organised</h2>
+<pre class="block">Edumate/
+├── README.md, docker-compose.yml, .env.example, .gitignore, .gitattributes
+├── scripts/dev-start.ps1                       start both halves on Windows
+├── backend/                                    the Java server
+│   ├── pom.xml, mvnw, mvnw.cmd, .mvn/          build instructions and the Maven wrapper
+│   ├── Dockerfile
+│   └── src/
+│       ├── main/java/com/edumate/…             the code, one folder per module
+│       ├── main/resources/                     settings (application*.yml) and the database schema
+│       └── test/java/com/edumate/…             the automated tests
+├── frontend/                                   the browser app
+│   ├── package.json, package-lock.json, tsconfig.json, vite.config.ts, index.html
+│   ├── Dockerfile, nginx.conf
+│   ├── public/favicon.svg
+│   └── src/
+│       ├── main.tsx, App.tsx, config.ts, navigation.ts
+│       ├── api/          talking to the backend
+│       ├── auth/         login state and page guards
+│       ├── components/   shared screen pieces
+│       ├── hooks/        useLoad
+│       ├── i18n/         messages.ts: every on-screen text
+│       ├── pages/        one file per screen
+│       ├── styles/       theme.css (colours, sizes) and app.css (layout)
+│       └── utils/        formatting, file checks, form checks (+ their tests)
+└── docs/                                       this guide and the program that builds it</pre>
+
+<h2>Every file</h2>
+{{FILE_TABLE}}

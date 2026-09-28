@@ -1,0 +1,80 @@
+=== FILE frontend/src/pages/admin/TimetableManagePage.tsx
+>>> SUMMARY
+**The administrator's timetable planner** (FR-14), where **TC-011** can be shown live:
+
+<pre class="block">Generate new draft ──► (optionally) Move lectures ──► see clashes ──► Publish draft</pre>
+
+1. Choose programme, semester and section, and press **Generate new draft**. The backend's solver (backtracking with "most constrained first") fills the week without clashes, working around lectures the same teachers already give in other sections.
+2. The **Draft / Published** switch shows either version. Students keep seeing the published one until the draft is published.
+3. Each draft lecture has a **Move** button, which opens a small dialog (day, period, room).
+4. Moving a lecture onto a slot where its teacher, section or room is already busy **does not fail**. Instead the grid outlines the clashing lectures in red, and a red box lists each clash ("Teacher double-booked: Monday P2").
+5. **Publish draft** is refused by the backend while any clash exists: "1 clash(es) must be fixed before this timetable can be published." This is TC-011's expected result.
+6. At the bottom, the **workload** table shows each teacher's lectures per week and what they teach.
+>>> 30-32
+Once the programmes arrive, choose the first automatically.
+>>> 34
+Loads the section's timetable (draft, published and clashes), again whenever programme, semester or section changes, and only once a programme is chosen.
+>>> 35
+The set of lecture ids involved in any clash. `flatMap` joins every clash's list of ids into one list, and a `Set` gives quick "is this one in it?" checks for the grid.
+>>> 38-44
+`generate`: needs a programme; busy; asks the backend for a new draft; shows it; switches to the draft view; and shows "Draft generated with 16 lectures and no clashes."
+>>> 45-48
+A refusal becomes a toast (for example "No clash-free timetable exists with the teachers' current commitments."). Always stop being busy.
+>>> 53-59
+`publish`: asks for confirmation; publishes; switches to the published view; shows "Timetable published. Students and teachers can now see it."; and reloads the workload (hours have changed).
+>>> 60-63
+A refusal (the clash rule) becomes a toast. Always stop being busy.
+>>> 68-73
+`saveMove(day, period, room)`: sends the move; shows "Lecture moved. Check the clash list before publishing."; closes the dialog; and reloads (the clash list may have changed).
+>>> 74-75
+Any error becomes a toast.
+>>> 79
+The lectures to draw: the draft or the published ones, depending on the switch (an empty list if not loaded yet).
+>>> 81-83
+The drawing: title and subtitle.
+>>> 84-90
+The toolbar, with a programme drop-down …
+>>> 95-96
+… the semester …
+>>> 98-99
+… the section (typed in capitals) …
+>>> 101-102
+… "Generate new draft" ("Generating…" while busy) …
+>>> 104
+… and "Publish draft", disabled while busy or when there is no draft.
+>>> 110-114
+Loading and error; then, when the view is loaded, the Draft / Published switch …
+>>> 116-117
+… "Draft (16)": highlighted when chosen …
+>>> 119-120
+… "Published (16)".
+>>> 124-125
+In the draft view, if there is a draft: a green "No clashes. This draft can be published." if there are none …
+>>> 127-132
+… otherwise a red box listing each clash with its kind, day and period.
+>>> 139
+In the draft view without a draft: "There is no draft. Generate one to start planning."
+>>> 141-146
+The grid in a card. In the draft view it is given the clash ids (red outlines) and a "Move" button under each lecture, which opens the move dialog for that lecture.
+>>> 149
+No buttons in the published view (published lectures cannot be moved).
+>>> 155
+While a lecture is being moved, the dialog is shown.
+>>> 157
+The workload card.
+>>> 159-162
+The workload table and its header row.
+>>> 168-170
+One row per teacher: name, hours per week, and what they teach, e.g. "23CS501 (A), 23CS501 (B)", or "—".
+>>> 189-193
+`MoveDialog`: a dimmed background (clicking it cancels), the dialog box (clicks inside do not reach the background), and the title "Move lecture: 23CS503".
+>>> 195-200
+A grid with the day drop-down (Monday–Friday) …
+>>> 205-209
+… the period drop-down, e.g. "P2 (10:00)" …
+>>> 214-215
+… and the room box (at most 20 characters, the backend's limit).
+>>> 218-219
+Cancel …
+>>> 222
+… and Save, which passes the chosen day, period and room to `saveMove`.

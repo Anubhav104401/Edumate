@@ -1,0 +1,134 @@
+<h1>Security: who you are, what you may do, and what can never be tampered with</h1>
+
+<div class="callout kid"><strong>Like a school exam hall</strong>
+At the gate, a guard checks your ID card (<em>authentication</em>: who are you?). Inside, a list on the wall says which
+room each class may enter (<em>authorisation</em>: what may you do?). The answer sheets are sealed so nobody can
+change them afterwards (<em>integrity</em>). A register records who entered and when (<em>audit</em>).</div>
+
+<h2>1. Passwords: stored so that even the database cannot reveal them</h2>
+<p>EduMate never stores a password. It stores a <strong>bcrypt hash</strong>:</p>
+<pre class="block">Edumate@2026  ──bcrypt, cost 12, random salt──►  $2a$12$Q9mK…(53 more characters)</pre>
+<ul>
+<li>A <strong>hash</strong> is a one-way scramble: easy to compute from the password, practically impossible to reverse.</li>
+<li>A random <strong>salt</strong> is mixed in, so two people with the same password get different hashes, and pre-computed tables of common passwords are useless.</li>
+<li><strong>Cost 12</strong> makes each check deliberately slow (about a quarter of a second). A real user never notices; an attacker who stole the table and tries a billion guesses would need decades. (<a href="#f-backend-src-main-java-com-edumate-security-SecurityConfig-java-L97">SecurityConfig line 97</a>)</li>
+</ul>
+<p><em>Alternatives and what they would change:</em> plain SHA-256 or MD5 is fast, which is exactly wrong here
+(billions of guesses per second on a graphics card); storing passwords encrypted means whoever holds the key can read them
+all. Argon2 is a newer, even stronger choice, and bcrypt remains OWASP-accepted. The report's security testing
+(Table 3.13, category <strong>A02</strong>) inspected exactly this, and recorded <em>no finding</em>: bcrypt with cost 12.</p>
+<p><strong>Timing trick.</strong> When the username does not exist, EduMate still runs one bcrypt check against a
+dummy hash (<a href="#f-backend-src-main-java-com-edumate-security-LoginAttemptService-java-L59">line 59</a>). Otherwise
+"unknown user" would answer instantly and "wrong password" slowly, and an attacker could tell which usernames exist.
+Both answers also have the same wording: "Invalid username or password."</p>
+
+<h2>2. Account lockout</h2>
+<p>After <strong>5 wrong passwords in a row</strong>, the account is locked for <strong>15 minutes</strong>: even the
+correct password gets 423 "Too many failed attempts. Your account is locked until 10:45 AM." This stops online guessing
+(the report's <strong>A07</strong> finding). The counter is saved even though the login fails:
+<code>@Transactional(noRollbackFor = ApiException.class)</code>. Both numbers are settings
+(<code>max-failed-logins</code>, <code>lockout-minutes</code>).</p>
+
+<h2>3. The login token (JWT)</h2>
+<p>After a successful login the backend hands out a <strong>JSON Web Token</strong>, a signed "wristband":</p>
+<pre class="block">eyJhbGciOiJIUzI1NiJ9 . eyJzdWIiOiJzdHVkZW50Iiwicm9sZSI6IlNUVURFTlQiLCJ1aWQiOjEyLCJjYW1wdXMiOiJKR0MiLC4uLn0 . 7mV9…
+      header                                    payload (who, role, campus, expiry)                                  signature</pre>
+<ul>
+<li>The header and payload are only <em>encoded</em> (Base64URL), not secret: anyone can read them. Never put secrets in a token.</li>
+<li>The signature is <strong>HMAC-SHA256</strong> of header + payload with the server's secret key (at least 32 bytes, checked at start-up: <a href="#f-backend-src-main-java-com-edumate-security-SecurityConfig-java-L79">line 79</a>). Change one letter of the payload and the signature no longer matches; the test <code>aTamperedTokenIsRejected</code> proves it.</li>
+<li>It expires after <strong>8 hours</strong> (<code>token-validity-hours</code>).</li>
+<li>The browser sends it on every request as <code>Authorization: Bearer &lt;token&gt;</code>.</li>
+</ul>
+<p><strong>Why a token and not a server session?</strong> With sessions, the server remembers each logged-in user in memory
+and gives the browser a cookie. That is simple, and allows instant logout-everywhere, but it needs shared session storage
+when there are several backend copies, and cookies bring CSRF risk (below). With a token, the server remembers nothing:
+any backend copy can check any request.</p>
+<p><strong>The trade-off</strong>, stated honestly: a token cannot be "taken back" before it expires. If one is stolen,
+it works until its expiry. Real systems reduce this with short expiry plus refresh tokens, or a revocation list. EduMate
+keeps 8 hours (one working day) and keeps the token only for the life of the browser tab
+(<code>sessionStorage</code>).</p>
+<p><em>Other alternative:</em> log in through the university's existing identity provider (OAuth 2 / OpenID Connect,
+for example Azure AD or Google Workspace). Then EduMate would not store passwords at all. That is recommended for
+production, but it needs the university's identity system, so it is outside this project.</p>
+
+<h2>4. CSRF: why it is switched off</h2>
+<p><strong>Cross-site request forgery</strong> tricks a logged-in browser into sending a request to another site, relying
+on the browser automatically attaching that site's <em>cookies</em>. EduMate's login travels in a header that JavaScript
+adds explicitly; browsers never attach it automatically. So there is nothing for CSRF to ride on, and CSRF protection is
+disabled (<a href="#f-backend-src-main-java-com-edumate-security-SecurityConfig-java-L46">line 46</a>). If EduMate switched
+to cookies, CSRF protection would have to be switched back on.</p>
+
+<h2>5. Authorisation: the RoleMatrix, deny by default</h2>
+<p><a href="#f-backend-src-main-java-com-edumate-security-RoleMatrix-java"><code>RoleMatrix</code></a> is the
+<strong>single, complete list</strong> of "which role may call which address", for example:</p>
+<pre class="block">allow(GET,  "/api/fees/me",                STUDENT, GUARDIAN);
+allow(POST, "/api/exams/result-sets/*/publish", EXAM_SUPERINTENDENT);
+open (POST, "/api/auth/login");                                  // no login needed
+…
+anyRequest().denyAll();                                          // everything else: refused, for everyone</pre>
+<p><strong>The defect it fixes (DR-06 / DEF-031).</strong> In the original design, two report addresses were missing
+from the matrix and quietly fell back to "any logged-in user". So a student could download the whole class's marks
+(TC-017). Now anything missing is refused, even for an administrator. The test <code>RoleMatrixCoverageTest</code>
+fails the build if any controller address is missing from the matrix. The administrator can see the whole matrix on the
+Role matrix page.</p>
+<p><strong>Denials are recorded.</strong> A refused request writes <code>ACCESS_DENIED</code> with the user and address
+to the audit log.</p>
+
+<h2>6. Object-level checks: "is this record yours?"</h2>
+<p>The RoleMatrix says a student may call <code>/api/fees/me</code>. It cannot say <em>whose</em> fees. That second check
+is done in the services:</p>
+<ul>
+<li>The student's identity comes from the <strong>signed token</strong> (<code>CurrentUser</code>), never from a number in the URL, so it cannot be changed.</li>
+<li>For records addressed by id (<code>/api/admissions/applications/7</code>), the service checks ownership (applicant) or campus (staff). Someone else's application answers <strong>404</strong>, not 403, so nobody can even find out that it exists.</li>
+<li>Every staff query is limited to the user's <strong>campus</strong> (multi-tenancy).</li>
+</ul>
+
+<h2>7. Input: never trusted</h2>
+<ul>
+<li><strong>Validation</strong>: every JSON body is checked with Bean Validation rules (<code>@NotBlank</code>, <code>@Email</code>, <code>@Size</code>, <code>@DecimalMax</code>…) before any code uses it.</li>
+<li><strong>SQL injection</strong> (A03) is impossible by construction: every query uses parameters (<code>?</code>, <code>:name</code>), so typed text is always treated as data, never as SQL.</li>
+<li><strong>Uploads</strong>: real file type by magic bytes, size limits at three layers, safe names, random storage keys (<a href="#08-document-upload">chapter 8</a>).</li>
+<li><strong>Payment callbacks</strong> come from outside without a login, so they must carry an <strong>HMAC-SHA256 signature</strong> over <code>orderId|txnRef|status|amount</code> made with the shared gateway secret. The comparison uses <code>MessageDigest.isEqual</code>, which takes the same time however many characters match, so an attacker cannot guess the signature character by character from response times.</li>
+</ul>
+
+<h2>8. Output: nothing runs that should not</h2>
+<ul>
+<li><strong>XSS</strong> (DEF-036, reflected cross-site scripting): React always writes values as <em>text</em>. A name like <code>&lt;script&gt;alert(1)&lt;/script&gt;</code> is shown as those characters and never run. EduMate never uses <code>dangerouslySetInnerHTML</code>.</li>
+<li><strong>Content-Security-Policy</strong> (nginx): scripts may only come from EduMate itself, so even an injected <code>&lt;script src="https://evil…"&gt;</code> is refused by the browser. <code>frame-ancestors 'none'</code> and <code>X-Frame-Options: DENY</code> stop click-jacking.</li>
+<li><strong>Downloads</strong> of uploaded documents carry <code>Content-Security-Policy: sandbox</code> and <code>X-Content-Type-Options: nosniff</code>, so a crafted PDF cannot run scripts as EduMate.</li>
+<li><strong>CSV exports</strong>: a cell starting with <code>=</code>, <code>+</code>, <code>-</code> or <code>@</code> gets a leading <code>'</code>, so a spreadsheet will not run it as a formula (CSV injection).</li>
+<li><strong>Errors</strong> (A05): never a stack trace or SQL in an answer (<code>include-stacktrace: never</code>). Unexpected errors show only a reference number; details go to the server log. The test <code>errorsDoNotLeakInternals</code> checks this.</li>
+</ul>
+
+<h2>9. Children's data: guardian consent (DPDP)</h2>
+<p>The Digital Personal Data Protection Rules, 2025 require <strong>verifiable</strong> parental consent before a child's
+personal data is processed. The report's requirement review found this missing (RR-02). EduMate sends a 6-digit
+one-time code to the <em>guardian's</em> e-mail or phone:</p>
+<ul>
+<li>it is generated with <code>SecureRandom</code> (unpredictable) and stored only as a bcrypt hash;</li>
+<li>it is valid for 10 minutes, with at most 5 attempts;</li>
+<li>the guardian's contact is masked everywhere (<code>an****om</code>);</li>
+<li>consent can be revoked, after which the application can be stopped but not moved forward;</li>
+<li>staff views of a minor's documents are audited.</li>
+</ul>
+<p>The "demo code on screen" feature exists only because no real inbox is available in a demo; it is controlled by
+<code>edumate.demo.expose-otp</code> and must be <code>false</code> in production.</p>
+
+<h2>10. Secrets and the server itself</h2>
+<ul>
+<li>Secrets (JWT key, gateway secret, database password) come from <strong>environment variables</strong>, in Docker from a <code>.env</code> file that is never committed (<code>.gitignore</code>). <code>docker-compose.yml</code> refuses to start without them (<code>${JWT_SECRET:?…}</code>).</li>
+<li>The development defaults in <code>application.yml</code> are marked <code>change-me</code>.</li>
+<li>The backend container runs as an ordinary user (<code>USER edumate</code>), never as root.</li>
+<li>Only <code>/actuator/health</code> and <code>/actuator/info</code> are exposed, and health shows no details.</li>
+</ul>
+
+<h2>The report's security testing (Table 3.13) and where each item lives</h2>
+<table>
+<thead><tr><th>Finding in the report</th><th>OWASP</th><th>In EduMate</th><th>Proved by</th></tr></thead>
+<tbody>
+<tr><td>Report endpoints open to any logged-in user (DEF-031)</td><td>A01 Broken access control</td><td>deny-by-default RoleMatrix; audit of denials</td><td><code>SecurityIntegrationTest</code>, <code>RoleMatrixCoverageTest</code></td></tr>
+<tr><td>No finding (password storage and transport checked)</td><td>A02 Cryptographic failures</td><td>bcrypt, cost 12, kept; https required in deployment</td><td><code>SecurityConfig</code></td></tr>
+<tr><td>Stack traces in error responses</td><td>A05 Security misconfiguration</td><td><code>GlobalExceptionHandler</code>, <code>include-stacktrace: never</code></td><td><code>errorsDoNotLeakInternals</code></td></tr>
+<tr><td>No account lockout</td><td>A07 Identification &amp; authentication failures</td><td><code>LoginAttemptService</code>: 5 failures → 15 minutes</td><td><code>accountLockout</code></td></tr>
+<tr><td>Reflected XSS in the applicant search field (DEF-036)</td><td>A03 Injection</td><td>React escaping; CSP header</td><td>design</td></tr>
+</tbody></table>

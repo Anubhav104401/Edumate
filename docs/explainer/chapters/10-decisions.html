@@ -1,0 +1,68 @@
+<h1>Decisions and alternatives: why it is built this way</h1>
+
+<p>Every design is a set of choices. For each important one below: <strong>what was chosen</strong>, <strong>why</strong>,
+<strong>what else was possible</strong>, and <strong>how the outcome would differ</strong>. Examiners often ask
+"why not X?", and this chapter is the answer sheet.</p>
+
+<h2>Architecture</h2>
+<table>
+<thead><tr><th>Decision</th><th>Chosen</th><th>Why</th><th>Alternative → consequence</th></tr></thead>
+<tbody>
+<tr><td>Overall shape</td><td>Modular monolith: one backend, one database, one package per module</td><td>Simple to run and test; cross-module work (pay → ledger → e-mail) is one transaction</td><td><strong>Microservices</strong> → independent scaling and deployments, but network failures between services, distributed transactions for payments, and far more to operate</td></tr>
+<tr><td>Frontend / backend split</td><td>React SPA + JSON REST API</td><td>Named in the report; fast screens; the API can also serve a future mobile app</td><td><strong>Server-rendered pages</strong> → simpler, but full page reloads, and screens tied to Java code</td></tr>
+<tr><td>API style</td><td>REST: resources + HTTP methods; actions as POST (<code>/transitions</code>, <code>/approve</code>, <code>/publish</code>)</td><td>Universally understood; easy to secure address by address with the RoleMatrix</td><td><strong>GraphQL</strong> → flexible queries, but one address for everything makes the per-address RoleMatrix impossible; per-field rules would be needed</td></tr>
+<tr><td>How the browser reaches the API</td><td>Same origin via a proxy (Vite in dev, nginx in Docker)</td><td>No CORS configuration to get wrong; identical frontend code everywhere</td><td><strong>CORS</strong> → needed if frontend and backend live on different domains; a careless wildcard exposes the API</td></tr>
+<tr><td>Layers</td><td>Controller → Service → Repository</td><td>Each part testable alone; rules in one place</td><td><strong>SQL in controllers</strong> → less code at first, tangled later</td></tr>
+</tbody></table>
+
+<h2>Data and correctness</h2>
+<table>
+<thead><tr><th>Decision</th><th>Chosen</th><th>Why</th><th>Alternative → consequence</th></tr></thead>
+<tbody>
+<tr><td>Money and GPA numbers</td><td><code>BigDecimal</code> / <code>NUMERIC</code></td><td>Exact decimals</td><td><strong>double</strong> → 0.1 + 0.2 = 0.30000000000000004; wrong paise, GPAs off by 0.01</td></tr>
+<tr><td>Schema management</td><td>Flyway SQL migrations; <code>ddl-auto: none</code></td><td>Exact, reviewed, repeatable schema, with CHECK and UNIQUE rules</td><td><strong>Hibernate auto-DDL</strong> → convenient, but it can silently alter production tables and cannot express every rule</td></tr>
+<tr><td>Concurrent edits (marks, attendance, applications, books)</td><td>Optimistic locking (<code>@Version</code>) + explicit version check</td><td>No waiting; conflicts are rare and shown clearly</td><td><strong>Pessimistic locks</strong> → a teacher leaving a sheet open would block others; <strong>last-write-wins</strong> → silent data loss (DR-01)</td></tr>
+<tr><td>Payment callbacks</td><td>Row lock + duplicate check + UNIQUE constraints</td><td>Duplicates arrive milliseconds apart and must be serialised</td><td><strong>Only a Java check</strong> → the original DEF-014 double credit</td></tr>
+<tr><td>Publishing results</td><td>Atomic <code>UPDATE … WHERE status = 'APPROVED'</code></td><td>The database decides the single winner</td><td><strong>Read, then write</strong> → the original DEF-027 double publication</td></tr>
+<tr><td>Result computation</td><td>Two cohort-wide queries, then in-memory work</td><td>Removes the N+1 pattern (DR-03)</td><td><strong>One query per student</strong> → 14.2 minutes on the report's performance run</td></tr>
+<tr><td>Messages</td><td>Transactional outbox + scheduled dispatcher</td><td>Business work never waits for, or fails because of, an SMS provider (DR-08); retries for free</td><td><strong>Send inside the business method</strong> → slow computations, and messages sent for work that later rolled back; <strong>a message broker</strong> (Kafka, RabbitMQ) → more power, one more system to run</td></tr>
+<tr><td>Audit</td><td>One <code>audit_log</code> table with old <em>and</em> new value</td><td>DR-04: traceable changes; simple queries</td><td><strong>Database triggers</strong> → capture everything, but know nothing about the user or reason; <strong>event sourcing</strong> → full history, much more complex</td></tr>
+<tr><td>Multi-campus</td><td>Shared tables with <code>campus_code</code>, checked in services</td><td>One database to run; provisioning from settings</td><td><strong>Database per campus</strong> → strongest isolation, many databases to upgrade; <strong>PostgreSQL row-level security</strong> → isolation enforced by the database, but harder to test on H2</td></tr>
+<tr><td>Uploaded files</td><td>Object store behind an interface; local folder implementation</td><td>Database stays small; cloud storage is a one-class change</td><td><strong>Files in the database</strong> → one backup, but a bloated database (see <a href="#08-document-upload">chapter 8</a>)</td></tr>
+<tr><td>Development database</td><td>H2 in PostgreSQL mode + a PostgreSQL compatibility test</td><td>Zero installation for newcomers; real PostgreSQL still tested</td><td><strong>PostgreSQL everywhere</strong> → more realistic, every developer must run a database</td></tr>
+<tr><td>Caching</td><td>Spring Cache on published results; Redis in Docker; evicted on publish</td><td>Results morning load; cache cannot show stale results after a publish</td><td><strong>No cache</strong> → every student's refresh hits the database</td></tr>
+</tbody></table>
+
+<h2>Security</h2>
+<table>
+<thead><tr><th>Decision</th><th>Chosen</th><th>Why</th><th>Alternative → consequence</th></tr></thead>
+<tbody>
+<tr><td>Login proof</td><td>JWT (HS256), 8 hours, stateless</td><td>Any backend copy can check it; no session store</td><td><strong>Server sessions + cookies</strong> → instant revocation, but session storage and CSRF protection needed; <strong>university SSO (OIDC)</strong> → no passwords in EduMate, needs the university's identity provider</td></tr>
+<tr><td>Token storage in the browser</td><td><code>sessionStorage</code></td><td>Survives refresh, gone when the tab closes</td><td><strong>localStorage</strong> → stays logged in on shared lab PCs; <strong>HttpOnly cookie</strong> → unreadable by scripts, but CSRF returns</td></tr>
+<tr><td>Password hashing</td><td>bcrypt, cost 12</td><td>Slow on purpose; salted; OWASP-accepted</td><td><strong>SHA-256</strong> → far too fast to resist guessing; <strong>Argon2</strong> → even stronger, also fine</td></tr>
+<tr><td>Access rules</td><td>One deny-by-default RoleMatrix + object-level checks in services + a coverage test</td><td>Fixes DR-06/DEF-031 and keeps it fixed</td><td><strong><code>@PreAuthorize</code> on each method</strong> → rules scattered over 20 files, easy to forget one (exactly the original defect)</td></tr>
+<tr><td>Someone else's record</td><td>Answer 404, not 403</td><td>Does not even reveal that the record exists</td><td><strong>403</strong> → confirms existence, which helps an attacker enumerate ids</td></tr>
+<tr><td>File type</td><td>Magic bytes, on both sides</td><td>Names and browser types are chosen by the sender</td><td><strong>Extension / Content-Type</strong> → a renamed program would be accepted</td></tr>
+<tr><td>Guardian consent</td><td>OTP to the guardian, bcrypt-hashed, 10 min, 5 tries, revocable</td><td>"Verifiable" consent under the DPDP Rules, 2025 (RR-02)</td><td><strong>A tick box</strong> → not verifiable; the minor could tick it; <strong>DigiLocker / Aadhaar-based</strong> → stronger, but an external integration outside this project</td></tr>
+<tr><td>Payment authenticity</td><td>HMAC-SHA256 signature, constant-time comparison</td><td>The callback URL must be public; only the gateway knows the secret</td><td><strong>IP allow-listing only</strong> → breaks when the gateway's addresses change; spoofable inside shared networks</td></tr>
+</tbody></table>
+
+<h2>Frontend</h2>
+<table>
+<thead><tr><th>Decision</th><th>Chosen</th><th>Why</th><th>Alternative → consequence</th></tr></thead>
+<tbody>
+<tr><td>All on-screen text</td><td>One file, <code>messages.ts</code> (<code>t.…</code>)</td><td>Change any wording in one place; ready for translation; TypeScript catches missing keys</td><td><strong>Text inside each page</strong> → hunting through 25 files; <strong>react-intl / i18next</strong> → full translation tooling, heavier than needed now</td></tr>
+<tr><td>All colours and sizes</td><td>CSS variables in <code>theme.css</code>, with a dark-mode set</td><td>Re-brand by editing one file</td><td><strong>Tailwind / Bootstrap / Material UI</strong> → fast styling, but colours spread through markup or tied to the library's look</td></tr>
+<tr><td>Data fetching</td><td>Small <code>useLoad</code> hook + <code>fetch</code> wrapper</td><td>~50 lines, no dependency, handles loading/error/cancel</td><td><strong>TanStack Query / Axios</strong> → caching, retries, interceptors; more to learn and install</td></tr>
+<tr><td>Uploads</td><td><code>XMLHttpRequest</code> for progress</td><td><code>fetch</code> cannot report upload progress</td><td><strong>fetch</strong> → no progress bar</td></tr>
+<tr><td>Confirmations and messages</td><td>Own <code>ConfirmDialog</code> and toasts</td><td>Styled, translatable, accessible, non-blocking</td><td><strong><code>window.confirm</code> / <code>alert</code></strong> → block the page, cannot be styled or translated</td></tr>
+<tr><td>Crash handling</td><td><code>ErrorBoundary</code> around each page</td><td>One broken page never blanks the whole app</td><td><strong>None</strong> → white screen (as happened once, see <code>AdminController</code>)</td></tr>
+<tr><td>Accessibility</td><td>Labels tied to inputs, ARIA roles, keyboard-operable drop zone, announced toasts</td><td>WCAG 2.1, the report's usability objective</td><td><strong>Mouse-only widgets</strong> → unusable with a keyboard or screen reader</td></tr>
+</tbody></table>
+
+<h2>Scope decisions (what was deliberately left out)</h2>
+<ul>
+<li>The <strong>university ERP</strong> and <strong>DigiLocker</strong> integrations named in the report are not implemented; they need external systems and credentials.</li>
+<li>The <strong>payment gateway</strong> and the <strong>SMS/e-mail provider</strong> are simulated (<code>MockPaymentGateway</code>, <code>LoggingNotificationGateway</code>). Their interfaces are the same as a real integration would use, so replacing them does not change the rest of the code.</li>
+<li>The code base is a working reference implementation of the core modules, much smaller than the 48,600 lines the report describes for the production system.</li>
+</ul>

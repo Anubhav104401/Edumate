@@ -1,0 +1,233 @@
+=== FILE backend/src/main/java/com/edumate/timetable/TimetableEntry.java
+>>> SUMMARY
+**One lecture** in the weekly timetable: the section (programme + semester + section letter), the day (1 = Monday … 5 = Friday), the period (1 … 6, where period 1 starts at 9:00), the course, the teacher, the room, and whether this lecture is in the DRAFT or the PUBLISHED timetable.
+
+A section can have a draft and a published timetable at the same time. Students keep seeing the published one while the timetable coordinator works on the next draft. When the draft is published, it replaces the old published one.
+>>> 55-65
+Creates a lecture with all its details. Its status starts as DRAFT (line 49).
+>>> 67-71
+`moveTo`: moves the lecture to another day, period and room (when the coordinator adjusts the draft by hand).
+>>> 73-75
+Marks the lecture as PUBLISHED.
+
+=== FILE backend/src/main/java/com/edumate/timetable/TimetableRepository.java
+>>> SUMMARY
+Reads and deletes timetable lectures. Besides simple look-ups (one section's lectures, a teacher's lectures, all published lectures), it has two hand-written queries:
+- **commitments elsewhere**: published lectures of **other** sections that use one of these teachers or rooms. These are what a new timetable must not clash with;
+- **delete a section's draft (or published) lectures**, in one statement.
+>>> 14-15
+One section's lectures of one status (DRAFT or PUBLISHED), sorted by day, then period. Spring builds the SQL from the long method name.
+>>> 17
+One teacher's lectures of one status, sorted by day and period ("My timetable" for faculty).
+>>> 19
+All lectures of one status (used for the workload report).
+>>> 22-27
+The "commitments elsewhere" query: PUBLISHED lectures that are **not** in this section, and whose teacher is in the given list **or** whose room is in the given list.
+>>> 28-32
+The method running it, with its five named values.
+>>> 34
+A bulk change: write pending changes first, forget cached copies afterwards.
+>>> 35-39
+Deletes all lectures of one section with one status.
+>>> 40-41
+The method running it; it returns how many lectures were deleted.
+
+=== FILE backend/src/main/java/com/edumate/timetable/TimetableSolver.java
+>>> SUMMARY
+The **timetable algorithm** (FR-14; the report calls this design element TimetableSolver). It does two jobs: **generate** a clash-free week, and **find clashes** in any timetable. It is plain Java with no database, so the tests (`TimetableSolverTest`) can check it directly.
+
+**Generating is like solving a Sudoku.**
+- The **blanks**: every lecture that must happen this week. A 4-hour course becomes 4 lectures, so a semester of 6 courses might need about 20 lectures.
+- The **values** a blank can take: the 30 weekly slots (5 days × 6 periods).
+- The **rules** (constraints):
+  1. a section can attend only one lecture per slot;
+  2. a teacher can give only one lecture per slot, **including** lectures they already teach in other sections' published timetables;
+  3. a course meets at most **once a day**, so its hours are spread over the week.
+
+**How it searches (backtracking with "most constrained first").**
+1. Look at every lecture without a slot and count its **legal** slots (slots that break no rule right now).
+2. Pick the lecture with the **fewest** legal slots. This is the *minimum remaining values* (MRV) heuristic, the same idea as the DSATUR method for graph colouring: deal with the hardest blank first, while there is still room to manoeuvre.
+3. Try its first legal slot, then repeat from step 1 for the remaining lectures.
+4. If some lecture ends up with **no** legal slot, a choice made earlier was wrong. **Undo** the last choice and try that lecture's next slot. Undoing and retrying is called *backtracking*.
+5. When every lecture has a slot, the timetable is done. If every possibility has been tried, no clash-free timetable exists. After 200,000 steps the search also gives up, so a bad input can never hang the server.
+
+**Why not simpler methods?**
+- *Greedy* (place each lecture in the first free slot, never undo): fast, but it can paint itself into a corner and fail even when a solution exists.
+- *Trying every combination*: 30 choices for each of about 20 lectures is 30²⁰, far more than any computer could ever check.
+- *Integer programming or special solvers* (such as OR-Tools or OptaPlanner): powerful, but a large extra dependency for a problem this small. Backtracking with MRV solves a section's week in milliseconds.
+
+**Finding clashes** is simpler. Put every lecture into three sets of "boxes": one box per (teacher, slot), one per (section, slot), one per (room, slot). Any box holding two or more lectures is a clash. This is a single pass over the lectures (O(n)).
+>>> 34-36
+5 days, 6 periods, and a limit of 200,000 search steps.
+>>> 39-40
+A lecture waiting for a slot: which course, and which teacher.
+>>> 43-44
+A slot: day and period.
+>>> 47-48
+A clash found: its type (FACULTY, SECTION or ROOM), where it is, which lectures are involved, and a sentence describing it.
+>>> 54
+`solve`: the lectures to place, plus "teacher @ slot" pairs already taken by other sections.
+>>> 55
+The answer being built: `assignment[i]` is the slot of lecture i (empty at first).
+>>> 56-58
+The three "already used" sets that enforce the rules:
+- `sectionTaken`: slots this section already has a lecture in (rule 1);
+- `facultyTaken`: "teacher@day-period" keys, starting with the busy ones from other sections (rule 2);
+- `courseDay`: "course@day" keys (rule 3).
+>>> 59
+The step counter. It is an array of one number so that the recursive calls can all add to the same counter.
+>>> 60-61
+Runs the search. It returns the slots in the same order as the lectures, or null if impossible.
+>>> 64-65
+`backtrack`: one step of the search. It calls itself for the next step (this is called *recursion*).
+>>> 66-68
+Too many steps: give up.
+>>> 69-80
+**MRV:** for every lecture still without a slot, list its legal slots, and remember the lecture with the fewest.
+>>> 81-83
+No lecture is left without a slot: success!
+>>> 84-85
+Takes the chosen lecture and tries each of its legal slots in turn.
+>>> 86-87
+Places it: marks the slot, teacher-slot and course-day as used, and records the choice.
+>>> 88-90
+Solves the rest. If that works, the whole problem is solved.
+>>> 91-92
+It did not work: **undo** this choice (backtrack) and try the next slot.
+>>> 94
+No slot worked for this lecture: report failure to the previous step, which will then try its next option.
+>>> 98-112
+The legal slots of a lecture. It walks period by period, and within each period day by day, so it prefers **early periods spread over the week** (Mon 1, Tue 1, Wed 1 …). This makes the result look like a normal timetable, with no empty mornings. A slot is legal if the section is free (104), the teacher is free (105), and this course has no lecture that day yet (106).
+>>> 114-127
+`place`: adds (`add = true`) or removes (`add = false`) the three "used" marks of a lecture in a slot.
+>>> 129-131
+The key "teacher 12 is busy on day 3, period 2" is written as `12@3-2`.
+>>> 134
+`findClashes`: every clash among the given lectures.
+>>> 135
+An empty list to collect every clash found.
+>>> 136-141
+Groups by teacher, by section (programme/semester/section) and by room, each within the same slot, and adds the clashes of each kind.
+>>> 142-143
+Sorts the clashes by day, then period, as the page lists them.
+>>> 146-147
+`group`: `resource` is a small function that gives each lecture's "box name" (teacher, section or room).
+>>> 148-152
+Puts every lecture into its box. The key is the resource plus the slot, e.g. `f12@3-2`. `computeIfAbsent` creates an empty box the first time a key is seen.
+>>> 153-161
+Every box with more than one lecture becomes a `Clash` listing the lectures' ids.
+
+=== FILE backend/src/main/java/com/edumate/timetable/TimetableService.java
+>>> SUMMARY
+The **timetable workflow** used by the timetable coordinator:
+
+1. **Generate** a DRAFT for a section (programme + semester + section) with the solver.
+2. **Adjust** it by hand if needed: move a lecture to another day, period or room.
+3. **Check clashes**, both inside the draft and against other sections' **published** timetables (the same teacher or room booked twice).
+4. **Publish.** This is **refused while any clash exists**, which is the expected result of test case TC-011. Publishing replaces the section's previous published timetable.
+
+It also answers "My timetable" (a student's section, or a teacher's own lectures) and the **workload report** (lecture hours per week for each teacher).
+
+**Why may a hand move create a clash?** Coordinators sometimes need to try an arrangement that is temporarily invalid on the way to a valid one (like moving furniture). The move is allowed, the clash is shown in red at once, and publishing stays blocked until it is fixed. Refusing every intermediate state would make hand editing painful.
+>>> 45-47
+Constructor: repositories for lectures, courses, programmes, students and users, the solver, and the audit logger.
+>>> 58
+`generate` a draft for one section.
+>>> 59
+The programme must exist on the caller's campus.
+>>> 60-63
+The courses of this semester; none → 404.
+>>> 64-66
+Every course needs a teacher, otherwise 400 "Every course needs a teacher before a timetable can be made."
+>>> 67-69
+The section must have students, otherwise 404 (for example if someone asks for section "Z").
+>>> 71
+The section's home room, e.g. `BTCSE-5A`.
+>>> 72
+Throws away the section's old draft (the published timetable is not touched).
+>>> 73-78
+The teachers of these courses, and the slots where they already teach other sections (from published timetables). These go to the solver as "busy".
+>>> 80-87
+Builds the list of lectures. Each course appears as many times as its weekly hours, and courses with more hours come first (then by code), which helps the search.
+>>> 89-93
+Runs the solver. No solution → 409 "No clash-free timetable exists with the teachers' current commitments."
+>>> 94-99
+Saves one DRAFT lecture per placed lecture, all in the section's home room.
+>>> 100-102
+Audit line (e.g. "22 lectures"), then returns the full view of the section.
+>>> 106-114
+`view`: the section's draft and published lectures (with course and teacher names), plus the clashes of the draft.
+>>> 118-120
+`move`: loads the lecture (404 if missing) and checks it belongs to a programme of the caller's campus.
+>>> 121-123
+Published lectures cannot be moved (409); generate a new draft instead.
+>>> 124-128
+Remembers the old position, moves the lecture, and writes an audit line with the old and new positions (DR-04 style: old and new values).
+>>> 132-136
+`clashes`: the clash list of a section's draft.
+>>> 139-144
+`publish`: needs a draft, otherwise 400 "Generate a draft timetable first."
+>>> 145-149
+**TC-011:** any clash → 409, e.g. "2 clash(es) must be fixed before this timetable can be published."
+>>> 150-151
+Deletes the old published lectures of this section, then marks every draft lecture as PUBLISHED.
+>>> 152-154
+Audit line, then returns the new view.
+>>> 159-171
+`mine`: for a teacher, their own published lectures; for a student (or a guardian, through their linked student), their section's published timetable.
+>>> 175-192
+`workload`: all published lectures of this campus, grouped by teacher. Then, for each teacher of the campus (including those with no lectures), it returns the number of weekly lectures and the list of "course (section)" they teach.
+>>> 194-207
+`clashesFor`: the clashes of a draft. It puts the draft together with the published lectures of other sections that share its teachers or rooms, runs the solver's clash finder, and keeps only clashes that involve at least one **draft** lecture. Clashes purely between other sections are not this section's problem.
+>>> 209-212
+The lectures of one section with one status.
+>>> 214-218
+The programme must exist on the caller's campus, otherwise 404.
+>>> 221-223
+The home room name: programme code + "-" + semester + section, e.g. `BTCSE-5A`.
+>>> 226-232
+Looks up the names of all courses and teachers used in a batch of lectures with **two queries in total** (not one per lecture: DR-03 again).
+>>> 234-246
+A small helper holding the two look-up maps. `view` turns a lecture into the JSON shown on screen, with "?" if a name is missing; `courseCode` gives a course's code.
+>>> 248-251
+The JSON of a section's timetable: draft, published, and clashes.
+>>> 253-255
+The JSON of one lecture.
+>>> 257-258
+The JSON of one row of the workload report.
+
+=== FILE backend/src/main/java/com/edumate/timetable/TimetableController.java
+>>> SUMMARY
+The timetable web addresses:
+
+| Method and URL | Who | Does |
+|---|---|---|
+| POST /api/timetable/generate | timetable coordinator, admin | make a new draft |
+| GET /api/timetable?programId=&semester=&section= | coordinator, admin | draft, published and clashes |
+| PUT /api/timetable/entries/{id} | coordinator, admin | move one draft lecture |
+| GET /api/timetable/clashes?… | coordinator, admin | only the clashes |
+| POST /api/timetable/publish | coordinator, admin | publish (refused if clashes) |
+| GET /api/timetable/me | student, guardian, faculty | "My timetable" |
+| GET /api/timetable/workload | coordinator, admin, HOD | hours per teacher |
+
+The body of generate and publish is `{"programId": 1, "semester": 5, "section": "A"}`. The body of a move is `{"day": 3, "period": 2, "room": "LH-204"}`.
+>>> 30-32
+Constructor: the timetable service.
+>>> 34-37
+POST generate. `@Valid` checks the `SectionRef` rules first.
+>>> 39-43
+GET a section's timetable. The three values come from the address: `?programId=1&semester=5&section=A`.
+>>> 45-49
+PUT a move of one lecture.
+>>> 51-55
+GET the clash list.
+>>> 57-60
+POST publish.
+>>> 62-65
+GET "my timetable".
+>>> 67-70
+GET the workload report.
+>>> 72-74
+The section reference: a programme id is required, the semester is 1 to 10, and the section is non-empty with at most 10 characters.
+>>> 76-78
+A move: day 1 to 5, period 1 to 6, and a room name with at most 20 characters.

@@ -1,0 +1,191 @@
+=== FILE frontend/src/components/DocumentUpload.tsx
+>>> SUMMARY
+**One box on the "Documents" step of the application form**, one box per document type. It shows whether the document is uploaded, lets the applicant **drag a file onto it** or **click to choose one**, checks the file in the browser, uploads it with a **progress bar**, and offers **View** and **Remove**.
+
+**The whole journey of one file:**
+
+<pre class="block">1. Applicant drops "aadhaar.pdf" on the "Identity proof" box   (or clicks and picks it)
+2. checkFile() in the browser:  empty?  bigger than 5 MB?  wrong extension?  real first bytes?
+      └─ problem → red toast, nothing is sent
+3. FormData { type: "ID_PROOF", file: &lt;the bytes&gt; }
+4. XMLHttpRequest POST /api/admissions/applications/7/documents   (Authorization: Bearer …)
+      └─ progress events → "Uploading… 35%" and a growing bar
+5. Vite (5173) or nginx (3000) forwards it to Spring Boot (8080)
+6. Tomcat reads the multipart body (5 MB limit) → DocumentController → DocumentService:
+      owner? draft? empty? ≤ 5 MB? real kind by magic bytes? allowed for ID_PROOF?
+      SHA-256 → store under applications/7/&lt;random&gt;.pdf → save the index card → audit
+7. 200 OK with the document's JSON  → green toast "Identity proof (Aadhaar card or passport) uploaded."
+8. onChanged() → the page reloads the list → the box shows name, size, time and fingerprint</pre>
+
+**Why check in the browser if the server checks anyway?** Speed and kindness. A wrong 4 MB file is refused in a split second, before a slow upload over a weak connection. The browser checks are only a **convenience**. Someone could skip them (for example with `curl`), so the server repeats **every** check and is the one that really decides.
+
+**Accessibility.** The drop area is also a **button**: it can be reached with the Tab key and activated with Enter or Space. People who cannot use a mouse can still upload.
+>>> 22-28
+The box's inputs ("props"):
+- `applicationId`: which application;
+- `type`: which document (e.g. `PHOTO`);
+- `document`: the uploaded document's details, if there is one;
+- `editable`: false once the application is submitted;
+- `onChanged`: called after an upload or removal, so the page can reload.
+>>> 30
+The component. The `{ … }` pulls the five props out by name.
+>>> 31
+`dragging`: true while a file is being dragged over the box (to highlight it).
+>>> 32
+`progress`: `null` when idle, otherwise 0–100 while uploading.
+>>> 33
+A **ref** to the hidden `<input type="file">`, so a click on the box can open the file chooser.
+>>> 34-35
+The toast and confirm-dialog helpers.
+>>> 37
+The document's label in the chosen language, e.g. "Identity proof (Aadhaar card or passport)", from `messages.ts`.
+>>> 38
+The file kinds this document accepts, e.g. `['JPEG', 'PNG']` for a photo.
+>>> 39
+Is this document required?
+>>> 41
+`handleFile`: what happens once a file is chosen or dropped.
+>>> 42
+No file (for example the chooser was cancelled): do nothing.
+>>> 43-46
+Checks the file in the browser. If there is a problem, show it as a red toast and stop: nothing is sent.
+>>> 48
+Shows the progress bar at 0%.
+>>> 49-50
+Uploads, passing `setProgress` so the bar grows as the bytes travel. `await` waits until the server has answered.
+>>> 51-52
+Success: green toast "… uploaded.", then ask the page to reload (the box will then show the stored file's details).
+>>> 53-54
+Failure (for example the server's "must be uploaded as JPEG or PNG"): show the server's message.
+>>> 55-57
+Always: hide the progress bar and clear the file input. Otherwise choosing the **same** file again would not count as a "change", and nothing would happen.
+>>> 61
+`onDrop`: a file was dropped on the box.
+>>> 62
+Without `preventDefault()`, the browser would do its default thing with a dropped file: leave EduMate and open the file itself.
+>>> 63-65
+Un-highlights the box and, if uploads are allowed and none is running, handles the first dropped file. `void` says "start this, I am not waiting for it here".
+>>> 69-70
+`view`: shows the stored document in a new tab.
+>>> 71-72
+Downloads its bytes **with the login token** (a normal link would not send the token and would get 401).
+>>> 73
+Makes a temporary local address (`blob:http://localhost:5173/3f2c…`) that points at those bytes inside the browser.
+>>> 74
+Opens it in a new tab. `noopener` stops the new tab from controlling this one.
+>>> 75
+After 60 seconds, releases the temporary address to free memory (the tab has loaded it by then).
+>>> 76-77
+Any error becomes a toast.
+>>> 82
+`remove`: asks "Remove the uploaded …?" and stops unless the applicant confirms.
+>>> 83-88
+Deletes it on the server, shows "… removed.", and reloads; any error becomes a toast.
+>>> 92-94
+The drawing starts: a card, with a top row holding the label and a badge.
+>>> 96
+The badge: "Required" in amber, or "Optional" in blue.
+>>> 99-101
+If a document is uploaded: a green "Uploaded" badge, its file name and its size (e.g. "1.2 MB").
+>>> 102
+When it was uploaded.
+>>> 103-104
+The first 16 characters of the SHA-256 fingerprint, with all 64 shown on mouse-over (`title`).
+>>> 107-110
+Otherwise: "Not uploaded".
+>>> 113
+Only while the application can still be edited: the drop area.
+>>> 114-115
+The drop area. Its CSS class becomes `dropzone dragging` while a file hovers over it, which highlights it (see `app.css`).
+>>> 116-117
+It acts as a button for screen readers and can be reached with Tab.
+>>> 118
+Click → open the hidden file chooser.
+>>> 119
+Enter or Space → the same, for keyboard users.
+>>> 120-123
+A file is dragged over the box: `preventDefault()` allows dropping here, and the box is highlighted.
+>>> 124-125
+The file left the box → un-highlight; dropped → `onDrop`.
+>>> 127
+"Drag a file here, or click to choose one" (or "Replace file" if one is already uploaded).
+>>> 128
+"Accepted: PDF, JPEG or PNG. Maximum 5 MB."
+>>> 129-136
+While uploading: "Uploading… 35%" and a bar whose inner part is 35% wide.
+>>> 137-142
+The hidden file chooser. `accept=".pdf,.jpg,.jpeg,.png"` makes the chooser show only those files at first. That is merely a filter, and the checks above still run. When a file is picked, `handleFile` gets the first one (`files?.[0]`).
+>>> 147-149
+If uploaded: a row with a "View" button …
+>>> 152-153
+… and, while editable, a "Remove" button.
+
+=== FILE frontend/src/utils/fileChecks.ts
+>>> SUMMARY
+Checks a file **in the browser, before uploading**, in this order:
+
+| # | Check | Message (from `messages.ts`, `t.upload`) |
+|---|---|---|
+| 1 | empty (0 bytes) | "“marks.pdf” is empty." |
+| 2 | larger than 5 MB | "“marks.pdf” is larger than 5 MB. Please scan it at a lower resolution." |
+| 3 | extension not allowed | "“marks.docx” is not an accepted file. Use PDF, JPEG or PNG." |
+| 4 | first bytes are not really that kind | "“marks.pdf” does not look like a real PDF, JPEG or PNG file." |
+
+Check 4 reads **only the first 8 bytes** of the file (`file.slice(0, 8)`), not the whole file, so it is instant even for a 5 MB scan. It uses the same magic numbers as the backend's `FileTypeSniffer`.
+
+**These lists must match the backend's `DocumentType.java`.** If they differed, the browser might refuse a file the server would accept (annoying), or allow one the server refuses (the server's message is then shown, so nothing unsafe happens).
+>>> 12
+The three file kinds, as a TypeScript type: a value can only be one of these three texts.
+>>> 15-20
+The kinds each document accepts. The photo cannot be a PDF.
+>>> 23
+The required documents: photo, ID proof, Class 12 marks card.
+>>> 25-28
+The file-name endings of each kind. JPEG files may end in `.jpg` or `.jpeg`.
+>>> 33
+`acceptAttribute`: for `['PDF','JPEG']`, gives `.pdf,.jpg,.jpeg`. `flatMap` turns each kind into its list of endings and joins the lists into one.
+>>> 38
+`describeKinds`: for `['PDF','JPEG','PNG']`, gives "PDF, JPEG or PNG" (all but the last joined with commas, then "or" and the last).
+>>> 43
+`starts(sig)`: true if every byte of the signature equals the file's byte at the same position.
+>>> 44-46
+PDF (`%PDF-`), PNG (`\x89PNG\r\n\x1a\n`) or JPEG (`FF D8 FF`).
+>>> 47
+None matched.
+>>> 55-56
+Check 1: empty file.
+>>> 58-59
+Check 2: over 5 MB (`MAX_UPLOAD_BYTES` in `config.ts`).
+>>> 61-64
+Check 3: does the lower-cased name end with one of the allowed endings? `MARKS.PDF` counts as `.pdf`.
+>>> 66
+Check 4: reads the first 8 bytes. `file.slice(0, 8)` takes just that piece, and `arrayBuffer()` reads it (which takes a moment, hence `await`).
+>>> 67-69
+Recognise the kind; if it is unknown, or not one this document accepts, refuse.
+>>> 71
+`null` = no problem, go ahead and upload.
+
+=== FILE frontend/src/utils/fileChecks.test.ts
+>>> SUMMARY
+Automatic tests of the browser-side file checks, run with `npm test` (Vitest):
+- real PDF, PNG and JPEG bytes are recognised; a Windows program is not;
+- a genuine PDF is accepted; an empty file, a `.docx`, a program renamed to `.pdf`, and a PDF renamed to `photo.png` are all refused with the right message;
+- the helper functions build `.pdf,.jpg,.jpeg` and "PDF, JPEG or PNG".
+>>> 4-6
+Test bytes: the start of a real PDF (`%PDF-1.4`), a real PNG signature, and the start of a Windows program (`MZ`).
+>>> 8-12
+`describe` groups tests; `it` is one test ("it recognises…"); `expect(x).toBe(y)` fails the test if `x` is not `y`.
+>>> 15-16
+A program is not recognised (`null`).
+>>> 20-22
+A real PDF named `marks.pdf`, for a document that accepts PDF, passes (`null` = no problem). `new File([bytes], name)` makes a pretend file in memory.
+>>> 25-26
+An empty file → "is empty".
+>>> 29-30
+PDF content named `.docx` → wrong extension.
+>>> 33-34
+A program named `marks.pdf` → "does not look like…" (the magic-bytes check).
+>>> 37-38
+PDF content named `photo.png` for a photo → refused by the magic-bytes check, even though the extension looks right.
+>>> 42-45
+The two helper functions.

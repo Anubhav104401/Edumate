@@ -1,0 +1,118 @@
+<h1>Computers from zero</h1>
+
+<p>Before any EduMate file makes sense, a few basic ideas are needed. Each one is small.</p>
+
+<h2>1. A program is a list of instructions</h2>
+<div class="callout kid"><strong>Like a recipe</strong>
+A recipe says: take two eggs, beat them, heat the pan, pour. A computer program says: take the marks, add them,
+compare with 40, print "Pass". The computer follows the steps exactly, very fast, and never gets bored.</div>
+<p>Programs are written as text in a <strong>programming language</strong> (Java, TypeScript, SQL…). Another program
+(a <em>compiler</em> or <em>interpreter</em>) turns that text into something the machine can run.</p>
+
+<h2>2. Files, folders, bytes</h2>
+<p>Everything a computer stores is a <strong>file</strong> inside a <strong>folder</strong>. A file is a row of
+<strong>bytes</strong>. A byte is a number from 0 to 255. Text is stored by giving every letter a number
+(in <em>UTF-8</em>, <code>A</code> is 65, <code>a</code> is 97; ₹ takes three bytes). A photo is also just bytes,
+arranged in the PNG or JPEG way. This matters for uploads: EduMate looks at a file's first few bytes to find out what it
+<em>really</em> is (<a href="#08-document-upload">chapter 8</a>).</p>
+<p>Sizes: 1 KB = 1,024 bytes, 1 MB = 1,024 KB = 1,048,576 bytes. The upload limit, 5 MB, is 5,242,880 bytes.</p>
+
+<h2>3. Client and server</h2>
+<div class="callout kid"><strong>Like a restaurant</strong>
+You (the <em>client</em>) sit at a table and order from the menu. The kitchen (the <em>server</em>) cooks and sends back
+the dish. You never walk into the kitchen; you only talk to the waiter.</div>
+<p>In EduMate, the <strong>browser</strong> (Chrome, Edge, Firefox) is the client. It shows the pages. The
+<strong>backend</strong> (a Java program) is the server. It keeps the data and applies the rules. They talk over the
+network using <strong>HTTP</strong>.</p>
+
+<h2>4. HTTP: how the two talk</h2>
+<p>HTTP is a very simple conversation: the client sends a <strong>request</strong>, the server sends back a
+<strong>response</strong>. Always in that order, one request, one response.</p>
+<pre class="block">REQUEST                                     RESPONSE
+GET /api/fees/me HTTP/1.1                   HTTP/1.1 200 OK
+Host: localhost:5173                        Content-Type: application/json
+Authorization: Bearer eyJhbGciOi…
+                                            {"usn":"23BTRCS007","outstanding":62500.00, …}</pre>
+<ul>
+<li>The <strong>method</strong> says what kind of thing to do: <code>GET</code> read, <code>POST</code> create or act,
+<code>PUT</code> replace, <code>DELETE</code> remove.</li>
+<li>The <strong>path</strong> (<code>/api/fees/me</code>) says what to do it to.</li>
+<li><strong>Headers</strong> are labels: who is asking (<code>Authorization</code>), what kind of body is attached
+(<code>Content-Type</code>), what kind of answer is wanted (<code>Accept</code>).</li>
+<li>The <strong>body</strong> is the content (for EduMate: JSON, or the bytes of an uploaded file).</li>
+<li>The response starts with a <strong>status code</strong>:</li>
+</ul>
+<table>
+<thead><tr><th>Code</th><th>Meaning</th><th>Example in EduMate</th></tr></thead>
+<tbody>
+<tr><td>200</td><td>OK</td><td>the fee account was sent</td></tr>
+<tr><td>204</td><td>OK, nothing to send back</td><td>a document was deleted</td></tr>
+<tr><td>400</td><td>your request is wrong</td><td>"Only PDF, JPEG and PNG files are accepted."</td></tr>
+<tr><td>401</td><td>who are you? (no valid login)</td><td>no token, or an expired one</td></tr>
+<tr><td>403</td><td>I know you, but you may not</td><td>a student asking for the whole class's marks (TC-017)</td></tr>
+<tr><td>404</td><td>not found</td><td>an application that is not yours</td></tr>
+<tr><td>409</td><td>conflict with the current state</td><td>someone else saved the record first; results already published</td></tr>
+<tr><td>410</td><td>gone (expired)</td><td>a consent code older than 10 minutes</td></tr>
+<tr><td>413</td><td>too large</td><td>an upload over 5 MB</td></tr>
+<tr><td>423</td><td>locked</td><td>5 wrong passwords in a row</td></tr>
+<tr><td>500</td><td>the server made a mistake</td><td>"Something went wrong on our side. Please quote reference 3f2c9a1b…"</td></tr>
+</tbody></table>
+
+<h2>5. Addresses and ports</h2>
+<div class="callout kid"><strong>Like a block of flats</strong>
+The street address (<em>host</em>) gets you to the building; the <em>flat number</em> (port) gets you to the right door.
+One computer runs many programs, and each listens behind its own numbered door.</div>
+<p>A web address such as <code>http://localhost:8080/api/fees/me</code> has four parts:</p>
+<table>
+<thead><tr><th>Part</th><th>Here</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>scheme</td><td><code>http</code></td><td>which language to speak (https = the encrypted version)</td></tr>
+<tr><td>host</td><td><code>localhost</code></td><td>which computer: <em>localhost</em> means "this same computer"</td></tr>
+<tr><td>port</td><td><code>8080</code></td><td>which program on that computer</td></tr>
+<tr><td>path</td><td><code>/api/fees/me</code></td><td>which thing inside that program</td></tr>
+</tbody></table>
+<p>EduMate's programs and their ports are listed in <a href="#04-architecture-and-ports">chapter 4</a>.</p>
+
+<h2>6. JSON: the shape of the data</h2>
+<p>The browser and the backend must agree on how to write data as text. EduMate uses <strong>JSON</strong>
+(JavaScript Object Notation):</p>
+<pre class="block">{
+  "usn": "23BTRCS007",            ← text goes in double quotes
+  "outstanding": 62500.00,        ← numbers do not
+  "minor": false,                 ← true / false
+  "phone": null,                  ← "nothing"
+  "courses": ["23CS501", "23CS502"],          ← a list, in square brackets
+  "user": { "id": 12, "role": "STUDENT" }     ← an object inside an object
+}</pre>
+<p>Every language can read and write JSON. In the browser, <code>JSON.stringify(object)</code> turns an object into
+this text and <code>response.json()</code> turns the text back. In Java, the library <strong>Jackson</strong> does the
+same for Java objects. <a href="#05-life-of-a-request">Chapter 5</a> follows one JSON message all the way.</p>
+
+<h2>7. A database: the filing cabinet</h2>
+<div class="callout kid"><strong>Like a filing cabinet of ruled sheets</strong>
+Each drawer is a <em>table</em> (students, marks, payments). Each sheet is a <em>row</em> (one student). Each column
+on the sheet is a <em>column</em> (name, date of birth). Every sheet has a unique number, its <em>id</em>, so other
+sheets can point at it.</div>
+<p>The database program (PostgreSQL in production, H2 on a laptop) keeps these tables on disk, makes sure two people
+cannot corrupt a row at the same time, and answers questions written in <strong>SQL</strong>:</p>
+<pre class="block">SELECT full_name FROM student WHERE usn = '23BTRCS007';      → Aarav Sharma</pre>
+
+<h2>8. Frontend and backend</h2>
+<ul>
+<li><strong>Frontend</strong>: the part that runs <em>in the browser</em> and draws the screens (folder <code>frontend/</code>, written in TypeScript with React).</li>
+<li><strong>Backend</strong>: the part that runs <em>on the server</em>, holds the rules and talks to the database (folder <code>backend/</code>, written in Java with Spring Boot).</li>
+</ul>
+<p>The golden rule of this design: <strong>the backend decides; the frontend only asks and shows.</strong>
+Anything the browser does can be changed by the person sitting at it, so every rule (who may do what, what counts as
+a valid file, whether results may be published) is checked on the server. The browser repeats some checks only to be
+quick and friendly.</p>
+
+<h2>9. Source code, building, running</h2>
+<p><strong>Source code</strong> is the text people write. <strong>Building</strong> turns it into something runnable:
+Maven turns the Java code into one <code>.jar</code> file; Vite turns the TypeScript into plain JavaScript files a browser
+understands. <strong>Running</strong> starts it. <a href="#13-running">Chapter 13</a> gives the exact commands.</p>
+
+<h2>10. Git and GitHub</h2>
+<p><strong>Git</strong> keeps the full history of every file: who changed what, when, and why ("commits").
+<strong>GitHub</strong> stores a copy online: this project lives at
+<a href="https://github.com/Anubhav104401/Edumate">github.com/Anubhav104401/Edumate</a>.</p>

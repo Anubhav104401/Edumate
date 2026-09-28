@@ -8,6 +8,7 @@ defect fix described in the report is built in and covered by an automated test.
 
 > **New to programming?** Open [`docs/EduMate-Zero-to-Hero.html`](docs/EduMate-Zero-to-Hero.html) in a browser.
 > It explains every folder, every file and every line of this project from first principles.
+> After changing code, regenerate it with `python docs/explainer/build_explainer.py --report` (Python 3 + Pygments).
 
 ---
 
@@ -106,7 +107,7 @@ cd frontend && npm test       # 15 Vitest tests: upload checks, form validation,
 | DR-08 computation also sends messages | outbox + `NotificationDispatcher` | design |
 | DEF-027 double publication | atomic `UPDATE … WHERE status = 'APPROVED'` | `ResultPublicationIntegrationTest` (TC-015) |
 | DEF-036 reflected XSS | React escapes text; CSP header in `nginx.conf` | design |
-| A02 password storage | bcrypt cost 12 | `SecurityConfig` |
+| A02 password storage (tested in Table 3.13, no finding) | bcrypt cost 12, kept | `SecurityConfig` |
 | A05 stack traces in errors | `GlobalExceptionHandler`, `include-stacktrace: never` | `SecurityIntegrationTest` |
 | A07 no account lockout | `LoginAttemptService` (5 failures → 15 min) | `SecurityIntegrationTest` |
 | Recommendation 1: SGPA complexity 19 | `SgpaCalculator` split into methods of complexity ≤ 3 | `SgpaCalculatorTest` |

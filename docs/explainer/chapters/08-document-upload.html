@@ -1,0 +1,299 @@
+<h1>The document upload system, in minute detail</h1>
+
+<p>An applicant must upload scanned documents: a photograph, an identity proof, marks cards, and a category certificate.
+This chapter follows <strong>one file</strong> from the applicant's computer to the server's disk and back to an
+officer's screen, naming every check, every limit, every byte format and every file involved. It then lists what can
+go wrong at each step, and the other designs that were possible.</p>
+
+<div class="callout kid"><strong>Like handing a document to the admission office</strong>
+You pick the paper (choose a file). The clerk at the window glances at it: is it blank, too thick, the wrong kind of
+paper? (browser checks). You put it in an envelope with a label saying what it is (FormData). The postman carries it,
+and you can watch how far he has walked (progress bar). At the office, a second, stricter clerk opens it and checks
+everything again, fingerprints it, gives it a random locker number, locks it in the cupboard, and writes an index card
+(server checks, SHA-256, storage key, disk, database). Later, an officer asks for it by the index card, and the visit
+is written in the register (audit).</div>
+
+<h2>The files that make up the system</h2>
+<table>
+<thead><tr><th>Side</th><th>File</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td rowspan="6">Browser</td><td><a href="#f-frontend-src-pages-applicant-ApplyPage-tsx"><code>ApplyPage.tsx</code></a></td><td>shows one upload box per document type (step 4 of the application)</td></tr>
+<tr><td><a href="#f-frontend-src-components-DocumentUpload-tsx"><code>DocumentUpload.tsx</code></a></td><td>one box: drag &amp; drop / click, progress bar, View, Remove</td></tr>
+<tr><td><a href="#f-frontend-src-utils-fileChecks-ts"><code>fileChecks.ts</code></a></td><td>browser checks: empty, size, extension, magic bytes</td></tr>
+<tr><td><a href="#f-frontend-src-api-endpoints-ts-L140"><code>endpoints.ts</code> (uploadDocument)</a></td><td>builds the multipart form</td></tr>
+<tr><td><a href="#f-frontend-src-api-http-ts-L129"><code>http.ts</code> (uploadWithProgress, download)</a></td><td>sends with progress; downloads with the token</td></tr>
+<tr><td><a href="#f-frontend-src-config-ts-L12"><code>config.ts</code> (MAX_UPLOAD_BYTES)</a>, <a href="#f-frontend-src-i18n-messages-ts"><code>messages.ts</code> (upload, documentTypes)</a></td><td>the limit and every text</td></tr>
+<tr><td rowspan="2">Between</td><td><a href="#f-frontend-vite-config-ts"><code>vite.config.ts</code></a> / <a href="#f-frontend-nginx-conf-L13"><code>nginx.conf</code> (client_max_body_size 6m)</a></td><td>forward <code>/api</code> to port 8080</td></tr>
+<tr><td><a href="#f-backend-src-main-resources-application-yml-L30"><code>application.yml</code> (multipart limits)</a></td><td>5 MB per file, 6 MB per request</td></tr>
+<tr><td rowspan="9">Server</td><td><a href="#f-backend-src-main-java-com-edumate-security-RoleMatrix-java-L107"><code>RoleMatrix</code></a></td><td>only APPLICANT may upload; applicant, officer and admin may view</td></tr>
+<tr><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentController-java"><code>DocumentController</code></a></td><td>the four web addresses; safe download headers</td></tr>
+<tr><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java"><code>DocumentService</code></a></td><td>the pipeline: ownership, checks, fingerprint, storage, record, audit</td></tr>
+<tr><td><a href="#f-backend-src-main-java-com-edumate-documents-FileTypeSniffer-java"><code>FileTypeSniffer</code></a></td><td>the real kind from the first bytes</td></tr>
+<tr><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentType-java"><code>DocumentType</code></a>, <a href="#f-backend-src-main-java-com-edumate-documents-FileKind-java"><code>FileKind</code></a></td><td>which document accepts which kinds; which are required</td></tr>
+<tr><td><a href="#f-backend-src-main-java-com-edumate-documents-ObjectStore-java"><code>ObjectStore</code></a>, <a href="#f-backend-src-main-java-com-edumate-documents-LocalFileObjectStore-java"><code>LocalFileObjectStore</code></a></td><td>where the bytes live (a folder on disk)</td></tr>
+<tr><td><a href="#f-backend-src-main-java-com-edumate-documents-ApplicationDocument-java"><code>ApplicationDocument</code></a> + repository</td><td>the database "index card"</td></tr>
+<tr><td><a href="#f-backend-src-main-java-com-edumate-admissions-AdmissionService-java-L165"><code>AdmissionService.requireOwnDraft / requireVisible</code></a></td><td>who may touch which application</td></tr>
+<tr><td><a href="#f-backend-src-main-java-com-edumate-common-GlobalExceptionHandler-java"><code>GlobalExceptionHandler</code></a></td><td>turns every problem into a clear JSON error</td></tr>
+</tbody></table>
+
+<h2>What may be uploaded</h2>
+<table>
+<thead><tr><th>Document</th><th>Accepted kinds</th><th>Required to submit?</th></tr></thead>
+<tbody>
+<tr><td>Passport-size photograph</td><td>JPEG, PNG</td><td>yes</td></tr>
+<tr><td>Identity proof (Aadhaar card or passport)</td><td>PDF, JPEG, PNG</td><td>yes</td></tr>
+<tr><td>Class 12 / qualifying examination marks card</td><td>PDF, JPEG, PNG</td><td>yes</td></tr>
+<tr><td>Class 10 marks card</td><td>PDF, JPEG, PNG</td><td>no</td></tr>
+<tr><td>Category certificate (OBC / SC / ST)</td><td>PDF, JPEG, PNG</td><td>no</td></tr>
+</tbody></table>
+<p>Maximum size: <strong>5 MB</strong> (5,242,880 bytes) per file. One file per document type; uploading again replaces
+the previous one. Uploads are possible only while the application is a <strong>DRAFT</strong>.</p>
+
+<h2>Step 1: choosing the file (browser)</h2>
+<p>The box is a <code>&lt;div role="button"&gt;</code> with a hidden <code>&lt;input type="file"&gt;</code> inside. There are
+three ways in:</p>
+<ul>
+<li><strong>Click</strong> (or <strong>Enter</strong> / <strong>Space</strong> for keyboard users) calls
+<code>inputRef.current.click()</code>, which opens the operating system's file chooser. The chooser is pre-filtered by
+<code>accept=".pdf,.jpg,.jpeg,.png"</code> (or <code>".jpg,.jpeg,.png"</code> for the photo). That is only a
+convenience filter: the person can switch it to "All files".</li>
+<li><strong>Drag over</strong>: <code>onDragOver</code> calls <code>preventDefault()</code> (without it the browser would refuse the drop) and highlights the box.</li>
+<li><strong>Drop</strong>: <code>onDrop</code> calls <code>preventDefault()</code> (otherwise the browser would leave EduMate and open the file itself) and takes <code>event.dataTransfer.files[0]</code>.</li>
+</ul>
+<p>Either way, the page now holds a <strong><code>File</code> object</strong>. It knows the file's <code>name</code>
+(<code>aadhaar.pdf</code>), <code>size</code> (in bytes), <code>type</code> (the browser's <em>guess</em> from the
+extension) and <code>lastModified</code>. <strong>The bytes have not been read yet</strong>: a <code>File</code> is a
+handle to the file on disk.</p>
+
+<h2>Step 2: the browser's quick checks</h2>
+<p><a href="#f-frontend-src-utils-fileChecks-ts"><code>checkFile(file, acceptedKinds)</code></a> runs four checks, cheapest
+first, and stops at the first problem:</p>
+<table>
+<thead><tr><th>#</th><th>Check</th><th>How</th><th>Message (from <code>messages.ts</code> → <code>upload</code>)</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>empty?</td><td><code>file.size === 0</code></td><td>“aadhaar.pdf” is empty.</td></tr>
+<tr><td>2</td><td>too big?</td><td><code>file.size &gt; 5 × 1024 × 1024</code></td><td>“aadhaar.pdf” is larger than 5 MB. Please scan it at a lower resolution.</td></tr>
+<tr><td>3</td><td>allowed extension?</td><td>lower-cased name ends with <code>.pdf</code> / <code>.jpg</code> / <code>.jpeg</code> / <code>.png</code> (only those this document accepts)</td><td>“aadhaar.docx” is not an accepted file. Use PDF, JPEG or PNG.</td></tr>
+<tr><td>4</td><td>really that kind?</td><td>reads <strong>only the first 8 bytes</strong>: <code>file.slice(0, 8).arrayBuffer()</code>, then compares with the magic numbers</td><td>“aadhaar.pdf” does not look like a real PDF, JPEG or PNG file.</td></tr>
+</tbody></table>
+<p>If anything is wrong, a red toast appears and <strong>nothing is sent</strong>. The whole check takes a few
+milliseconds, even for a 5 MB file, because only 8 bytes are read.</p>
+
+<h3>Magic numbers: how a file's kind is recognised</h3>
+<p>Almost every file format begins with a fixed "signature". The name and the extension are just labels anyone can
+change; these first bytes are part of the content itself.</p>
+<table>
+<thead><tr><th>Kind</th><th>First bytes (hexadecimal)</th><th>As characters</th><th>Where checked</th></tr></thead>
+<tbody>
+<tr><td>PDF</td><td><code>25 50 44 46 2D</code></td><td><code>%PDF-</code></td><td rowspan="3"><code>fileChecks.ts sniffKind</code> (browser) and <code>FileTypeSniffer.detect</code> (server)</td></tr>
+<tr><td>PNG</td><td><code>89 50 4E 47 0D 0A 1A 0A</code></td><td><code>‰PNG␍␊␚␊</code></td></tr>
+<tr><td>JPEG</td><td><code>FF D8 FF</code></td><td>(not printable)</td></tr>
+<tr><td><em>a Windows program</em></td><td><code>4D 5A</code></td><td><code>MZ</code></td><td>matches none of the above, so it is refused</td></tr>
+</tbody></table>
+
+<h2>Step 3: packing the file into a multipart form</h2>
+<p><a href="#f-frontend-src-api-endpoints-ts-L140"><code>api.admissions.uploadDocument</code></a> builds a
+<strong><code>FormData</code></strong>:</p>
+<pre class="block">const form = new FormData();
+form.append('type', 'ID_PROOF');     // a text part
+form.append('file', file);           // a file part: the browser will stream the bytes from disk</pre>
+<p>When sent, the browser turns this into a <strong><code>multipart/form-data</code></strong> body: several parts separated by
+a random <strong>boundary</strong> line the browser chooses:</p>
+<pre class="block">POST /api/admissions/applications/7/documents HTTP/1.1
+Host: localhost:5173
+Accept: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9…
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryq7Z3kR9xT2mN
+Content-Length: 348217
+
+------WebKitFormBoundaryq7Z3kR9xT2mN
+Content-Disposition: form-data; name="type"
+
+ID_PROOF
+------WebKitFormBoundaryq7Z3kR9xT2mN
+Content-Disposition: form-data; name="file"; filename="aadhaar.pdf"
+Content-Type: application/pdf
+
+%PDF-1.7
+…347,800 or so raw bytes of the scan…
+------WebKitFormBoundaryq7Z3kR9xT2mN--</pre>
+<ul>
+<li>The part names <code>type</code> and <code>file</code> must match <code>@RequestParam("type")</code> and <code>@RequestParam("file")</code> in <code>DocumentController</code>.</li>
+<li>The page <strong>does not</strong> set <code>Content-Type</code> itself: only the browser knows the boundary it chose. Setting the header by hand would leave the boundary out, and the server could not find the parts.</li>
+<li>The <code>Content-Type: application/pdf</code> inside the file part is the browser's guess from the extension. The server <strong>ignores it</strong> for all decisions.</li>
+</ul>
+<p><strong>Why multipart and not JSON?</strong> JSON can only carry text, so the file would have to be converted to
+Base64 text, which is <strong>33% larger</strong> (4 characters for every 3 bytes) and must be held entirely in memory on
+both sides. Multipart carries the raw bytes as they are, and every web server understands it.</p>
+
+<h2>Step 4: sending, with a progress bar</h2>
+<p><a href="#f-frontend-src-api-http-ts-L129"><code>uploadWithProgress</code></a> uses
+<strong><code>XMLHttpRequest</code></strong> rather than <code>fetch</code>, because <code>fetch</code> cannot report
+upload progress. While the bytes leave the computer, the browser fires <code>xhr.upload.onprogress</code> with
+<code>loaded</code> and <code>total</code>:</p>
+<pre class="block">loaded 120,000 of 348,217  → onProgress(34) → "Uploading… 34%" and the bar at 34% width
+loaded 348,217 of 348,217  → onProgress(100)</pre>
+<p>The request goes to port 5173 (or 3000), and Vite (or nginx) forwards it to the backend on port 8080. nginx allows
+bodies up to <strong>6 MB</strong> (<code>client_max_body_size 6m</code>). Its default of 1 MB would block most
+scans with error 413.</p>
+
+<h2>Step 5: the server receives the multipart body</h2>
+<p>Tomcat, inside Spring Boot, reads the body, using the limits in
+<a href="#f-backend-src-main-resources-application-yml-L30"><code>application.yml</code></a>:</p>
+<pre class="block">spring.servlet.multipart.max-file-size:    5MB     ← any single file part
+spring.servlet.multipart.max-request-size: 6MB     ← the whole body (file + text parts + boundaries)</pre>
+<p>Too large → Spring raises <code>MaxUploadSizeExceededException</code> → <code>GlobalExceptionHandler</code> answers
+<strong>413</strong> <code>FILE_TOO_LARGE</code> "The file is larger than the 5 MB limit." The controller never runs, so
+an oversized upload wastes as little server work as possible.</p>
+
+<h2>Step 6: the security guard</h2>
+<p>The JWT is checked (signature, expiry), then the RoleMatrix:
+<code>allow(POST, "/api/admissions/applications/*/documents", APPLICANT)</code>. An officer, a student or an anonymous
+caller cannot upload at all.</p>
+
+<h2>Step 7: the controller</h2>
+<p><a href="#f-backend-src-main-java-com-edumate-documents-DocumentController-java-L39"><code>DocumentController.upload</code></a>
+accepts only <code>multipart/form-data</code> (<code>consumes = …</code>). Spring fills its parameters:</p>
+<ul>
+<li><code>CurrentUser me</code> from the token;</li>
+<li><code>applicationId</code> = 7 from the address;</li>
+<li><code>DocumentType type</code> from the text part. <code>"ID_PROOF"</code> becomes the enum value; an unknown value such as <code>"SELFIE"</code> gives 400 <code>BAD_PARAMETER</code>;</li>
+<li><code>MultipartFile file</code> from the file part (a missing part also gives 400 <code>BAD_PARAMETER</code>).</li>
+</ul>
+
+<h2>Step 8: the pipeline in DocumentService.upload</h2>
+<p><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L67"><code>DocumentService.upload</code></a>
+runs inside one database transaction:</p>
+<table>
+<thead><tr><th>#</th><th>What</th><th>Line</th><th>If it fails</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>The application exists, belongs to this applicant, and is still DRAFT</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L68">68</a></td><td>404 "Application was not found." / 409 NOT_DRAFT "A submitted application can no longer be edited."</td></tr>
+<tr><td>2</td><td>Not empty</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L69">69</a></td><td>400 EMPTY_FILE "The selected file is empty."</td></tr>
+<tr><td>3</td><td>At most 5 MB (again)</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L72">72</a></td><td>400 FILE_TOO_LARGE "The file is larger than the 5 MB limit."</td></tr>
+<tr><td>4</td><td>Read the bytes (at most 5 MB, so safe to hold in memory)</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L75">75</a></td><td>400 UPLOAD_FAILED "The file could not be read. Please try again."</td></tr>
+<tr><td>5</td><td>The real kind from the magic bytes</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L76">76</a></td><td>400 UNSUPPORTED_FILE "Only PDF, JPEG and PNG files are accepted. This file is none of them."</td></tr>
+<tr><td>6</td><td>That kind is allowed for this document</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L78">78</a></td><td>400 WRONG_FILE_TYPE "Passport-size photograph must be uploaded as [JPEG, PNG], not PDF."</td></tr>
+<tr><td>7</td><td>Choose a random storage key</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L83">83</a></td><td>–</td></tr>
+<tr><td>8</td><td>Write the bytes to the object store</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L84">84</a></td><td>500 (disk full…), and the transaction is undone</td></tr>
+<tr><td>9</td><td>Register "if this transaction fails, delete the new file"</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L85">85</a></td><td>–</td></tr>
+<tr><td>10</td><td>If a document of this type exists: delete its record now and its file after commit</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L87">87</a></td><td>–</td></tr>
+<tr><td>11</td><td>Save the index card: clean name, key, real MIME type, size, SHA-256, time</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L91">91</a></td><td>409 if the database refuses (e.g. duplicate key)</td></tr>
+<tr><td>12</td><td>Audit: <code>DOCUMENT_UPLOADED</code> "ID_PROOF aadhaar.pdf sha256=9f86d0…"</td><td><a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L94">94</a></td><td>–</td></tr>
+</tbody></table>
+
+<h3>The fingerprint: SHA-256</h3>
+<p><strong>SHA-256</strong> turns any amount of data into a 256-bit number, written as 64 hexadecimal characters. The
+same bytes always give the same fingerprint; changing even one byte gives a completely different one. EduMate stores the
+fingerprint of every upload, so anyone can later prove that the stored file is exactly the one that was uploaded, by
+computing its SHA-256 again. The test <code>fingerprintIsTheStandardSha256</code> checks the official test value:
+<code>SHA-256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad</code>.</p>
+
+<h3>The storage key: never the person's file name</h3>
+<pre class="block">applications/7/3f2c9a1b-4d5e-4f60-a5b1-7c8d9e0f1a2b.pdf
+└─ folder per application ─┘└──────── random UUID ─────────┘└ extension of the REAL kind</pre>
+<p>Why not store the file under its own name? Two people upload <code>scan.pdf</code> (a collision); a name like
+<code>..\..\config.yml</code> tries to climb out of the folder (path traversal); names can reveal personal details;
+and a predictable name can be guessed. A random UUID has none of these problems. The extension always matches the
+<em>real</em> content: a PDF renamed <code>.png</code> is stored as <code>.pdf</code>.</p>
+<p>The <strong>displayed</strong> name is cleaned separately by
+<a href="#f-backend-src-main-java-com-edumate-documents-DocumentService-java-L136"><code>safeFilename</code></a>:
+folders are removed, only letters, digits, spaces and <code>._()-</code> are kept, it is cut to 90 characters, and the
+real extension is added. <code>..\..\evil&lt;script&gt;.exe</code> becomes <code>evilscript.pdf</code>.</p>
+
+<h3>Writing to disk safely: LocalFileObjectStore</h3>
+<ol>
+<li><strong>Resolve</strong> the key under the storage root (<code>./storage</code>, or <code>/app/storage</code> in Docker, a named volume), clean it (<code>normalize</code>), and refuse it unless it is still inside the root. This is a second defence against path traversal.</li>
+<li>Create the folder <code>storage/applications/7/</code> if needed.</li>
+<li>Write the bytes to a temporary <code>upload-….part</code> file in that folder.</li>
+<li><strong>Rename</strong> it to the final name in one step (<code>ATOMIC_MOVE</code>). Anyone looking sees either no file or the complete file, never half a file, even if the server stops mid-write.</li>
+</ol>
+
+<h3>Keeping the disk and the database in step</h3>
+<p>The file is written <em>before</em> the transaction commits. Two things could go wrong, and both are handled with
+Spring's <code>TransactionSynchronization</code> ("call me when this transaction ends"):</p>
+<table>
+<thead><tr><th>Situation</th><th>Without care</th><th>What EduMate does</th></tr></thead>
+<tbody>
+<tr><td>The new file is written, then the transaction fails (database down, constraint violated)</td><td>an orphan file on disk that nothing points to</td><td><code>deleteObjectIfRolledBack</code>: after the transaction, if it did not commit, the new file is deleted</td></tr>
+<tr><td>Replacing a document: the old file is deleted, then the transaction fails</td><td>the old record comes back, but its file is gone</td><td><code>deleteObjectAfterCommit</code>: the old file is deleted only <em>after</em> a successful commit</td></tr>
+<tr><td>Deleting the old file after commit fails (for example, a locked file on Windows)</td><td>the user sees an error although their upload worked</td><td><code>quietlyDelete</code> only logs a warning</td></tr>
+</tbody></table>
+
+<h2>Step 9: the answer, and the screen updates</h2>
+<p>The service returns a <code>DocumentView</code>, and Jackson writes it as JSON:</p>
+<pre class="block">{"id":41,"type":"ID_PROOF","label":"Identity proof (Aadhaar card or passport)",
+ "originalFilename":"aadhaar.pdf","contentType":"application/pdf","sizeBytes":347812,
+ "sha256":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+ "uploadedAt":"2026-09-28T05:31:07.412Z"}</pre>
+<p>In the browser, <code>xhr.onload</code> sees status 200, parses the JSON, and resolves the promise.
+<code>DocumentUpload</code> shows the green toast "Identity proof (Aadhaar card or passport) uploaded.", hides the bar,
+clears the file input, and calls <code>onChanged()</code>. <code>ApplyPage</code> reloads the application, so the box
+now shows "Uploaded", the name, "339.7 KB", the time and the first 16 characters of the fingerprint. The "Still
+missing" list shrinks.</p>
+
+<h2>Viewing a document</h2>
+<ol>
+<li>The <strong>View</strong> button calls <code>api.admissions.downloadDocument(41)</code> → <code>download('/api/admissions/documents/41/content')</code>. This must be a <code>fetch</code> <em>with the token</em>: a plain link would not send the Authorization header and would get 401.</li>
+<li>RoleMatrix: applicant, admissions officer or admin. The service then checks that the applicant owns it, or that the staff member's campus matches.</li>
+<li>If the viewer is <strong>staff</strong>, <code>DOCUMENT_VIEWED</code> is written to the audit log: who looked at which document of which application. These may be a minor's personal documents.</li>
+<li>The controller streams the file from disk with these headers:
+<pre class="block">Content-Type: application/pdf                              ← the REAL kind, found at upload time
+Content-Disposition: inline; filename="aadhaar.pdf"        ← show it; use this name if saved
+Content-Security-Policy: sandbox                           ← treat as untrusted content
+X-Content-Type-Options: nosniff                            ← (added by Spring Security) never guess the type</pre></li>
+<li>The browser receives the bytes as a <code>Blob</code>, makes a temporary <code>blob:</code> address for them, and opens it in a new tab with <code>noopener</code>. The temporary address is released after 60 seconds.</li>
+</ol>
+<p>The file can only ever be PDF, JPEG or PNG, because that was decided from its bytes at upload, so the browser
+always opens it with its built-in PDF or image viewer, never as a web page. When the content address is opened
+directly, the <code>sandbox</code> policy adds a second wall.</p>
+
+<h2>Removing a document</h2>
+<p><strong>Remove</strong> asks "Remove the uploaded identity proof (aadhaar card or passport)?", then sends
+<code>DELETE /api/admissions/documents/41</code>. The service checks that it is the applicant's own DRAFT, deletes
+the record, deletes the file after commit, writes <code>DOCUMENT_DELETED</code>, and answers <strong>204 No
+Content</strong>.</p>
+
+<h2>After submission</h2>
+<p>Submitting requires the three required documents (<code>AdmissionService.checkReadyToSubmit</code>: "Upload these
+documents first: …"). Once the application is SUBMITTED, uploads and deletions are refused (409 NOT_DRAFT). The page
+shows the boxes without the drop area or Remove button. Officers see all five boxes read-only, with View only.</p>
+
+<h2>Every limit, and how to change the 5 MB limit</h2>
+<table>
+<thead><tr><th>Layer</th><th>Setting</th><th>Value</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td>Browser</td><td><code>MAX_UPLOAD_BYTES</code> in <code>frontend/src/config.ts</code></td><td>5 × 1024 × 1024</td><td>instant, friendly refusal</td></tr>
+<tr><td>nginx (Docker)</td><td><code>client_max_body_size</code> in <code>frontend/nginx.conf</code></td><td>6m</td><td>let the whole multipart body through</td></tr>
+<tr><td>Spring/Tomcat</td><td><code>spring.servlet.multipart.max-file-size</code> / <code>max-request-size</code></td><td>5MB / 6MB</td><td>stop reading oversized bodies early</td></tr>
+<tr><td>Service</td><td><code>MAX_BYTES</code> in <code>DocumentService.java</code></td><td>5 × 1024 × 1024</td><td>the final, authoritative check</td></tr>
+<tr><td>Texts</td><td><code>upload.accepted</code>, <code>upload.tooLarge</code>, <code>errors.tooLarge</code> in <code>messages.ts</code>; the backend messages</td><td>"5 MB"</td><td>what people read</td></tr>
+</tbody></table>
+<p>To allow 10 MB: change all four numeric settings (keep the request limit about 1 MB above the file limit), and the
+texts that say "5 MB".</p>
+
+<h2>Tests that prove it</h2>
+<ul>
+<li><code>UploadSafetyTest</code> (server): magic bytes, disguised programs, file-name cleaning, which kinds each document accepts, the SHA-256 test value.</li>
+<li><code>AdmissionConsentIntegrationTest</code> (server, through real HTTP): a program renamed <code>id.pdf</code> is refused with UNSUPPORTED_FILE; a real PNG and PDFs are accepted; submission then succeeds (with consent).</li>
+<li><code>fileChecks.test.ts</code> (browser): empty file, wrong extension, disguised program, PDF renamed as a photo.</li>
+</ul>
+
+<h2>Designs that were possible, and what they would change</h2>
+<table>
+<thead><tr><th>Alternative</th><th>What would change</th><th>Why not here</th></tr></thead>
+<tbody>
+<tr><td>Keep the bytes <strong>inside the database</strong> (<code>bytea</code> / BLOB)</td><td>One place to back up; transactions cover files too.</td><td>The database grows by gigabytes; backups and queries slow down. The report's architecture names a separate object store.</td></tr>
+<tr><td><strong>Cloud object store</strong> (Amazon S3, Azure Blob, MinIO) with the same <code>ObjectStore</code> interface</td><td>Unlimited, replicated storage; nothing else in EduMate changes.</td><td>Needs a cloud account. The interface was designed so this is a one-class change.</td></tr>
+<tr><td><strong>Direct-to-cloud upload</strong> with pre-signed URLs</td><td>Large files bypass the backend entirely.</td><td>The backend would no longer see the bytes before storage, so the magic-byte and size checks would move to a later step.</td></tr>
+<tr><td><strong>Base64 inside JSON</strong></td><td>One uniform JSON API.</td><td>33% larger, held fully in memory, no native progress.</td></tr>
+<tr><td><strong>Resumable / chunked uploads</strong> (e.g. the tus protocol)</td><td>Survives a dropped mobile connection half-way.</td><td>Unnecessary for files of at most 5 MB.</td></tr>
+<tr><td><strong>Trust the browser's Content-Type or the extension</strong></td><td>Simpler code.</td><td>Both are chosen by the sender: a renamed program would be accepted.</td></tr>
+<tr><td><strong>Virus scanning</strong> (e.g. ClamAV) and <strong>image re-encoding</strong> (to strip hidden data)</td><td>Extra protection against malicious PDFs and images.</td><td>Not part of this project; the <code>ObjectStore</code> step is where such a scan would be added.</td></tr>
+</tbody></table>
+
+<h2>The demo's placeholder documents</h2>
+<p>The 30 seeded M.Tech applications need documents without anyone uploading real scans. The seeder builds a
+<strong>real, valid one-page PDF</strong> by hand (header <code>%PDF-1.4</code>, five objects, a cross-reference table
+with exact byte positions) and a <strong>real PNG</strong> (a 120 × 150 blue rectangle with the person's initials), and
+stores them exactly as an upload would be: random key, SHA-256, index card. They pass the same magic-byte checks and
+open in any viewer.</p>

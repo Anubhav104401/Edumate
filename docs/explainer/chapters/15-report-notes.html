@@ -1,0 +1,31 @@
+<h1>Notes on the SQA report: discrepancies found, and known limitations</h1>
+
+<p>While turning the report into working code, a few numbers in the report turned out to be inconsistent. They are
+listed here so they can be corrected or explained at the viva. The code follows the correct values.</p>
+
+<h2>Discrepancies in the report</h2>
+<table>
+<thead><tr><th>#</th><th>Where</th><th>The report says</th><th>Correct value</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Test case TC-013 (SGPA)</td><td>SGPA <strong>8.25</strong> for grades S, A, B, B, C over credits 4, 4, 3, 3, 2</td><td><strong>8.63</strong></td><td>(4×10 + 4×9 + 3×8 + 3×8 + 2×7) ÷ 16 = 138 ÷ 16 = 8.625, which rounds to 8.63. The code computes 8.63, and <code>SgpaCalculatorTest</code> and <code>ResultPublicationIntegrationTest</code> both assert it.</td></tr>
+<tr><td>2</td><td>Conclusion (effort spent on reviews)</td><td><strong>2.4%</strong> of effort</td><td><strong>2.1%</strong></td><td>Elsewhere the report gives 61 review hours out of 2,860 total hours: 61 ÷ 2,860 = 2.13%.</td></tr>
+<tr><td>3</td><td>Security summary</td><td>"all <strong>five</strong> security findings"</td><td><strong>four</strong></td><td>Table 3.13 has five rows, but one of them (A02, password storage) records "no finding — Pass". The findings are four: A01, A03, A05 and A07.</td></tr>
+</tbody></table>
+
+<h2>Known limitations of this implementation</h2>
+<ul>
+<li><strong>Scale.</strong> The report describes a production system of about 48,600 lines. This repository is a working
+reference implementation of its core modules, so it is much smaller.</li>
+<li><strong>External systems.</strong> The university ERP and DigiLocker integrations named in the report are not
+implemented.</li>
+<li><strong>Simulated gateways.</strong> Payments go through <code>MockPaymentGateway</code>, which signs and delivers
+callbacks exactly as a real gateway would. E-mail and SMS are written to the log by <code>LoggingNotificationGateway</code>.</li>
+<li><strong>Not split by campus.</strong> The audit log and the message outbox are university-wide, so only
+university-level administrators should hold the ADMIN role.</li>
+<li><strong>Token revocation.</strong> A login token stays valid until it expires (8 hours); there is no server-side
+"log out everywhere".</li>
+<li><strong>Uploads.</strong> Files are checked by type and size, but not scanned for viruses, and images are not
+re-encoded.</li>
+<li><strong>Development database.</strong> H2 is in memory: data is recreated on every start. Use Docker (PostgreSQL) for
+data that must persist.</li>
+</ul>

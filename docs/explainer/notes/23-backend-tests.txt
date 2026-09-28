@@ -1,0 +1,340 @@
+=== FILE backend/src/test/java/com/edumate/TestFixtures.java
+>>> SUMMARY
+Small helpers shared by the **unit tests**: a complete settings object built by hand (the same values as `application.yml`), and a quick way to create a logged-in user. Unit tests can therefore create a service directly with `new`, without starting Spring. They run in milliseconds.
+>>> 14-15
+A private constructor: this class only holds helpers, so nobody should create an object of it.
+>>> 18-30
+Builds every settings group in the same order as `AppProperties`: security (a test secret, 8-hour tokens, 5 failures, 15 minutes), academic (R-2023, 75%, 16 weeks), payment secret, storage folder `target/test-storage`, library (14 days, ₹2, ₹200), admissions (0.60 / 0.40 and the reserved shares), demo off, and one campus.
+>>> 32-34
+Creates a `CurrentUser` on campus JGC. For example `user(99, "examsup", Role.EXAM_SUPERINTENDENT, null)`.
+
+=== FILE backend/src/test/java/com/edumate/IntegrationTestBase.java
+>>> SUMMARY
+The parent of every **integration test**. It starts the **whole backend** in memory with the demo data loaded, and gives each test a `MockMvc`: a "fake browser" that sends HTTP requests through the real security filters, controllers, services and database, without opening a network port.
+
+**Unit test vs integration test:**
+- A *unit test* checks one class alone (for example `SgpaCalculator`). It is very fast and pinpoints the broken piece exactly.
+- An *integration test* checks that the pieces work **together**: the URL, the RoleMatrix, the JSON, the transaction and the SQL. It is slower (Spring takes a few seconds to start), but it catches mistakes that unit tests cannot see.
+
+EduMate uses both, as the report's test strategy prescribes (unit → integration → system).
+
+All integration test classes share **one** running application and one database (Spring caches it). Each test therefore uses different demo users, so tests cannot disturb one another.
+>>> 20
+`@SpringBootTest`: start the complete application for the tests.
+>>> 21
+`@AutoConfigureMockMvc`: also create the `MockMvc` fake browser.
+>>> 22
+Uploaded files go into `target/test-storage`, which is deleted on every `mvnw clean`.
+>>> 25-26
+Spring hands the `MockMvc` to the test (`@Autowired`).
+>>> 29
+`bearer(username)`: logs in and returns the text `Bearer eyJhbGciOi…` to put in the Authorization header.
+>>> 30-32
+Sends `POST /api/auth/login` with the JSON body `{"username":"…","password":"Edumate@2026"}`.
+>>> 33-34
+Expects 200 OK and reads the answer's body as text.
+>>> 35
+Picks the `token` field out of the JSON with a JsonPath expression (`$.token` means "the field token at the top level").
+>>> 38-40
+A shortcut for reading any value out of a JSON text with JsonPath.
+
+=== FILE backend/src/test/java/com/edumate/PostgresCompatibilityTest.java
+>>> SUMMARY
+The SQA Plan's **Compatibility** objective: EduMate must run on **PostgreSQL** (production), not only on H2 (development). H2 imitates PostgreSQL well, but not perfectly, so a query could work on a laptop and fail in production.
+
+This test starts a **real PostgreSQL 17 server** inside the test run (using the `embedded-postgres` library, which downloads nothing at test time: the server binaries come as a Maven dependency). It points the backend at that server and runs the trickiest queries: the Flyway schema, the whole demo seed, searches with optional filters, cohort joins and bulk deletes.
+
+If a query uses something H2 accepts but PostgreSQL does not, this test fails on the developer's machine, long before anything reaches production.
+>>> 28
+The PostgreSQL server, started once for this test class.
+>>> 30-36
+Starts it. If starting fails, the checked `IOException` is wrapped so it can be thrown from a static initialiser.
+>>> 38-44
+`@DynamicPropertySource`: overrides the settings **before** Spring starts, so the backend uses this PostgreSQL server (its address, user and password) instead of H2, and the H2 console is switched off.
+>>> 46-49
+After all tests of this class, stops the server.
+>>> 51-53
+The test. `@DisplayName` is the sentence shown in the test report.
+>>> 54
+Logs in as the demo student.
+>>> 58-59
+The hall ticket loads.
+>>> 60-62
+"My results" returns the 4 published semesters of history.
+>>> 63-64
+The fee account shows ₹62,500 outstanding.
+>>> 66-71
+The admissions officer's list works, both without filters and with `status=SUBMITTED` and search text "app" (the query with optional filters, the kind most likely to behave differently on the two databases).
+>>> 80-82
+The library search for "code" finds "Clean Code" first.
+>>> 84-88
+The admin's workload report and dashboard load.
+>>> 90-95
+Computing results runs the cohort-wide join and the bulk delete on PostgreSQL. It is expected to stop with MARKS_INCOMPLETE, because one mark in the demo data is deliberately missing.
+
+=== FILE backend/src/test/java/com/edumate/admissions/AdmissionStateMachineTest.java
+>>> SUMMARY
+**State transition testing** of the admission lifecycle (Fig. 3.2 of the report). State transition testing is one of the black-box techniques in the report's test design: check every valid arrow, and check that invalid arrows are refused.
+
+| Test | Checks |
+|---|---|
+| happy path | DRAFT → SUBMITTED → UNDER_REVIEW → SHORTLISTED → OFFERED → ENROLLED works |
+| DR-07 | ENROLLED → ENROLMENT_REVERSED works for ADMIN, needs a reason, and is refused for an officer |
+| missing arrows | DRAFT cannot jump to ENROL; REJECTED cannot be submitted |
+| roles | an applicant cannot shortlist |
+| buttons | an officer sees exactly SHORTLIST and REJECT on an UNDER_REVIEW application; an applicant sees none |
+| dead ends | every state except the three end states has a way out |
+>>> 15
+The state machine under test, created directly (no Spring needed).
+>>> 17-26
+Walks the whole happy path, each step by the right role, and checks it ends in ENROLLED.
+>>> 28-37
+DR-07: reversing an enrolment leads to ENROLMENT_REVERSED and needs a reason. An admissions officer trying it gets an error saying "Only ADMIN…".
+>>> 39-45
+Arrows that do not exist are refused.
+>>> 47-51
+A correct arrow taken by the wrong role is refused.
+>>> 53-58
+`allowedActions` gives exactly the buttons the screen should show.
+>>> 60-69
+Goes through **every** state: the three end states must have no way out, and every other state must have at least one. This catches a forgotten arrow whenever the table is edited.
+
+=== FILE backend/src/test/java/com/edumate/admissions/AdmissionConsentIntegrationTest.java
+>>> SUMMARY
+Two integration tests through real HTTP:
+
+**TC-020** (guardian consent for a minor, the fix for RR-02), which also exercises the **document upload pipeline**:
+1. Rohan (17) opens his application: `minor` is true.
+2. A Windows program (starting with the bytes `MZ`) renamed to `id.pdf` is refused with UNSUPPORTED_FILE.
+3. The real photo (PNG) and two PDFs are accepted.
+4. Submitting is refused with GUARDIAN_CONSENT_REQUIRED.
+5. A consent code is requested. The dev profile returns it as `demoOtp`, standing in for the guardian's inbox.
+6. The code is verified: consent GRANTED.
+7. Submitting now succeeds: status SUBMITTED.
+
+**Privacy:** the adult applicant Priya asks for Rohan's application by its id and gets 404, not his data.
+>>> 22-23
+The smallest byte sequences that `FileTypeSniffer` accepts as a PDF and as a PNG.
+>>> 25-27
+The TC-020 test.
+>>> 28-32
+Logs in as Rohan, loads his application, checks `minor` is true, and keeps its id.
+>>> 35-36
+Uploads a disguised program as ID proof: expects 400 UNSUPPORTED_FILE.
+>>> 37-39
+Uploads the three required documents: each is accepted (200).
+>>> 41-44
+Tries to submit: expects 409 GUARDIAN_CONSENT_REQUIRED.
+>>> 46-50
+Requests a consent code: expects PENDING, and reads the demo code.
+>>> 51-53
+Sends the code back: expects GRANTED.
+>>> 55-58
+Submits again: now 200 and SUBMITTED.
+>>> 61-70
+Priya (another applicant) asks for Rohan's application by id and gets 404.
+>>> 72-78
+`upload`: sends a `multipart/form-data` request, exactly as the browser does. `MockMultipartFile("file", name, type, bytes)` is the file part: form field name `file`, the original file name, the browser-claimed type and the content. `.param("type", …)` is the text part. The claimed type is deliberately the meaningless `application/octet-stream`, which proves the server decides by the bytes and not by the claim.
+
+=== FILE backend/src/test/java/com/edumate/documents/UploadSafetyTest.java
+>>> SUMMARY
+Unit tests of the upload pipeline's **safety checks**:
+
+| Test | Checks |
+|---|---|
+| real kinds | PDF, PNG and JPEG are recognised by their first bytes |
+| disguised files | a Windows program (`MZ…`), an empty file and "no file" are all refused |
+| file names | `..\..\evil<script>.exe` becomes `evilscript.pdf`; `/etc/passwd` becomes `passwd.pdf`; an empty name becomes `photo.png` |
+| photo | a photo cannot be a PDF; the required types are photo, ID proof and Class 12 marks card |
+| fingerprint | SHA-256 of "abc" is the internationally published test value `ba7816bf…15ad` |
+
+The fingerprint test compares with a value from the SHA-256 standard itself, so it proves the code computes the **real** SHA-256 and not something that merely looks like it.
+>>> 13
+The sniffer under test, created directly.
+>>> 15-20
+Each real kind is recognised.
+>>> 22-28
+Anything else is refused, including empty and missing content.
+>>> 30-39
+File names are cleaned: folders removed, odd characters removed, and the real extension always added. `safeFilename` is package-private (no `public`), so only tests in the same package can call it.
+>>> 41-47
+The document rules.
+>>> 49-53
+The SHA-256 test value from the standard.
+
+=== FILE backend/src/test/java/com/edumate/exam/SgpaCalculatorTest.java
+>>> SUMMARY
+Unit tests of the **grade and GPA arithmetic** (R-2023):
+- **TC-013**: grades S, A, B, B, C over credits 4, 4, 3, 3, 2 give (40 + 36 + 24 + 24 + 14) ÷ 16 = 138 ÷ 16 = 8.625, which rounds to **8.63**. The SQA report states 8.25 for this case, but 8.25 is not reachable with these grades (see the "Report discrepancies" chapter);
+- **grade bands**: ten (internal, external) pairs and the grade each must give, including values right at the band edges, such as 55.99 (boundary value analysis);
+- **external minimum**: 40 internal + 20.99 external fails, although the total is 60.99; with 21 external it passes;
+- **CGPA** weights each semester by its credits;
+- **empty input** gives 0.00 instead of a division-by-zero error.
+>>> 19-31
+TC-013. `isEqualByComparingTo("8.63")` compares the numbers' values, so 8.630 and 8.63 count as equal.
+>>> 33-39
+A **parameterised test**: JUnit runs `gradeBands` once for each line of the `@CsvSource` table, e.g. internal 36 + external 56 → S. It is ten tests written once.
+>>> 41-46
+The external-marks minimum of 21 out of 60, tested just below and exactly at the limit.
+>>> 48-55
+Two earlier semesters (20 credits at 8.00, 20 at 9.00) plus 10 credits of grade point 10 now: (160 + 180 + 100) ÷ 50 = 8.80.
+>>> 57-61
+No courses at all: 0.00, not a crash.
+
+=== FILE backend/src/test/java/com/edumate/exam/ResultPublicationIntegrationTest.java
+>>> SUMMARY
+The whole **results workflow** in one story, through real HTTP:
+1. Computing is refused (MARKS_INCOMPLETE): one internal mark is still empty.
+2. The SQA teacher enters it (with the row's version and a reason).
+3. Computing now works for all 60 students.
+4. **Two-person approval** (the Safety objective): publishing too early is refused (NOT_APPROVED); the first approval works; the **same** person approving again is refused (SAME_APPROVER); a second person's approval gives APPROVED.
+5. **TC-015 / DEF-027**: two superintendents publish **at the same instant** from two threads. Exactly one gets PUBLISHED and the other ALREADY_PUBLISHED.
+6. The student now sees semester 5 with SGPA **8.63**.
+
+**How "at the same instant" is arranged.** Both threads are started, and each first waits at a `CountDownLatch`, which works like a starting gate. When the main thread opens the gate (`countDown`), both rush into `publish` together. Without the atomic UPDATE fix, both would often succeed.
+>>> 34-41
+Spring provides the publication service and two repositories to the test.
+>>> 43-45
+The test and its description.
+>>> 46-50
+Looks up the B.Tech programme's id and the current exam session's id, builds the "compute" JSON body, and logs in as the first superintendent.
+>>> 52-56
+Step 1: compute → 409 MARKS_INCOMPLETE.
+>>> 58-62
+Step 2: logs in as the SQA teacher and finds her course.
+>>> 63-67
+Loads her marks sheet and picks Kiran Joshi's row: its id and version. `$.lines[?(@.usn == '23BTRCS015')]` is a JsonPath *filter*: "the lines whose usn is 23BTRCS015".
+>>> 68-71
+Saves internal mark 31 with the version and a reason → 200.
+>>> 73-79
+Step 3: compute → 200, with 60 students. Keeps the result set's id.
+>>> 81-83
+Step 4a: publish before approval → 409 NOT_APPROVED.
+>>> 84-85
+First approval → AWAITING_SECOND_APPROVAL.
+>>> 86-87
+The same person again → 409 SAME_APPROVER.
+>>> 88-90
+The second superintendent → APPROVED.
+>>> 92-95
+Step 5: a thread-safe list for the two outcomes, the starting gate, and a pool of two threads.
+>>> 96-108
+Each thread waits at the gate, then calls `publish` directly and records either PUBLISHED or the error code it got.
+>>> 109-112
+Opens the gate, waits up to 30 seconds for both threads, and checks the outcomes are exactly one PUBLISHED and one ALREADY_PUBLISHED (in any order).
+>>> 114-118
+Step 6: the student's semester 5 SGPA is 8.63.
+
+=== FILE backend/src/test/java/com/edumate/fees/GatewaySignatureTest.java
+>>> SUMMARY
+Unit tests of the **HMAC-SHA256 signature** that proves a payment callback really came from the gateway:
+- a genuinely signed callback verifies, and the signature is 64 hexadecimal characters (256 bits);
+- changing **any single** field (the amount 62500.00 → 625000.00, the order, or SUCCESS → FAILURE) makes verification fail, and so does a missing signature.
+>>> 12
+The signer under test, built with the test settings.
+>>> 14-19
+Sign, then verify the same values: true.
+>>> 21-28
+Verify with one field changed each time: always false.
+
+=== FILE backend/src/test/java/com/edumate/fees/PaymentIntegrationTest.java
+>>> SUMMARY
+**TC-005 + TC-006 and the fix for DEF-014**, through real HTTP:
+1. The student starts paying ₹62,500 for their fee demand.
+2. The simulated gateway completes the payment and delivers the success callback **twice** (as real gateways sometimes do).
+3. The first delivery is PROCESSED with a receipt; the second is DUPLICATE_IGNORED.
+4. The ledger shows exactly **one** credit of ₹62,500, and nothing is outstanding.
+5. Paying the same demand again is refused (ALREADY_PAID).
+
+A second test sends a **forged** callback with a wrong signature and expects BAD_SIGNATURE.
+>>> 21-27
+Logs in as the student and finds their fee demand's id.
+>>> 29-34
+Starts the payment → 200, amount 62500.00. Keeps the order id.
+>>> 36-43
+Asks the mock gateway to succeed and deliver the callback twice. The outcomes must be PROCESSED then DUPLICATE_IGNORED, and the first must carry a receipt number starting with `RCPT-`.
+>>> 45-49
+Reloads the account: exactly one CREDIT of 62500.00, and outstanding is zero.
+>>> 51-54
+A second payment for the same demand → 409 ALREADY_PAID.
+>>> 57-67
+A callback with the signature "00ff" → 400 BAD_SIGNATURE. The callback URL needs no login (the gateway cannot log in), which is exactly why the signature matters.
+
+=== FILE backend/src/test/java/com/edumate/security/SecurityIntegrationTest.java
+>>> SUMMARY
+Security tests through real HTTP, mapped to the OWASP Top 10 used in the report:
+
+| Test | Checks | OWASP |
+|---|---|---|
+| TC-017 / DEF-031 | a student asking for the consolidated marks report gets 403, and the attempt is audited | A01 Broken Access Control |
+| no token | 401 UNAUTHENTICATED | A07 |
+| tampered token | changing 3 characters of a real token → 401 | A07 / A02 |
+| deny by default | an unknown URL is refused even for an admin | A01 |
+| lockout | 5 wrong passwords → the 6th attempt, even with the right password, gets 423 ACCOUNT_LOCKED | A07 |
+| no leaks | a broken JSON body gives MALFORMED_JSON, never a Java stack trace | A05 |
+>>> 21-22
+The audit repository, to check that denied access was recorded.
+>>> 24-35
+TC-017: `student2` asks for the report → 403 FORBIDDEN, and the audit log contains an ACCESS_DENIED entry by `student2` for that URL.
+>>> 37-42
+No Authorization header → 401 UNAUTHENTICATED.
+>>> 44-50
+Changes the last 3 characters of a valid token (that is, its signature) → 401.
+>>> 52-57
+`/api/secret-report` is not in the RoleMatrix → 403, even for an admin.
+>>> 59-67
+Five wrong passwords: each gets 401 with the same neutral message, which does not reveal whether the username exists. `ccc.admin` is used so no other test's login is affected.
+>>> 68-72
+The correct password now gets 423 Locked.
+>>> 74-81
+A body that is not valid JSON → 400 MALFORMED_JSON, and the body contains neither "Exception" nor "at com." (the start of a Java stack-trace line).
+
+=== FILE backend/src/test/java/com/edumate/security/RoleMatrixCoverageTest.java
+>>> SUMMARY
+A **guard test** against DR-06 / DEF-031 ever coming back. It asks Spring for **every URL that any EduMate controller answers**, and checks that each one has an explicit rule in the RoleMatrix.
+
+If a developer adds a new endpoint and forgets the matrix, this test fails and the build is red. The mistake is caught before release, not discovered as a data leak. (Deny-by-default would also block the forgotten URL, but it would then be broken for everyone; this test tells the developer immediately.)
+
+This test turns a *review finding* into a *permanent automatic check*, which is one of the report's recommendations.
+>>> 30-35
+Spring provides the RoleMatrix and the object that knows every URL mapping (`RequestMappingHandlerMapping`).
+>>> 39-40
+A list for any URLs found without a rule.
+>>> 41-44
+Goes through every mapping, skipping Spring's own (for example the error page), which are not EduMate's.
+>>> 45-47
+The mapping's URL patterns and HTTP methods.
+>>> 48-49
+Turns a pattern such as `/api/fees/demands/{id}` into a sample path `/api/fees/demands/1` by replacing every `{…}` with `1`.
+>>> 50-54
+For each method, checks whether some matrix rule covers "method + sample path"; if not, records it.
+>>> 57
+The list must be empty; otherwise the failure message lists the uncovered endpoints.
+>>> 60-65
+`covered`: a rule covers the request if its method matches (or it has none) and its pattern matches the path, using the same path-pattern rules Spring Security uses.
+
+=== FILE backend/src/test/java/com/edumate/timetable/TimetableSolverTest.java
+>>> SUMMARY
+Unit tests of the **timetable algorithm** (FR-14, TC-011):
+- a generated week of 16 lectures has no section clash (all slots different), never uses a teacher's busy slot, and never puts one course twice on the same day;
+- an impossible request (one course meeting 6 times in a 5-day week) returns null instead of a wrong timetable;
+- **TC-011**: one teacher in two sections at the same time is reported as a FACULTY clash naming both lectures;
+- the same teacher in different periods is not a clash.
+>>> 17
+The solver under test.
+>>> 19-28
+Builds a week: five courses (course id, teacher id, weekly hours) of 4, 4, 3, 3 and 2 hours, which is 16 lectures.
+>>> 30-35
+Teacher 101 is already busy on Monday and Tuesday in period 1; solve the week around that.
+>>> 37-38
+Every lecture got a slot, and no two lectures share one (a `HashSet` drops duplicates, so its size would shrink if any repeated).
+>>> 39-45
+For every lecture: its teacher is not in a busy slot, and its "course@day" has not been seen before.
+>>> 48-55
+Six lectures of the same course cannot fit in 5 days with "once a day" → null.
+>>> 57-65
+TC-011: two lectures of teacher 101, both Monday period 1, in sections A and B → exactly one FACULTY clash with ids 1 and 2.
+>>> 67-71
+Monday period 1 and Monday period 2 → no clash.
+>>> 73-77
+Creates a timetable entry for the tests. The id is normally given by the database, so the test sets it directly (`ReflectionTestUtils.setField`).

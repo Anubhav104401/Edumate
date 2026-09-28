@@ -1,0 +1,85 @@
+<h1>Running EduMate, and fixing common problems</h1>
+
+<h2>What you need</h2>
+<ul>
+<li><strong>JDK 21 or newer</strong> (the Java Development Kit). Check with <code>java -version</code>.</li>
+<li><strong>Node.js 20 or newer</strong> (includes npm). Check with <code>node -v</code>.</li>
+<li>Git, to download the project: <code>git clone https://github.com/Anubhav104401/Edumate.git</code>.</li>
+<li>Nothing else: Maven downloads itself (the wrapper), and the development database lives in memory.</li>
+</ul>
+
+<h2>Way 1: the helper script (Windows)</h2>
+<pre class="block">powershell -ExecutionPolicy Bypass -File scripts\dev-start.ps1</pre>
+<p>It opens two windows: the backend (port 8080) and the frontend (port 5173); the first time it also installs the
+frontend packages. When both say they are ready, open <strong>http://localhost:5173</strong>.</p>
+
+<h2>Way 2: by hand, in two terminals</h2>
+<pre class="block">Terminal 1:   cd backend
+              ./mvnw spring-boot:run            (Windows: mvnw.cmd spring-boot:run)
+              … wait for "Started EduMateApplication" and "Demo data ready"
+
+Terminal 2:   cd frontend
+              npm install                       (first time only)
+              npm run dev
+              … open http://localhost:5173</pre>
+<p>Log in with any demo account; the password for all is <code>Edumate@2026</code>. The login page lists them in
+development builds.</p>
+
+<h2>Way 3: Docker (production-like)</h2>
+<pre class="block">copy .env.example .env        (Linux/macOS: cp .env.example .env) — then edit the secrets
+docker compose up --build
+… open http://localhost:3000</pre>
+<p>This starts PostgreSQL 17, Redis 7, the backend and nginx. Data survives restarts (Docker volumes
+<code>pgdata</code> and <code>uploads</code>). <code>docker compose down -v</code> removes them.</p>
+
+<h2>Suggested demonstration (about 15 minutes)</h2>
+<ol>
+<li><strong>student</strong>: dashboard cards; My results (four published semesters); My fees → Pay now → choose "2 times (replay test)" → Approve payment → PROCESSED + DUPLICATE_IGNORED; the statement shows one credit (TC-005/006).</li>
+<li><strong>sneha.kulkarni</strong>: Marks entry → course SQA, exam session 2026-ODD → Kiran Joshi (23BTRCS015) has an empty internal mark → enter 31 with a reason → Save.</li>
+<li><strong>examsup</strong>: Results workflow → Compute (60 results) → Approve; try Approve again → "A second, different exam superintendent must approve."</li>
+<li><strong>examsup2</strong>: Approve → Publish → confirm. The Outbox fills with result e-mails.</li>
+<li><strong>student</strong>: semester 5 appears with SGPA 8.63 (TC-013).</li>
+<li><strong>student2</strong>: try <code>http://localhost:5173/reports</code> → "You do not have access to this page." Behind the screen, the backend refuses the report's API address itself with 403 and records ACCESS_DENIED in the audit log (TC-017, proved by <code>SecurityIntegrationTest</code>).</li>
+<li><strong>applicant.minor</strong>: fill in, upload a photo and PDFs (try a renamed <code>.exe</code> → refused), Submit → refused; Send code to guardian → the demo code appears → Verify → Submit works (TC-020).</li>
+<li><strong>admissions</strong>: Applications → open one → Start review → Shortlist; Merit list → M.Tech → Generate.</li>
+<li><strong>admin</strong>: Timetable → Generate new draft → Move a lecture onto its teacher's other class → red clash → Publish draft refused (TC-011); Role matrix; Audit log.</li>
+<li><strong>ccc.admin</strong>: sees only City Campus data (multi-tenancy).</li>
+</ol>
+
+<h2>Useful addresses while it runs</h2>
+<table>
+<thead><tr><th>Address</th><th>What</th></tr></thead>
+<tbody>
+<tr><td>http://localhost:5173</td><td>the app (development)</td></tr>
+<tr><td>http://localhost:8080/actuator/health</td><td><code>{"status":"UP"}</code> if the backend is alive</td></tr>
+<tr><td>http://localhost:8080/h2-console</td><td>browse the database (JDBC URL <code>jdbc:h2:mem:edumate</code>, user <code>sa</code>, empty password)</td></tr>
+<tr><td>http://localhost:3000</td><td>the app (Docker)</td></tr>
+</tbody></table>
+
+<h2>Troubleshooting</h2>
+<table>
+<thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>"Cannot reach the EduMate server. Check that the backend is running on port 8080."</td><td>the backend is not running, or is still starting</td><td>start it; wait for "Demo data ready"</td></tr>
+<tr><td>Vite: "Port 5173 is already in use"</td><td>another copy is running (<code>strictPort</code> refuses to switch)</td><td>close the other window, or find it: <code>netstat -ano | findstr :5173</code>, then end that process</td></tr>
+<tr><td>Backend: "Port 8080 was already in use"</td><td>another program uses 8080</td><td>stop it, or start with <code>PORT=9090</code> and change the Vite proxy</td></tr>
+<tr><td>"release version 21 not supported" / "UnsupportedClassVersionError"</td><td>an older Java</td><td>install JDK 21+; check <code>java -version</code> and <code>JAVA_HOME</code></td></tr>
+<tr><td>npm errors about syntax or engines</td><td>an old Node.js</td><td>install Node 20 or newer</td></tr>
+<tr><td>"Too many failed attempts. Your account is locked until …"</td><td>5 wrong passwords</td><td>wait 15 minutes, or restart the backend (the dev database resets)</td></tr>
+<tr><td>Logged out with "Your session has ended."</td><td>the token expired (8 h) or was rejected</td><td>log in again</td></tr>
+<tr><td>Upload refused as "larger than 5 MB"</td><td>the scan is too big</td><td>scan at a lower resolution (150–200 dpi is enough)</td></tr>
+<tr><td>Upload refused as "does not look like a real PDF, JPEG or PNG file"</td><td>the file's content is another format (for example HEIC photos from iPhones, or a Word file renamed)</td><td>export or convert it to PDF/JPEG/PNG</td></tr>
+<tr><td>My data disappeared after restarting</td><td>development uses an in-memory database</td><td>expected; use Docker for data that persists</td></tr>
+<tr><td>Docker: "Set JWT_SECRET in .env"</td><td>no <code>.env</code> file, or a missing value</td><td>copy <code>.env.example</code> to <code>.env</code> and fill it in</td></tr>
+<tr><td>Docker: http://localhost:3000 shows nginx's 502</td><td>the backend container is still starting (or crashed)</td><td><code>docker compose logs backend</code></td></tr>
+<tr><td>PowerShell: "running scripts is disabled"</td><td>Windows execution policy</td><td>use <code>-ExecutionPolicy Bypass</code> as shown above</td></tr>
+<tr><td>A page shows "This page could not be displayed."</td><td>a bug while drawing that page</td><td>open the browser console (F12) for the error; other pages still work</td></tr>
+<tr><td>500 with "Please quote reference 3f2c9a1b"</td><td>an unexpected server error</td><td>search the backend's console for <code>traceId=3f2c9a1b</code> to see the details</td></tr>
+</tbody></table>
+
+<h2>Building for production</h2>
+<pre class="block">cd backend  &amp;&amp; ./mvnw package        → backend/target/edumate-backend-2.0.0.jar   (run: java -jar …)
+cd frontend &amp;&amp; npm run build          → frontend/dist/  (static files for any web server)</pre>
+<p>In production, set <code>SPRING_PROFILES_ACTIVE=docker</code> (or a similar profile) with a real PostgreSQL, a long
+random <code>JWT_SECRET</code>, a real <code>PAYMENT_GATEWAY_SECRET</code>, and <code>DEMO_SEED=false</code>,
+<code>DEMO_EXPOSE_OTP=false</code>. Serve everything over https.</p>

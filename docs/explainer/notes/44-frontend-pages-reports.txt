@@ -1,0 +1,71 @@
+=== FILE frontend/src/pages/exam/ConsolidatedReportView.tsx
+>>> SUMMARY
+**The consolidated marks table** of one result set: one row per student, one column per course (grade and marks), then SGPA, CGPA and PASS/FAIL, with a **"Download CSV"** button for spreadsheets.
+
+This is exactly the report of **TC-017 / DEF-031**: it contains **every** student's marks, so only examination superintendents and administrators may load it. When a student tries, the backend answers 403 and records the attempt in the audit log. This component is used by both the results workflow page and the reports page.
+
+**CSV safety.** The CSV comes from the backend, which puts a `'` in front of any cell starting with `=`, `+`, `-` or `@`. Spreadsheet programs would otherwise run such cells as formulas (*CSV formula injection*).
+>>> 16
+`downloadCsv`: saves the report as a file.
+>>> 17-18
+Fetches the CSV **with the login token** (as a Blob).
+>>> 19-23
+The usual way to make the browser save bytes as a file: make a temporary local address for them, create an invisible link to it with a `download` file name such as `consolidated-marks-5.csv`, and "click" it.
+>>> 24
+Releases the temporary address.
+>>> 25-26
+Any error (for example 403) becomes a toast.
+>>> 30-32
+While loading, show "Loading…"; on error, the red box; with no data, nothing.
+>>> 34-36
+The card and its header row with the title, e.g. "Consolidated marks: B.Tech Computer Science and Engineering, semester 5" …
+>>> 38
+… and the "Download CSV" button.
+>>> 42-44
+The table and its header row: USN, name …
+>>> 47
+… one column per course code (the list comes with the data, so it works for any semester) …
+>>> 55-57
+One row per student.
+>>> 60-62
+For each course, that student's grade and marks (or "—").
+>>> 67
+The PASS/FAIL cell.
+
+=== FILE frontend/src/pages/exam/ReportsPage.tsx
+>>> SUMMARY
+**Cohort-wide reports** for examination superintendents and administrators:
+1. the **shortfall report** for a programme, semester and section: for each course, the students currently below the attendance threshold;
+2. the **consolidated marks** of any result set, chosen from a drop-down.
+
+Both show many students' data at once, so the backend's RoleMatrix allows them only for these two roles.
+>>> 26-28
+Once the programmes arrive, choose the first automatically.
+>>> 31-35
+`runShortfall`: needs a programme; loads the report for the chosen programme, semester and section; shows any error as a toast.
+>>> 39-41
+The drawing: the page title.
+>>> 43
+The shortfall card.
+>>> 45-51
+When the programmes are loaded: a toolbar with the programme drop-down …
+>>> 56-57
+… the semester number …
+>>> 59-60
+… the section (typed letters become capitals: "a" → "A") …
+>>> 62
+… and the "Run report" button.
+>>> 67
+If the report has no students anywhere: "No student is below the minimum."
+>>> 68-71
+Otherwise, a heading for each course that has students in it: code, name and how many …
+>>> 73-76
+… and a list of those students: USN, name and percentage.
+>>> 84
+The consolidated-marks card.
+>>> 86-89
+When the result sets are loaded: a drop-down to choose one. `Number(...) || null` turns the empty "Choose…" option back into "nothing chosen".
+>>> 91-93
+One option per result set, e.g. "B.Tech Computer Science and Engineering · Semester 5 · 2026-ODD · Published".
+>>> 101
+When a set is chosen, its consolidated report appears below.

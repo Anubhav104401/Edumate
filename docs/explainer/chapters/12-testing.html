@@ -1,0 +1,81 @@
+<h1>Testing and the SQA report: how we know it works</h1>
+
+<p>The SQA report is about <em>quality assurance</em>: planning, reviewing and testing so that defects are found and fixed
+before users see them. EduMate turns the report's findings into code <strong>and</strong> into automatic tests that
+prove each fix, and keep proving it every time the tests run.</p>
+
+<h2>Running the tests</h2>
+<pre class="block">cd backend
+./mvnw test          (Windows: mvnw.cmd test)      → 64 tests, about a minute
+
+cd frontend
+npm test                                           → 15 tests, a few seconds</pre>
+<p>Maven prints <code>Tests run: 64, Failures: 0, Errors: 0</code> when everything passes. A failing test prints what
+it expected and what it got.</p>
+
+<h2>The levels of testing (the report's test strategy)</h2>
+<table>
+<thead><tr><th>Level</th><th>Checks</th><th>In EduMate</th><th>Speed</th></tr></thead>
+<tbody>
+<tr><td><strong>Unit</strong></td><td>one class alone, with no web server and no database</td><td><code>SgpaCalculatorTest</code>, <code>AdmissionStateMachineTest</code>, <code>TimetableSolverTest</code>, <code>UploadSafetyTest</code>, <code>GatewaySignatureTest</code>, the attendance-math and eligibility tests, and all frontend tests</td><td>milliseconds</td></tr>
+<tr><td><strong>Integration</strong></td><td>the real application in memory, through real HTTP (MockMvc), with security, JSON, transactions and SQL</td><td><code>SecurityIntegrationTest</code>, <code>PaymentIntegrationTest</code>, <code>ResultPublicationIntegrationTest</code>, <code>AdmissionConsentIntegrationTest</code>, <code>AttendanceConcurrencyIntegrationTest</code>, <code>RoleMatrixCoverageTest</code></td><td>seconds (Spring starts once and is shared)</td></tr>
+<tr><td><strong>Compatibility</strong></td><td>the same schema, seed and queries on a real PostgreSQL 17</td><td><code>PostgresCompatibilityTest</code> (embedded PostgreSQL)</td><td>seconds</td></tr>
+<tr><td><strong>System / acceptance</strong></td><td>a person using the running system</td><td>the demo accounts and scenarios in the README; the smoke tests done while building</td><td>minutes</td></tr>
+</tbody></table>
+
+<h2>Test design techniques used (as named in the report)</h2>
+<table>
+<thead><tr><th>Technique</th><th>Idea</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td>Boundary value analysis</td><td>test right at the edges, where mistakes hide</td><td>grade bands at 55.99 / 56, external 20.99 / 21; age on the day before and on the 18th/17th birthday; exactly 75.00% attendance</td></tr>
+<tr><td>Equivalence partitioning</td><td>one test per class of inputs that behave alike</td><td>file kinds: real PDF / PNG / JPEG, program, empty, missing</td></tr>
+<tr><td>Decision table</td><td>every combination of conditions → action</td><td>hall-ticket rules R1–R5 (<code>EligibilityEvaluatorTest</code>)</td></tr>
+<tr><td>State transition</td><td>every allowed arrow works; every other arrow is refused</td><td><code>AdmissionStateMachineTest</code> (Fig. 3.2)</td></tr>
+<tr><td>Concurrency tests</td><td>two users at the same instant</td><td>double publish (TC-015), stale attendance save (DR-01)</td></tr>
+<tr><td>Security tests (OWASP)</td><td>attack the system on purpose</td><td>forbidden report, tampered token, unknown endpoint, lockout, forged payment callback, stack-trace leak, disguised upload</td></tr>
+</tbody></table>
+
+<h2>From the report's findings to code to tests</h2>
+<table>
+<thead><tr><th>Report item</th><th>What it says</th><th>Fixed in</th><th>Proved by</th></tr></thead>
+<tbody>
+<tr><td>TC-005 / TC-006, DR-02, DEF-014</td><td>fee payment; a replayed callback must not credit twice</td><td><code>PaymentOrchestrator</code>, UNIQUE constraints</td><td><code>PaymentIntegrationTest</code></td></tr>
+<tr><td>TC-008 – TC-010, RR-04, DEF-019</td><td>eligibility at, above and below the threshold</td><td>attendance package</td><td><code>EligibilityEvaluatorTest</code>, <code>AttendanceMathTest</code></td></tr>
+<tr><td>TC-011</td><td>a teacher double-booked must block publishing</td><td><code>TimetableService</code>, <code>TimetableSolver</code></td><td><code>TimetableSolverTest</code></td></tr>
+<tr><td>TC-012, DR-04, DEF-022</td><td>amend a mark 18 → 22 with an audit trail</td><td><code>MarksEntryService</code>, <code>AuditLogger</code></td><td>demo scenario; audit page</td></tr>
+<tr><td>TC-013</td><td>SGPA for S, A, B, B, C over 4, 4, 3, 3, 2 credits</td><td><code>SgpaCalculator</code></td><td><code>SgpaCalculatorTest</code>, <code>ResultPublicationIntegrationTest</code> (8.63)</td></tr>
+<tr><td>TC-015, DEF-027</td><td>simultaneous publication happens once</td><td><code>ResultSetRepository.publishIfApproved</code></td><td><code>ResultPublicationIntegrationTest</code></td></tr>
+<tr><td>Safety objective</td><td>two-person approval before publication</td><td><code>ResultPublicationService</code></td><td><code>ResultPublicationIntegrationTest</code></td></tr>
+<tr><td>TC-017, DR-06, DEF-031</td><td>a student must not read the cohort report</td><td>deny-by-default <code>RoleMatrix</code></td><td><code>SecurityIntegrationTest</code>, <code>RoleMatrixCoverageTest</code></td></tr>
+<tr><td>TC-020, RR-02</td><td>a minor needs verifiable guardian consent</td><td><code>ConsentRegistry</code>, <code>AdmissionService</code></td><td><code>AdmissionConsentIntegrationTest</code></td></tr>
+<tr><td>DR-01</td><td>concurrent attendance saves</td><td><code>@Version</code> + explicit check</td><td><code>AttendanceConcurrencyIntegrationTest</code></td></tr>
+<tr><td>DR-03</td><td>N+1 queries in result computation</td><td>cohort queries</td><td>integration tests (60 students computed)</td></tr>
+<tr><td>DR-05</td><td>duplicate mark rows</td><td>UNIQUE constraint</td><td>schema</td></tr>
+<tr><td>DR-07</td><td>enrolment cannot be reversed</td><td>state machine arrow</td><td><code>AdmissionStateMachineTest</code></td></tr>
+<tr><td>DR-08</td><td>computation also sends messages</td><td>outbox + dispatcher</td><td>design; Outbox page</td></tr>
+<tr><td>RR-01</td><td>75% vs 80% contradiction</td><td>one setting, 75</td><td>eligibility tests</td></tr>
+<tr><td>RR-07</td><td>exam superintendent's rights undefined</td><td><code>EXAM_SUPERINTENDENT</code> rows in the RoleMatrix</td><td><code>RoleMatrixCoverageTest</code></td></tr>
+<tr><td>RR-08</td><td>revaluation must supersede</td><td><code>Mark.effectiveExternal()</code></td><td>computation</td></tr>
+<tr><td>A03 (DEF-036), A05, A07; A02 passed</td><td>reflected XSS, error leaks, no lockout; password storage had no finding</td><td>React escaping + CSP, <code>GlobalExceptionHandler</code>, <code>LoginAttemptService</code>; bcrypt kept</td><td><code>SecurityIntegrationTest</code></td></tr>
+<tr><td>Compatibility objective</td><td>runs on PostgreSQL</td><td>portable SQL</td><td><code>PostgresCompatibilityTest</code></td></tr>
+<tr><td>Recommendation 1</td><td>SGPA routine too complex (19)</td><td>small methods</td><td><code>SgpaCalculatorTest</code></td></tr>
+</tbody></table>
+
+<h2>What a test looks like</h2>
+<p>From <a href="#f-backend-src-test-java-com-edumate-exam-SgpaCalculatorTest-java"><code>SgpaCalculatorTest</code></a>:</p>
+<pre class="block">@Test
+@DisplayName("TC-013: grades S, A, B, B, C over credits 4, 4, 3, 3, 2")
+void tc013() {
+    List&lt;GradedCourse&gt; courses = List.of(
+            new GradedCourse(4, GradeScale.S.gradePoint()),  …  );
+    assertThat(SgpaCalculator.sgpa(courses)).isEqualByComparingTo("8.63");
+}</pre>
+<p>Every test has the same three parts: <strong>arrange</strong> (prepare the inputs), <strong>act</strong> (call the
+code), <strong>assert</strong> (check the result). If the result differs, the test fails and says so.</p>
+
+<h2>Why automatic tests matter for quality assurance</h2>
+<ul>
+<li>A fix without a test can quietly break again. <code>RoleMatrixCoverageTest</code> exists so that DEF-031 can never come back unnoticed.</li>
+<li>Tests are executable specifications. The concurrency test <em>is</em> the definition of "publish exactly once".</li>
+<li>The integration tests run through the same security filters, JSON conversion and database as real users do, so they catch mistakes in the connections between parts, not only in single parts.</li>
+</ul>

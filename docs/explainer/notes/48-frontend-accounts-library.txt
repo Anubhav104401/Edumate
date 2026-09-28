@@ -1,0 +1,89 @@
+=== FILE frontend/src/pages/accounts/PaymentsPage.tsx
+>>> SUMMARY
+**The accounts office page**:
+1. **Look up** any student's fee account by USN: their outstanding amount and full ledger (every debit and credit with its reference).
+2. **Recent payments** through the gateway: time, order number, amount, status, the bank's transaction reference, and the receipt number.
+
+This is where the effect of the DEF-014 fix is visible to staff. Even when the gateway delivered a success callback twice, there is **one** SUCCESS payment and **one** ledger credit, with the bank reference stored once (it is UNIQUE in the database).
+>>> 14
+Badge colours: succeeded green, started blue, failed red.
+>>> 23-24
+`lookup`: stops the page reload; does nothing if the box is empty.
+>>> 25-29
+Loads that student's account (for example 404 "Student 23BTRCS999 was not found." becomes a toast, and any earlier result is cleared).
+>>> 33-35
+The drawing: the page title.
+>>> 36-39
+A small form with the USN box …
+>>> 41
+… and the "Show account" button.
+>>> 46-49
+When an account was found: its card, headed by the student's name and USN …
+>>> 51-52
+… the amount outstanding …
+>>> 54-56
+… and the ledger table with its header row.
+>>> 64-66
+One row per ledger line.
+>>> 79
+The recent-payments card.
+>>> 81-86
+Loading, error, then the payments table and its header row.
+>>> 95-97
+One row per payment.
+>>> 101
+The status cell.
+
+=== FILE frontend/src/pages/library/LibraryDeskPage.tsx
+>>> SUMMARY
+**The librarian's desk**:
+1. **Issue a book**: type the student's USN, search the catalogue, and press "Issue" next to a book. The backend checks that a copy is available, the student's 3-book limit, and (with the book's version) that another librarian did not take the last copy at the same moment.
+2. **Books on loan**: every open loan, most overdue first, with the days late, the fine so far, and a "Return" button. Returning asks for confirmation and shows the fine to collect.
+>>> 25-27
+Issuing needs a USN first; otherwise remind the librarian to enter one.
+>>> 29-33
+Issues the book to that student; shows "“Clean Code” issued. Due back on 12 Oct 2026."; and reloads both lists (the available copies and the open loans have both changed).
+>>> 34-35
+A refusal becomes a toast, e.g. "All copies of this book are currently issued." or "Aarav Sharma already has 3 books. Return one first."
+>>> 40
+`giveBack`: asks "Return “Introduction to Algorithms”? Fine to collect: ₹12.00." and stops unless confirmed.
+>>> 41-45
+Returns it; shows "Book returned. Fine charged: ₹12.00."; and reloads both lists.
+>>> 46-47
+Any error becomes a toast.
+>>> 51-53
+The catalogue search runs only when the Search button is pressed (not on every key press).
+>>> 56-58
+The drawing: the title with the fine policy.
+>>> 60
+The "Issue a book" card.
+>>> 62-64
+One form holding the student's USN box …
+>>> 66-67
+… the catalogue search box …
+>>> 69
+… and the Search button.
+>>> 73-79
+Loading, error, then the catalogue table and its header row.
+>>> 83
+An empty header above the button column.
+>>> 86-89
+One row per book: its title (bold) and ISBN.
+>>> 94-95
+Copies on the shelf out of the total, e.g. "2 / 4".
+>>> 97-98
+The Issue button, disabled when no copy is available.
+>>> 110
+The "Books on loan" card.
+>>> 112-116
+Error, then the loans table and its header row.
+>>> 122
+An empty header above the button column.
+>>> 125-127
+One row per open loan.
+>>> 129-130
+The student's USN and name.
+>>> 132-133
+The due date, with a red "Overdue" badge if it has passed.
+>>> 137-138
+The Return button.

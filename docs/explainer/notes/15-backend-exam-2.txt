@@ -1,0 +1,181 @@
+=== FILE backend/src/main/java/com/edumate/exam/ResultStatus.java
+>>> SUMMARY
+The five **stages** a result set passes through, in order:
+
+<pre class="block">DRAFT ──compute──► COMPUTED ──approve (person A)──► AWAITING_SECOND_APPROVAL
+      ──approve (person B, not A)──► APPROVED ──publish──► PUBLISHED</pre>
+
+The SQA Plan adds **Safety** as a quality objective (new in ISO/IEC 25010:2023): "incorrect results cannot reach students irreversibly". Its measure is "two-person approval enforced before any result set is published". These stages are how that is enforced: results can only be published from APPROVED, and APPROVED can only be reached through two approvals by two different people.
+
+If a mark changes after computing, the set goes back to DRAFT (see `ResultSet.invalidate`).
+
+=== FILE backend/src/main/java/com/edumate/exam/ResultSet.java
+>>> SUMMARY
+The results of **one cohort in one exam session**, for example "B.Tech CSE, semester 5, exam session 2026-ODD". It records the stage (`status`) and **who did what, when**: who computed, who gave the first approval, who gave the second, who published. The individual students' numbers are in `StudentResult` rows pointing to this set.
+
+The database allows only one result set per session + programme + semester (UNIQUE rule `uq_result_set`), so there can never be two competing versions of the same results.
+
+The methods here only change the stage and the "who/when" fields. The rules about **when** a change is allowed (for example "the second approver must be a different person") live in `ResultPublicationService`.
+>>> 68
+Creates a new, empty result set in the DRAFT stage (the field's starting value on line 35).
+>>> 75-83
+Marks the set as computed, by whom and when, and **clears any earlier approvals** (lines 79-82). If results are recomputed after someone approved them, the numbers may have changed, so the approvals must be given again on the new numbers. Nobody can approve one set of numbers and have different numbers published.
+>>> 85-89
+First approval: move to AWAITING_SECOND_APPROVAL and remember who approved and when.
+>>> 91-95
+Second approval: move to APPROVED and remember the second person.
+>>> 98-99
+Back to DRAFT: called when a teacher changes a mark after the results were computed, so the out-of-date numbers must be recomputed before anyone can approve them.
+>>> 103-113
+Used only by the demo seeder, to create the published history of semesters 1–4 in one go, with both approvals filled in so the history also obeys the two-person rule.
+>>> 115-118
+True in the three stages after the first approval. While true, teachers may no longer change marks for this cohort (`MarksEntryService` refuses with RESULTS_LOCKED), because approvers are looking at, or have approved, those exact numbers.
+
+=== FILE backend/src/main/java/com/edumate/exam/ResultSetRepository.java
+>>> SUMMARY
+Reads result sets and, most importantly, **publishes them safely**. This is the fix for test defect **DEF-027**: "Concurrent publication publishes the same result set twice. Root cause: published flag read and written without a lock."
+
+**The old mistake ("check, then act"):**
+<pre class="block">Superintendent A: read status → APPROVED ✓            … write PUBLISHED, send 11,400 messages
+Superintendent B:        read status → APPROVED ✓ (A has not written yet) … write PUBLISHED, send them again</pre>
+Both checks passed because both read before either wrote.
+
+**The fix: check and act in one step.** `publishIfApproved` is a single SQL statement:
+<pre class="block">UPDATE result_set SET status = 'PUBLISHED', … WHERE id = ? AND status = 'APPROVED'</pre>
+The database runs an UPDATE on a row one transaction at a time. The first one finds status APPROVED, changes it, and reports "1 row changed". The second one, a moment later, finds PUBLISHED; its `WHERE` no longer matches, and it reports "0 rows changed". The service turns 0 into the message "These results were already published". The automated test `ResultPublicationIntegrationTest` runs two publishes at the same instant and checks that exactly one succeeds.
+
+The report's recommendation says DR-01, DR-02 and DEF-027 are "one underlying pattern: a check-then-act sequence without a lock". This is the third instance, fixed.
+>>> 25
+`@Modifying`: this query changes data. `flushAutomatically` writes any pending changes before it runs; `clearAutomatically` forgets cached copies afterwards, so the service's next read sees the database's real state.
+>>> 26-31
+The atomic UPDATE described in the summary, written in JPQL. It also increases the `version` counter itself, because a bulk update bypasses Hibernate's automatic version handling.
+>>> 32-33
+The method. It returns the number of rows changed: 1 = this call published it, 0 = it was not approved or someone else already published. The two status values are passed as parameters so the query compares enum values safely.
+
+=== FILE backend/src/main/java/com/edumate/exam/ResultSetView.java
+>>> SUMMARY
+The information about a result set that is **sent to the browser**: all the stage and who/when fields, plus two friendly names (the exam session's code and the programme's name) that the entity itself does not hold.
+
+Using a separate "view" record rather than sending the entity directly is a general EduMate habit: the browser gets exactly the fields meant for it, and changing the database structure later does not silently change the JSON.
+>>> 11-16
+Builds a view from a `ResultSet` plus the two names, copying the fields one by one in the order of the record's header.
+
+=== FILE backend/src/main/java/com/edumate/exam/StudentResult.java
+>>> SUMMARY
+One student's **computed result** inside a result set: SGPA, CGPA, credits registered, credits earned, and PASS or FAIL. The grade of each course is stored separately in `CourseGrade` rows pointing to this one.
+
+These rows are **snapshots**: they are recalculated every time the result set is computed, and frozen once it is published.
+>>> 49-50
+The constructor used by `ResultComputationService` to store one student's computed numbers.
+
+=== FILE backend/src/main/java/com/edumate/exam/CourseGrade.java
+>>> SUMMARY
+The grade of one student in one course, as part of a `StudentResult`: the total marks, the letter grade (S…F), its grade point and the course's credits. These are what the student sees in the course-wise table on "My results", and what the consolidated marks report lists.
+>>> 43-44
+The constructor used when saving a computed result.
+
+=== FILE backend/src/main/java/com/edumate/exam/StudentResultRepository.java
+>>> SUMMARY
+Reads and writes per-student results, with three hand-written queries:
+- `deleteByResultSetId`: removes the old rows before recomputing;
+- `findPublishedHistory`: the earlier published semesters of a whole cohort **in one query** (needed for CGPA);
+- `findPublishedForStudent`: a student's own published semesters, for "My results". Only PUBLISHED sets are included, so draft or approved-but-unpublished numbers can never leak to students.
+>>> 16-18
+A bulk DELETE of every student result of one result set. The database schema says `ON DELETE CASCADE` for `course_grade → student_result`, so the course grades of those results disappear automatically too. `flushAutomatically` writes pending changes first. It returns how many rows were deleted.
+>>> 21-28
+Earlier published semesters of a programme, as `(studentId, credits, SGPA)`. Only sets that are PUBLISHED, of this programme, and of a **lower** semester number count. One query for all students.
+>>> 29-31
+The method running it; the enum value PUBLISHED is passed in as a parameter.
+>>> 34-41
+One student's published semesters, joined with the exam session (for its code and name), oldest semester first. `select new …PublishedRow(...)` builds one `PublishedRow` per row.
+>>> 42-43
+The method running it.
+
+=== FILE backend/src/main/java/com/edumate/exam/PriorSemester.java
+>>> SUMMARY
+One row of the "published history" query: a student's id, the credits of an earlier semester, and that semester's SGPA. `ResultComputationService` groups these by student and feeds them to the CGPA formula.
+
+=== FILE backend/src/main/java/com/edumate/exam/PublishedRow.java
+>>> SUMMARY
+One row of the "my published results" query: which student result, which semester and exam session, the SGPA, CGPA, credits, outcome and publication time. `ResultQueryService` adds the course-wise grades and sends it to the browser.
+>>> 7-9
+The ten values of each row, in the same order as the query's `select new …PublishedRow(...)`.
+
+=== FILE backend/src/main/java/com/edumate/exam/CourseGradeRepository.java
+>>> SUMMARY
+Reads course grades. `findByStudentResultIdIn(ids)` loads the grades of **many** student results in one query (`WHERE student_result_id IN (…)`), again avoiding one query per student.
+
+=== FILE backend/src/main/java/com/edumate/exam/ResultComputationService.java
+>>> SUMMARY
+Computes **SGPA, CGPA and PASS/FAIL for a whole cohort** at once (FR-19; the report calls this design element ResultComputationService). It is started by an examination superintendent clicking "Compute" on the Results workflow page.
+
+The steps:
+1. **Checks.** The exam session and programme exist; the programme is on the caller's campus; the results are not already published.
+2. **Load everything in two queries** (the fix for DR-03): all marks of the cohort with their course credits, and all earlier published semesters of the cohort.
+3. **Refuse incomplete data.** If any mark is missing, stop with "N mark entries are still empty". Computing with gaps would produce wrong SGPAs.
+4. **Throw away the old computed rows** of this result set.
+5. **For each student:** grade every course, work out SGPA and CGPA, decide PASS (all credits earned) or FAIL, and save the result and course grades.
+6. **Mark the set COMPUTED** (clearing any old approvals), write an audit line, and report a summary: how many students, how many passed, the average SGPA.
+
+It deliberately does **not** send any messages. The report found (DR-08) that the old design both computed results and sent notifications, so a slow SMS provider could slow or break the computation. Messages are sent only after publication, through the outbox.
+
+Everything runs in one transaction: if anything fails half-way (for example the database refuses a row), the whole computation is undone and the previous state remains.
+>>> 48-51
+Constructor: the repositories for marks, result sets, student results, course grades, exam sessions and programmes, plus the audit logger and clock.
+>>> 63
+`compute` for one exam session, programme and semester, on behalf of the logged-in superintendent `me`.
+>>> 64-66
+Loads the exam session and the programme, or stops with 404.
+>>> 67-69
+Multi-campus check: a superintendent of one campus cannot compute another campus's results.
+>>> 71-72
+Finds the existing result set for this cohort, or creates and saves a new DRAFT one. `orElseGet(() -> …)` runs the creation only when nothing was found.
+>>> 73-76
+Published results are final: recomputing them is refused with 409.
+>>> 78
+**Query 1**: every mark row of the cohort, with course credits.
+>>> 79-81
+No marks at all → 400 "No marks have been entered for this cohort yet."
+>>> 82-86
+Counts the incomplete rows (a missing internal or external mark). If there are any, stop with 409 MARKS_INCOMPLETE, saying how many. In the demo data exactly one is missing on purpose (a student's SQA internal mark), so this message can be shown and then fixed by the teacher.
+>>> 88-89
+Groups the rows by student: a map from student id to that student's list of rows. `LinkedHashMap` keeps the students in the query's order.
+>>> 90-94
+**Query 2**: the published history of the cohort, grouped by student into lists of `(credits, SGPA)` ready for the CGPA formula.
+>>> 96
+Deletes the previous computed rows of this set (if it was computed before), together with their course grades.
+>>> 98-99
+Counters for the summary: how many passed, and the sum of all SGPAs (for the average).
+>>> 100-107
+For each student (an "entry" = student id + their rows): compute and save their result with `computeOne` (below), giving it the student's history or an empty list if they have none. Then update the two counters.
+>>> 109
+Moves the set to COMPUTED, recording who computed it and when. Hibernate saves this change at the end of the transaction.
+>>> 110-111
+The number of students and the average SGPA (sum ÷ count, 2 decimals).
+>>> 112-113
+Writes an audit line such as "60 students, 57 passed, average SGPA 7.68".
+>>> 114-115
+Returns the summary shown in the "Computed …" pop-up message: the updated result set view and the four numbers.
+>>> 119-120
+`computeOne`: one student's courses (`rows`) and earlier semesters (`earlier`) → one saved `StudentResult`.
+>>> 121-124
+Empty lists and counters: the graded courses for the SGPA formula, the lines to store as course grades, and credits registered/earned.
+>>> 125-132
+For each course of this student:
+- line 126: its grade from internal + effective external marks;
+- line 127: remember (credits, grade point) for the SGPA;
+- lines 128-129: remember the course's total and grade to store later;
+- line 130: add the credits to "registered";
+- line 131: add them to "earned" only if the grade is a pass (`? :` = if … then … else 0).
+>>> 133
+PASS only if every registered credit was earned, i.e. no F anywhere.
+>>> 134-135
+Saves the student's result: SGPA of this semester, CGPA including earlier semesters, credits and outcome. `save` returns the saved row, now with its id.
+>>> 136-139
+Saves all course grades of this student in one call, each pointing to the new result's id (which is why they could only be built after line 134).
+>>> 140
+Returns the saved result to the loop above.
+>>> 144
+A small private record to hold one graded course until its `StudentResult` has an id.
+>>> 148-149
+The JSON sent back after computing: the result set view and the students / passed / failed / average numbers.

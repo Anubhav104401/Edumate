@@ -1,0 +1,219 @@
+=== FILE frontend/index.html
+>>> SUMMARY
+The **only HTML page** of the whole frontend. It is almost empty: a `<div id="root">` and one `<script>`. React fills that div with every screen of EduMate.
+
+This is what "single-page application" (SPA) means. The browser loads this one page once. After that, moving from "Dashboard" to "My fees" does **not** load a new page from the server. React swaps the content inside the div, and only the data travels as JSON. That is why moving between screens feels instant.
+
+The alternative is a multi-page site, where the server builds a new HTML page for every click (as Spring MVC with Thymeleaf templates would). That is simpler for small sites, but slower to use, and it mixes the look of the pages into the Java code. The report asks for a React SPA.
+>>> 1
+`<!doctype html>`: "this is a modern HTML5 page". Without it, browsers switch to an old compatibility mode.
+>>> 2
+The page starts here. `lang="en"` tells screen readers and translators that the text is English.
+>>> 3
+`<head>`: information **about** the page, not shown in the page itself.
+>>> 4
+The characters are UTF-8, so ₹, é and Hindi letters display correctly.
+>>> 5
+On phones, use the phone's real width instead of pretending to be a desktop screen. Without this, the page would appear tiny on a phone.
+>>> 6
+A one-sentence description of the page, which search engines may show.
+>>> 7
+The small icon in the browser tab: `favicon.svg`.
+>>> 8
+The text in the browser tab: "EduMate".
+>>> 9
+End of the head.
+>>> 10
+`<body>`: what is shown.
+>>> 12
+The empty box that React fills. `main.tsx` finds it by its id, `root`.
+>>> 13
+Shown only if JavaScript is switched off, because without JavaScript React cannot draw anything.
+>>> 14
+Loads the app's starting file, `src/main.tsx`. `type="module"` means it may use `import`. In development Vite translates the TypeScript on the fly; in production `vite build` replaces this line with the bundled, minified JavaScript file.
+>>> 15-16
+End of the body and of the page.
+
+=== FILE frontend/public/favicon.svg
+>>> SUMMARY
+The **tab icon**: a white graduation cap on a dark-blue rounded square. It is an **SVG**, a picture described with shapes rather than pixels, so it stays sharp at any size. Files in `public/` are copied unchanged into the built site.
+>>> 1
+The SVG starts. `viewBox="0 0 64 64"` means shapes are drawn on a 64 × 64 grid, which is then scaled to whatever size the browser needs.
+>>> 2
+The background: a 64 × 64 square with rounded corners (`rx="14"`) in EduMate's dark blue `#1f4e79`.
+>>> 3
+The top of the cap: a white diamond. A path is a list of points: start at (12, 26), go to (32, 16), (52, 26), (32, 36), and `z` closes the shape.
+>>> 4
+The body of the cap, in light blue.
+>>> 5
+The tassel: a thin white rounded rectangle on the right.
+>>> 6
+The SVG ends.
+
+=== FILE frontend/package.json
+>>> SUMMARY
+The frontend's **"shopping list"** (the npm version of `pom.xml`). It names the project, lists the **commands** (`npm run dev`, `npm test`…), and lists the **packages** it needs with their versions.
+
+`npm install` reads this file, downloads the packages into `node_modules/`, and records the **exact** versions it chose in `package-lock.json`. The lock file is what makes every install identical, so it is committed to Git.
+
+**`dependencies` vs `devDependencies`:** dependencies end up inside the app that users download (React itself). Dev dependencies are only tools used while building and testing (TypeScript, Vite, Vitest); none of their code reaches the user.
+
+**Version signs:** `^19.3.0` means "19.3.0 or any newer 19.x", i.e. accept bug-fix and feature updates but not a new major version, which could break things.
+>>> 1
+The file is one JSON object.
+>>> 2
+The package's name.
+>>> 3
+`private: true`: this is an application, not a library, so npm refuses to ever publish it to the public registry by accident.
+>>> 4
+The version, 2.0.0, the same as the backend.
+>>> 5
+`"type": "module"`: `.js` files use modern `import`/`export`.
+>>> 6
+A one-line description.
+>>> 7
+The commands, run as `npm run <name>`:
+>>> 8
+`npm run dev`: starts the Vite development server on port 5173.
+>>> 9
+`npm run build`: first checks all TypeScript types (`tsc --noEmit` checks without writing files), then builds the optimised production files into `dist/`. If a type is wrong, the build stops.
+>>> 10
+`npm run preview`: serves the built `dist/` folder locally, to try the production version.
+>>> 11
+`npm run typecheck`: only the type check.
+>>> 12
+`npm test`: runs every `*.test.ts` file once with Vitest.
+>>> 14
+Packages the app needs at run time:
+>>> 15
+React: builds the screen out of components.
+>>> 16
+React DOM: puts React's components into a web page.
+>>> 17
+React Router: shows the right page for each address (`/fees`, `/results`…).
+>>> 19
+Tools used only while developing:
+>>> 20-21
+Type descriptions of React for TypeScript, so it can check that components are used correctly.
+>>> 22
+The Vite plugin that understands React's JSX and refreshes components instantly when a file is saved.
+>>> 23
+jsdom: a pretend browser page for tests, so tests can run in Node without a real browser.
+>>> 24
+TypeScript: checks the types.
+>>> 25
+Vite: the development server and the production bundler.
+>>> 26
+Vitest: the test runner.
+
+=== FILE frontend/tsconfig.json
+>>> SUMMARY
+Settings for the **TypeScript** checker. TypeScript is JavaScript plus **types**: every value has a declared kind (text, number, a `Student` object…), and the checker refuses code that mixes them up **before** the code ever runs. For example, if the backend's JSON has `sgpa` but the code says `sgpA`, the build fails with a clear error instead of the page quietly showing nothing.
+
+Here TypeScript **only checks**: `noEmit` means it writes no files. Vite does the actual translation to JavaScript, which is much faster.
+>>> 1
+The settings object.
+>>> 2
+The checker's options:
+>>> 3
+Produce modern JavaScript (the 2022 edition), which all current browsers understand.
+>>> 4
+Which built-in things exist: the 2023 JavaScript library and the browser's DOM (`document`, `window`, `fetch`…).
+>>> 5
+Use modern `import`/`export` modules.
+>>> 6
+Find imported files the way a bundler such as Vite does.
+>>> 7
+JSX (the HTML-like tags inside `.tsx` files) is handled with React's modern automatic runtime, so files need no `import React`.
+>>> 8
+`strict`: the strictest checks. The most important one: a value that might be `null` must be checked before use, which prevents the classic "cannot read property of undefined" crash.
+>>> 9-10
+Unused variables and unused function parameters are errors. They usually mean a mistake or leftover code.
+>>> 11
+In a `switch`, forgetting `break` (so one case "falls through" into the next) is an error.
+>>> 12
+Every file must make sense on its own, which Vite needs because it translates files one at a time.
+>>> 13
+Do not re-check the type files of installed packages (faster).
+>>> 14
+Only check, never write output files.
+>>> 15
+Include Vite's own type descriptions (for example for `import.meta.env`).
+>>> 17
+Which files to check: everything in `src/`, plus `vite.config.ts`.
+
+=== FILE frontend/vite.config.ts
+>>> SUMMARY
+Settings for **Vite**, the frontend's development server and build tool.
+
+**The most important part is the proxy.** During development, two programs run:
+
+| Program | Port | Job |
+|---|---|---|
+| Vite | 5173 | serves the React app to the browser |
+| Spring Boot | 8080 | answers `/api/...` with JSON |
+
+The browser talks **only** to port 5173. When the page asks for `/api/fees/me`, Vite forwards (proxies) that request to `http://localhost:8080/api/fees/me` and passes the answer back:
+
+<pre class="block">Browser ──GET /api/fees/me──► Vite :5173 ──same request──► Spring Boot :8080
+Browser ◄──────JSON──────── Vite :5173 ◄──────JSON─────── Spring Boot :8080</pre>
+
+**Why not let the browser call port 8080 directly?** A different port counts as a different **origin** (origin = scheme + host + port). Browsers block a page from reading answers from another origin unless that server sends special **CORS** headers. With the proxy, the browser only ever sees one origin, so no CORS rules are needed. That is one less security setting to get wrong.
+
+In production (Docker), **nginx** plays the same role on port 3000 (see `nginx.conf`), so the frontend code is identical in both cases: it always calls `/api/...` on its own origin (`API_BASE = ''` in `config.ts`).
+>>> 1
+Tells TypeScript that this file may also contain Vitest's `test` settings.
+>>> 2
+`defineConfig` gives type checking and suggestions for the settings object.
+>>> 3
+The React plugin (JSX support and instant refresh).
+>>> 13
+The settings object, exported as the file's default.
+>>> 14
+Use the React plugin.
+>>> 15
+Development-server settings:
+>>> 16
+Listen on port 5173.
+>>> 17
+`strictPort`: if 5173 is already taken, stop with an error instead of quietly moving to 5174. The proxy settings and the documentation all assume 5173.
+>>> 18
+The proxy rules:
+>>> 19
+Any path starting with `/api` is forwarded to the backend on port 8080.
+>>> 22
+Test settings for Vitest:
+>>> 23
+Run tests inside jsdom's pretend browser page.
+
+=== FILE frontend/nginx.conf
+>>> SUMMARY
+Settings for **nginx** (say "engine-x"), the web server in the production-like Docker setup. It does two jobs:
+1. serves the **built** React files (index.html, JavaScript, CSS) from `/usr/share/nginx/html`;
+2. forwards every `/api/...` request to the Spring Boot container (`backend:8080`), exactly as Vite does in development.
+
+It also adds **security headers** to every answer. These are the "defence in depth" fix listed for DEF-036 (reflected XSS). React already escapes text, so injected HTML shows up as harmless text; the headers are a second wall behind that one.
+
+**Ports in Docker:** nginx listens on port 80 inside its container, and `docker-compose.yml` maps it to port **3000** on your computer. So you open http://localhost:3000.
+>>> 7
+One "server" block = one website.
+>>> 8
+Listen on port 80, the standard HTTP port, inside the container.
+>>> 9
+`_` means "answer whatever host name is used".
+>>> 10
+The folder with the built frontend files.
+>>> 13
+The largest request body nginx accepts. A 5 MB upload plus the multipart wrapping is slightly more than 5 MB, so the limit is 6 MB. nginx's default of 1 MB would block document uploads with error 413.
+>>> 16
+**Content-Security-Policy (CSP):** the browser may load scripts, styles and pictures only from this same site (`'self'`). Pictures may also come from `blob:` and `data:` (used to preview an upload before sending it). `object-src 'none'` forbids old plug-ins, and `frame-ancestors 'none'` forbids other sites from showing EduMate inside a frame. Even if an attacker managed to inject a `<script src="https://evil…">`, the browser would refuse to load it.
+>>> 17
+`nosniff`: the browser must trust the declared content type and not guess. Otherwise a text file could be "guessed" into a script.
+>>> 18
+When following a link to another site, send only the site's name, not the full address (which could contain ids).
+>>> 19
+Older way of forbidding frames (for browsers that do not understand `frame-ancestors`). This stops **click-jacking**: a hostile site placing EduMate invisibly over its own buttons.
+>>> 21-26
+Every `/api/...` request goes to `http://backend:8080`. Inside Docker's network, `backend` is the backend container's name. The three `proxy_set_header` lines pass along the original host name, the visitor's IP address (`X-Forwarded-For`) and whether they used http or https.
+>>> 29-32
+Everything else: send the requested file if it exists (for example `/assets/index-3f2a.js`); otherwise send `index.html`. This is needed for a single-page app. If someone opens `/hall-ticket` directly or presses refresh, there is no file with that name, so nginx sends `index.html`, and React Router shows the hall-ticket page.

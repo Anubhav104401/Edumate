@@ -1,0 +1,112 @@
+=== FILE frontend/src/pages/student/MyFeesPage.tsx
+>>> SUMMARY
+**"My fees"**, for a student (or "Your child's fees", for a guardian). It shows:
+1. a card with the **amount outstanding** (amber if something is due, green if nothing is);
+2. the **fee demands** (bills), each with its amount, paid, due, due date, a status badge (Paid / Due / Overdue) and a **"Pay now"** button;
+3. the **payments** made, with the order number, status and receipt number;
+4. the **ledger** (account statement): every debit (a bill) and credit (a payment).
+
+**What "Pay now" does:**
+<pre class="block">POST /api/fees/payments  {"feeDemandId": 12}
+  ← {"orderId": "ORD-81D4440CAE9D45BA", "amount": 62500.00, "checkoutPath": "/pay/ORD-81D4440CAE9D45BA"}
+→ the browser moves to the (simulated) bank page /pay/ORD-81D4440CAE9D45BA</pre>
+>>> 16-17
+Which badge colour each status gets: paid green, due amber, overdue red; payments succeeded green, started blue, failed red.
+>>> 19-24
+The page's tools: the user, page navigation, toasts, `starting` (which bill's payment is being started, to show "Opening the payment page…" on that one button), and the loaded fee account.
+>>> 27-30
+`pay(demandId)`: remembers which bill, asks the backend to create a payment order, then goes to the gateway page the backend named.
+>>> 31-33
+On failure (for example 409 "This fee has already been paid in full."), show the message and re-enable the buttons.
+>>> 37-39
+The drawing: the title is "Your child's fees" for a guardian, "My fees" otherwise.
+>>> 40-41
+Loading and error, as on every page.
+>>> 42-45
+When the data is there: the outstanding card, amber or green.
+>>> 52
+The bills table, inside a card that scrolls sideways on narrow screens (`table-wrap`).
+>>> 54-56
+The table and its header row. `className="num"` right-aligns number columns, so the digits line up.
+>>> 63
+An empty header above the button column.
+>>> 66-68
+One row per bill.
+>>> 74
+The status badge cell.
+>>> 77-80
+For an unpaid bill: the "Pay now" button. All pay buttons are disabled while any payment is being started, so two orders cannot be started at once.
+>>> 90
+The payments table.
+>>> 92-94
+Its header.
+>>> 102-104
+One row per payment: when, order number (in a fixed-width `mono` font, so long codes are easy to read), amount …
+>>> 108
+… the status badge …
+>>> 110
+… and, for a failed payment, the bank's reason in small grey text.
+>>> 119
+The ledger table.
+>>> 121-123
+Its header.
+>>> 131-133
+One row per ledger line. A CREDIT (money received) is written with a minus sign, because it reduces what is owed.
+
+=== FILE frontend/src/pages/student/MockGatewayPage.tsx
+>>> SUMMARY
+**The pretend bank page** at `/pay/<orderId>`. In real life this page belongs to the payment gateway (Razorpay, PayU…), and the student would enter card or UPI details there, **never on EduMate**. Here it is simulated, because a real gateway needs a merchant account.
+
+It shows the order and amount, and two buttons, **Approve payment** and **Decline payment**. The interesting part is the **"Send the bank’s confirmation"** choice ("once (normal)", "2 times (replay test)", "3 times (replay test)"): 1, 2 or 3 times. Real gateways sometimes send the same "payment succeeded" message more than once, which caused defect DEF-014 in the report (the student was credited twice). Choosing 2 or 3 lets you **watch the fix working**: the first delivery says PROCESSED with a receipt, and the others say DUPLICATE_IGNORED. The ledger is credited once.
+
+**Behind the buttons:** `POST /api/payments/gateway/mock/<orderId>/complete {"success": true, "deliveries": 2}`. The backend's `MockPaymentGateway` then builds the callback exactly as a real gateway would, **HMAC-signs** it with the shared secret, and delivers it to the real callback endpoint the chosen number of times.
+>>> 26-33
+`complete(success)`: busy; asks the simulated gateway to finish the payment (approve or decline) with the chosen number of deliveries; shows the outcomes and reloads the order; shows any error; and is no longer busy.
+>>> 37
+The first delivery's result, the one that counts (it holds the receipt number or the failure reason).
+>>> 39-43
+The drawing: title, loading and error.
+>>> 44-47
+A card showing the order number …
+>>> 49-50
+… the amount in large text …
+>>> 52-53
+… and the order's current status. If the status has no translation, the raw value is shown (`?? data.status`).
+>>> 56-58
+Before paying: the "deliveries" choice …
+>>> 60-62
+… a drop-down with 1, 2 and 3. `Number(e.target.value)` turns the chosen text into a number.
+>>> 69-71
+The "Approve payment" button ("Contacting EduMate…" while busy) …
+>>> 73
+… and "Decline payment".
+>>> 80-81
+After paying: the results list …
+>>> 83-86
+… one numbered line per delivery with its outcome badge (green PROCESSED, blue DUPLICATE_IGNORED) and an explanation.
+>>> 90-92
+A green "Receipt number: RCPT-…" box, or a red failure box, and a button back to "My fees".
+
+=== FILE frontend/src/pages/student/HallTicketPage.tsx
+>>> SUMMARY
+**The hall ticket page**: is the student allowed to sit the coming exams, course by course, and **why**?
+
+At the top, a green "You are eligible in every course. Your hall ticket will be issued." or an amber "You are not yet eligible in every course. The reasons are listed below." box, the fee status, and when exams start. Then a table with, for each course: attendance, whether internal assessment is complete, whether a medical exemption applies, the decision (eligible or not), the **decision-table rule** that decided it (R1–R5), and the reasons.
+
+Showing the rule and reasons, rather than only "not eligible", means a student knows exactly what to fix, and staff can check every decision against the regulation (the report's decision-table test cases TC-008 to TC-010).
+>>> 14-16
+The drawing: the title, and a subtitle naming the exam session once the data has arrived.
+>>> 17-18
+Loading and error.
+>>> 19-20
+When the data is there:
+>>> 22
+A row with the fee badge and the exam start date.
+>>> 26-29
+The course table and its header row.
+>>> 39-43
+One row per course, starting with its code (bold) and name.
+>>> 45
+The attendance cell: a green or red badge with the percentage.
+>>> 50
+The decision cell: a green "Eligible" or red "Not eligible" badge.

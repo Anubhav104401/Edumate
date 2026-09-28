@@ -1,0 +1,49 @@
+=== FILE frontend/src/pages/student/MyResultsPage.tsx
+>>> SUMMARY
+**"My results"**: every **published** semester, newest first. Each semester card shows the SGPA, CGPA, credits earned / registered, PASS or FAIL, when it was published, and a table of courses with marks, grade and grade points.
+
+Only **published** results ever reach this page; the backend's query filters on PUBLISHED. On results morning thousands of students open this page at once, so the backend serves it from the **cache** (`@Cacheable("publishedResults")`, Redis in Docker) instead of asking the database each time.
+>>> 13
+The backend sends semesters oldest first; `[...data].reverse()` makes a **copy** and reverses it, so the newest comes first. The original data is left unchanged, because React state must never be changed in place.
+>>> 15-20
+The drawing: the title, loading, error, and "No results have been published yet." if the list is empty.
+>>> 21-22
+One card per semester.
+>>> 23-26
+The card's header: "Semester 5" and the exam session's name.
+>>> 28-29
+"Credits earned: 16 of 16 · 28 Sept 2026, 10:15 am".
+>>> 32-34
+The SGPA, always with two decimals (`toFixed(2)`: 8.6 → "8.60").
+>>> 36-37
+The CGPA, the same way.
+>>> 42
+Older history semesters (from the demo data) have no course details …
+>>> 44-48
+… otherwise a table of courses and its header row.
+>>> 57-59
+One row per course.
+>>> 64
+The grade cell: a red badge for F, green for anything else.
+
+=== FILE frontend/src/pages/student/MyLibraryPage.tsx
+>>> SUMMARY
+**"My library"**: the books a student has borrowed, with issue and due dates, days late, the fine so far, and a status badge: "On loan" (blue), "Overdue" (red) or "Returned 12 Oct 2026" (green). The subtitle states the fine policy: "Fine: Rs 2 per day late, at most Rs 200."
+>>> 14-19
+The drawing: the title with the fine policy, loading, error, and "No books borrowed." if the list is empty.
+>>> 20-24
+If there are loans: a card with a table and its header row.
+>>> 33-36
+One row per loan, starting with the title (bold) and the author.
+>>> 44-45
+The status cell: for a book still out, "Overdue" if late, otherwise "On loan" …
+>>> 47
+… and for a returned book, "Returned <date>".
+
+=== FILE frontend/src/pages/student/MyTimetablePage.tsx
+>>> SUMMARY
+**"My timetable"**: the published week. For a student or guardian it shows the student's section; for a teacher, their own lectures, with the section shown in each cell (a teacher teaches several sections).
+>>> 16-21
+The drawing: title, loading, error, and "No timetable has been published yet." if empty.
+>>> 22-24
+Otherwise, the week grid in a card, with section letters only for faculty.

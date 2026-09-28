@@ -1,0 +1,108 @@
+=== FILE frontend/src/components/Layout.tsx
+>>> SUMMARY
+**The frame around every page after login**: a dark menu on the left (the links for the user's role), a white bar at the top with a tagline, the user's name, role and campus, and a "Log out" button. The current page appears in the middle, where `<Outlet />` stands.
+
+The page area is wrapped in an `ErrorBoundary`, so a crashing page never takes the menu down with it.
+
+On narrow (phone) screens, `app.css` moves the menu above the page instead of beside it.
+>>> 17-19
+`handleLogout`: logs out with the message "You have been logged out." and goes to the login page.
+>>> 22-23
+The drawing starts: the outer "shell" (a grid of menu + main area; see `app.css`).
+>>> 24
+The menu. `<nav>` with `aria-label="Main menu"` tells screen readers this is the main navigation.
+>>> 25-26
+The brand at the top of the menu: the logo (the same picture as the tab icon). `alt=""` marks it as decoration, which screen readers skip.
+>>> 29-31
+One link per menu item of the user's role (from `navigation.ts`). `NavLink` automatically adds the class `active` to the link of the current page, which `app.css` highlights. `end` on the dashboard link (`/`) makes it active **only** on `/` itself; otherwise every address, since all begin with `/`, would highlight it.
+>>> 35-36
+The main area, and the top bar.
+>>> 38-40
+The user block on the right of the top bar.
+>>> 43-44
+The role's display name and the campus, e.g. "Student · Campus JGC", from `messages.ts` (`t.roles`, `t.topbar.campus`).
+>>> 47
+The "Log out" button.
+>>> 52-54
+The page itself, inside the error safety net. `resetKey={location.pathname}` forgets a crash when the address changes.
+
+=== FILE frontend/src/components/TimetableGrid.tsx
+>>> SUMMARY
+Draws a week as a **grid**: one row per day (Monday–Friday), one column per period (P1–P6, each with its start time, such as 9:00). Each lecture shows its course code, teacher and room.
+
+It is used by "My timetable" (students and teachers) and by the administrator's timetable page, where clashing lectures are outlined in red and each lecture gets a "Move" button.
+
+The layout is a **CSS grid** (`.tt-grid` in `app.css`): 7 columns (day names + 6 periods). It is marked with ARIA roles (`table`, `columnheader`, `rowheader`, `cell`), so screen readers read it as a real table.
+>>> 10-14
+Inputs:
+- the lectures;
+- optionally, the ids of lectures in a clash (outlined in red);
+- whether to show the section letter;
+- optionally, extra buttons to draw under each lecture (the admin's "Move").
+>>> 18
+`at(day, period)`: the lectures in one cell.
+>>> 20-22
+The grid, and its top-left empty corner cell.
+>>> 23-25
+The header row: "P1 9:00", "P2 10:00", and so on. Texts from `messages.ts`.
+>>> 28-29
+One row per day, drawn by `DayRow` below.
+>>> 36-40
+`DayRow`'s inputs: the day, the `at` function, and the same optional settings.
+>>> 41
+The end of the list of inputs; the function body starts.
+>>> 42-45
+A row starts with the day's name ("Monday"). `<>` groups the cells without adding an extra box, so they sit directly in the grid.
+>>> 47-49
+For each period: the lectures there, and whether any of them is in a clash.
+>>> 50-51
+The cell. Its class becomes e.g. `tt-cell filled clash`, which colours it (filled cells tinted, clashing ones outlined in red).
+>>> 52-53
+Each lecture in the cell. Hovering shows the full course name (`title`).
+>>> 55
+The section letter, if asked for (on the admin's page).
+>>> 58
+Any extra buttons for this lecture. `actions?.(e)` calls `actions` only if it was given.
+
+=== FILE frontend/src/components/ui.tsx
+>>> SUMMARY
+**Small reusable pieces** used by many pages. Writing them once keeps every page consistent: every error box looks the same, and every form field shows its error message in the same place.
+
+| Piece | Looks like |
+|---|---|
+| `PageHeader` | the page title, an optional subtitle, and buttons on the right |
+| `Loading` | a spinning circle and "Loading…" |
+| `ErrorBanner` | a red box with the message and an optional "Try again" button |
+| `Alert` | a coloured box: blue info, green good, amber warn, red bad |
+| `EmptyState` | grey "Nothing to show yet." in an empty list |
+| `Badge` | a small coloured pill, such as "Paid" or "Overdue" |
+| `Field` | a label, the input, a hint, and the error message under it |
+| `PercentBar` | a thin bar filled to a percentage, red when too low |
+>>> 9-11
+`PageHeader` draws a row holding the title block …
+>>> 13
+… the subtitle, only if one was given (`&&` means "draw the right-hand part only if the left-hand part is true") …
+>>> 15
+… and the buttons on the right, if any.
+>>> 22-23
+`Loading`: a box marked `aria-busy`, which tells screen readers content is on its way.
+>>> 31-35
+`ErrorBanner`: a red box with `role="alert"` (screen readers announce it immediately), the message, and a "Try again" button if the page passed an `onRetry` function.
+>>> 45-48
+`Alert`: a box whose class, e.g. `alert alert-warn`, sets the colour. Only red ones are announced as alerts. An optional bold title comes first, then the content.
+>>> 55
+`EmptyState`: grey text; by default "Nothing to show yet."
+>>> 60-61
+`Badge`: the plain `badge` class for info, otherwise e.g. `badge badge-good`.
+>>> 66-67
+`Field`: a box holding …
+>>> 69
+… the input the page passed in (text box, date picker, drop-down…).
+>>> 70
+A grey hint, shown only while there is no error.
+>>> 71-73
+The red error message. Its id, e.g. `email-error`, lets the input point to it with `aria-describedby`, so screen readers read the error together with the field.
+>>> 82
+`PercentBar`: the fill width, kept between 0 and 100 (a missing percentage counts as 0).
+>>> 83-85
+The bar. Its class adds `low` (red) or `warn` (amber). `aria-hidden` hides it from screen readers, because the number is already written next to it.

@@ -1,0 +1,89 @@
+=== FILE frontend/src/pages/LoginPage.tsx
+>>> SUMMARY
+**The sign-in screen** at `/login`. The person types a username and password and presses "Sign in". What happens next:
+
+1. The browser checks that both boxes are filled ("Enter both your username and your password.").
+2. `login()` sends `POST /api/auth/login` with `{"username":"student","password":"Edumate@2026"}`.
+3. The backend checks the bcrypt hash, the lockout counter and the account, and answers with a **token** and the user's details, or with an error:
+   - 401 "Invalid username or password." (the message never says **which** of the two was wrong, so attackers cannot find out which usernames exist);
+   - 423 "Too many failed attempts. Your account is locked until 10:45 AM." (15 minutes after the fifth failure)
+4. On success, the token is saved and the person is sent to the page they originally asked for, or to the dashboard.
+
+**The demo helper.** In development builds only, a list of demo accounts appears under the form. Clicking one fills in its username and the demo password. A production build (`npm run build`) removes the helper, because `SHOW_DEMO_ACCOUNTS` is false there.
+
+**Every text** on this page is in `messages.ts` under `login`: the title, labels, button, hint and account descriptions.
+>>> 16-19
+The page's memory: what is typed in the two boxes, the current error message, and `busy` (true while waiting for the server, which disables the button so it cannot be pressed twice).
+>>> 22
+Where to go after login: the address `RequireAuth` remembered (`state.from`), or `/` (the dashboard). `?.` and `??` handle the case where nothing was remembered.
+>>> 24-25
+Already logged in (for example Back was pressed after login): go straight on.
+>>> 28
+`handleSubmit`: runs when the form is submitted (the button is clicked or Enter is pressed).
+>>> 29
+Without this, the browser would do an old-fashioned form submission and reload the whole page.
+>>> 30-32
+A box is empty → show "Enter both your username and your password." and stop. Nothing is sent.
+>>> 34-35
+Busy, and no old error.
+>>> 36-38
+Tries to log in. On success, go to the remembered page. `replace` means the Back button will not return to the login page.
+>>> 39-40
+On failure, show the server's message, e.g. "Invalid username or password."
+>>> 41-43
+Always: no longer busy.
+>>> 46-49
+The drawing: a centred card holding the brand …
+>>> 50
+… the logo …
+>>> 53-55
+… the title, the subtitle, and the red error box if there is an error.
+>>> 56
+The form. `noValidate` switches off the browser's own pop-up bubbles; EduMate shows its own messages instead, in its own style and words.
+>>> 57
+The username field:
+>>> 59-64
+- `id="username"` connects it to its label, so clicking the label focuses the box and screen readers read the label;
+- `autoComplete="username"` lets password managers fill it in;
+- `value` and `onChange` make it a *controlled input*: React holds the text, and every key press updates it;
+- `autoFocus` puts the cursor here when the page opens.
+>>> 67
+The password field:
+>>> 69-74
+`type="password"` shows dots instead of the letters; `autoComplete="current-password"` helps password managers.
+>>> 77-78
+The submit button, disabled while busy, reading "Signing in…" meanwhile.
+>>> 82-83
+Only in development: the demo-accounts box.
+>>> 86-93
+One button per demo username. Clicking fills in both boxes.
+>>> 96-98
+The username, then its description from `messages.ts` (`login.demoAccounts`), e.g. "applicant – Applicant Priya Nair (adult, M.Tech)".
+
+=== FILE frontend/src/pages/DashboardPage.tsx
+>>> SUMMARY
+**The home page** after login: "Welcome, Aarav Sharma", then a grid of coloured **cards**. The backend decides which cards the person's role sees (`DashboardService`), and the frontend just draws them. Each card is a link to the page where its number can be acted on.
+>>> 15-16
+The drawing starts. `<>` groups the parts without an extra box.
+>>> 17
+The title "Welcome, <name>" and a subtitle.
+>>> 18
+While waiting: "Loading…".
+>>> 19
+If loading failed: the red box with a "Try again" button that calls `reload`.
+>>> 20
+If there are no cards at all: a grey message.
+>>> 21-23
+Otherwise, a grid with one tile per card.
+>>> 24
+Each tile is a link (`<Link>` changes the page without reloading). Its class, e.g. `stat tone-warn`, gives it its colour. The label, big value and hint are drawn inside it.
+
+=== FILE frontend/src/pages/NotFoundPage.tsx
+>>> SUMMARY
+Shown for any address that is not listed in `App.tsx`, for example `/nonsense`: "Page not found", with a button back to the dashboard.
+>>> 9-10
+The drawing.
+>>> 11
+The title and explanation, from `messages.ts` (`notFound`).
+>>> 12
+A button-looking link to the dashboard.

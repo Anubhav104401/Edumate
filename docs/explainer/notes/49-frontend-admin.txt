@@ -1,0 +1,68 @@
+=== FILE frontend/src/pages/admin/AuditPage.tsx
+>>> SUMMARY
+**The audit trail**: who changed what, when, and the value **before and after**. Keeping the old value is the fix for DR-04 / DEF-022: the original design recorded only the new value, so a changed mark could not be traced back.
+
+Examples of lines:
+- `MARK_AMENDED` by `arjun.shetty`: Mark #412, 18.00 → 22.00 (reason: IA-2 re-evaluated);
+- `RESULT_SET_PUBLISHED` by `examsup2`;
+- `ACCESS_DENIED` by `student2`: GET /api/reports/consolidated-marks (TC-017);
+- `DOCUMENT_VIEWED` by `admissions`: an applicant's ID_PROOF.
+
+The newest entries come first. The filters narrow the list to one record, for example type `Mark` and id `412`. Both must be filled for the filter to apply.
+>>> 18-20
+Pressing Search: filter only if **both** a type and an id were typed; otherwise show everything. Changing `filter` triggers a reload.
+>>> 23-26
+The drawing: title and subtitle, then a form-card with the filters.
+>>> 27-28
+The record-type box (e.g. `Mark`, `AdmissionApplication`, `Payment`) …
+>>> 30-31
+… the record-id box …
+>>> 33
+… the Search button …
+>>> 36
+… and Refresh, which reloads without changing the filter.
+>>> 40-46
+Loading, error, then the table and its header row.
+>>> 55-57
+One row per audit entry, starting with its time. `nowrap` keeps the date on one line.
+>>> 61-62
+The record, e.g. "Mark #412".
+
+=== FILE frontend/src/pages/admin/OutboxPage.tsx
+>>> SUMMARY
+**Every e-mail and SMS EduMate has queued**, newest first, with its status: amber PENDING (waiting for the dispatcher, which runs every 5 seconds), green SENT, red FAILED (after 3 failed tries). "Refresh" reloads, so you can watch PENDING messages turn into SENT a few seconds after, say, publishing results or requesting a consent code.
+
+This page is the visible side of the DR-08 fix: business actions only **queue** messages, and a separate dispatcher sends them.
+>>> 11
+Badge colours: pending amber, sent green, failed red.
+>>> 16-22
+The drawing: the title, subtitle, and a Refresh button on the right.
+>>> 27-33
+Loading, error, then the table and its header row.
+>>> 41-43
+One row per message.
+>>> 47-48
+The subject, with the message text underneath in small grey type.
+>>> 51
+The status badge.
+
+=== FILE frontend/src/pages/admin/RoleMatrixPage.tsx
+>>> SUMMARY
+**The backend's RoleMatrix as a table**: every web address pattern, which HTTP method (or "any"), and exactly who may call it:
+- a list of role badges (for example "Examination superintendent", "Administrator");
+- **Public** (amber): no login needed; only the login endpoint and the payment gateway's signed callback;
+- **Any logged-in user** (blue).
+
+Anything **not** in this table is refused for everyone (deny by default, the fix for DR-06 / DEF-031). The data comes from the same object Spring Security enforces, so this page can never show a rule that differs from the real one.
+
+(This is the page that once went blank because Spring 7 sent HTTP methods as `{}`; see `AdminController` and `ErrorBoundary`.)
+>>> 13-15
+The drawing: title and subtitle.
+>>> 16-22
+Loading, error, then the table and its header row.
+>>> 28-30
+One row per rule, in the order they are checked.
+>>> 33-36
+The "who" cell. For a role rule, one badge per role, with each role's display name from `messages.ts` …
+>>> 40
+… otherwise a single badge: amber "Public" or blue "Any logged-in user".

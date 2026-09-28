@@ -1,0 +1,260 @@
+=== FILE backend/src/main/java/com/edumate/EduMateApplication.java
+>>> SUMMARY
+This is the **ON switch** of the whole backend. When you run the backend (`mvnw spring-boot:run`, or `java -jar edumate-backend-2.0.0.jar`), Java looks for a method called `main` and runs it. Our `main` has one job: hand control to Spring Boot.
+
+Think of Spring Boot as a very organised school principal. On the first morning it walks through every room (every Java file in `com.edumate` and its sub-folders), finds everything labelled `@Service`, `@Component`, `@RestController`, `@Configuration` …, creates exactly one of each, and introduces them to each other (a service that needs the `AuditLogger` is handed the `AuditLogger`). It also starts a small web server (Tomcat) that listens on **port 8080**, connects to the database, runs the Flyway migration that creates the tables, and then waits for requests.
+
+The four labels on top of the class switch on four extra features: automatic set-up, typed settings, caching and timed jobs.
+>>> 15
+`@SpringBootApplication` is really three labels in one: (1) "this is a configuration class", (2) "scan this package and every package below it for components", (3) "auto-configure": look at the libraries in pom.xml and set them up with sensible defaults. Because `spring-boot-starter-webmvc` is present it starts Tomcat; because `spring-boot-starter-data-jpa` and H2/PostgreSQL are present it creates a database connection pool, and so on.
+>>> 16
+`@ConfigurationPropertiesScan` tells Spring to look for classes marked `@ConfigurationProperties` (our `AppProperties`) and fill them from `application.yml`. Without it, `AppProperties` would never be created.
+>>> 17
+`@EnableCaching` switches on the cache. From now on a method marked `@Cacheable` (see `ResultQueryService.publishedFor`) remembers its answers. In development the cache lives in memory; in Docker it lives in Redis.
+>>> 18
+`@EnableScheduling` switches on timed jobs. `NotificationDispatcher.dispatchPending()` is marked `@Scheduled(fixedDelay 5 s)`, so it runs every 5 seconds only because of this line.
+>>> 19
+Declares the class `EduMateApplication`. `public` means any code may use it. The class itself holds no data; it only exists to carry the labels above and the `main` method below.
+>>> 21
+`public static void main(String[] args)` – the exact signature Java looks for when it starts a program. `static` means it can run without first creating an object; `void` means it returns nothing; `args` are any words typed after the command (for example `--server.port=9090`).
+>>> 22
+`SpringApplication.run(...)` starts everything described in the summary. We pass it this class (so Spring knows where to start scanning) and the command-line words (so they can override settings). This call keeps running until the server is stopped.
+
+=== FILE backend/src/main/java/com/edumate/config/AppProperties.java
+>>> SUMMARY
+Every setting that belongs to EduMate itself lives under `edumate:` in `application.yml` (for example the 75 % attendance rule, the JWT secret, the library fine). This file turns those text settings into **typed Java values**, so the rest of the code can write `properties.academic().attendanceThresholdPercent()` and get the number 75, instead of reading and parsing text again and again.
+
+How the matching works: Spring converts the YAML names written with dashes (`attendance-threshold-percent`) into Java names written in camelCase (`attendanceThresholdPercent`), level by level. If a value has the wrong type (for example `loan-days: fourteen`), the application refuses to start and says which setting is wrong. That is much better than finding out on results morning.
+
+Everything here is a **record**: a compact, read-only class. Once the settings are loaded they cannot be changed by accident while the app is running.
+>>> 14
+Connects this record to the `edumate:` section of `application.yml`. Every field below is filled from the sub-section with the same name.
+>>> 15-23
+The top-level record. Each line inside the round brackets is one sub-section of `edumate:` in application.yml:
+- `security` ← `edumate.security` (JWT secret, token lifetime, lockout rules)
+- `academic` ← `edumate.academic` (regulation name, 75 % threshold, 16 weeks per semester)
+- `payment` ← `edumate.payment` (the gateway's signing secret)
+- `storage` ← `edumate.storage` (the folder for uploaded scans)
+- `library` ← `edumate.library` (loan days, fine per day, maximum fine)
+- `admissions` ← `edumate.admissions` (merit-list weights and reserved seat shares)
+- `demo` ← `edumate.demo` (demo data and visible OTP switches)
+- `tenants` ← `edumate.tenants` (the list of campuses). `List<Tenant>` means "a list, each item being a Tenant".
+>>> 26-27
+The login settings: the secret used to sign login tokens, how many hours a token stays valid (8), how many wrong passwords are allowed (5), how many minutes an account stays locked (15), and whether the H2 database console may be opened in the browser (dev only).
+>>> 31
+The university regulation values: the regulation's name (R-2023), the attendance threshold in percent (75), and the number of teaching weeks in a semester (16, used to work out how many classes are planned in total).
+>>> 35
+Only one value: the secret key shared with the payment gateway. Both sides use it to sign and check payment callbacks (see `GatewaySignature`).
+>>> 39
+Where uploaded scanned documents are kept on disk (`./storage` by default).
+>>> 43
+Library rules. `BigDecimal` is used for money so that 2.00 × 3 is exactly 6.00, never 5.999999.
+>>> 47-48
+Merit-list rules: the weight of the entrance score (0.60), the weight of the qualifying-exam percentage (0.40), and a lookup table from category to its share of seats (OBC → 0.27, SC → 0.15, ST → 0.075).
+>>> 52
+Two demo switches: `seed` fills an empty database with demo data; `exposeOtp` shows the guardian's one-time code on screen so the consent flow can be demonstrated without a real inbox. Both must be `false` in real use.
+>>> 56
+One campus: its short code (JGC), full name and city.
+
+=== FILE backend/src/main/java/com/edumate/config/ClockConfig.java
+>>> SUMMARY
+Every date-dependent rule in EduMate (Is this fee overdue? How many days late is this book? Is this applicant under 18?) needs to know "what time is it now?". Instead of each class asking the computer directly, they all ask **one shared `Clock`** created here.
+
+Why go to this trouble? Two reasons:
+- **Correct time zone.** The server might run in a data centre set to UTC. The university works in Indian Standard Time, so the clock is fixed to `Asia/Kolkata`. Otherwise a fee paid at 1 a.m. IST could be counted on the previous day.
+- **Testable code.** A test can replace this clock with a fixed one ("pretend today is 15 October 2026") and get the same answer every time.
+>>> 18
+A constant holding the time zone "Asia/Kolkata" (IST, UTC+5:30). Other classes (for example `LoginAttemptService`, which prints lockout times) use `ClockConfig.CAMPUS_ZONE` too.
+>>> 20
+`@Bean`: the object returned by the method below becomes a shared Spring object. Any class whose constructor asks for a `Clock` receives this one.
+>>> 21
+The method's name `clock` becomes the bean's name. It returns a `Clock`.
+>>> 22
+`Clock.system(CAMPUS_ZONE)` = the computer's real clock, but reading dates in Indian time.
+
+=== FILE backend/src/main/java/com/edumate/config/WebConfig.java
+>>> SUMMARY
+A tiny piece of glue. Many controller methods in EduMate simply declare a parameter `CurrentUser me` and magically receive "the logged-in person". Spring MVC does not know how to fill such a parameter by itself, so `CurrentUserArgumentResolver` teaches it, and this file **registers** that teacher with Spring MVC.
+>>> 13
+`implements WebMvcConfigurer` means "I want to add my own settings to Spring MVC (the web layer)". We only use one of its hooks, `addArgumentResolvers`.
+>>> 21
+`@Override`: we are filling in a method that `WebMvcConfigurer` offers.
+>>> 22-23
+Spring calls this at start-up and gives us its list of "parameter fillers". We add ours to the list. From then on, whenever a controller method has a `CurrentUser` parameter, Spring asks our resolver to supply it.
+
+=== FILE backend/src/main/java/com/edumate/common/ApiError.java
+>>> SUMMARY
+Whenever something goes wrong, the backend answers with **exactly the same JSON shape**, so the frontend only needs one way of reading errors. For example, saving an attendance register that someone else changed produces:
+
+<pre class="block">{
+  "timestamp": "2026-09-28T13:41:07.123Z",
+  "status": 409,
+  "code": "STALE_UPDATE",
+  "message": "Another teacher saved this attendance sheet after you opened it. Reload to see their changes.",
+  "path": "/api/attendance/sessions",
+  "traceId": null,
+  "fieldErrors": null
+}</pre>
+
+- `status` is the HTTP status number (409 = conflict).
+- `code` is a short fixed word the frontend can test (`if (err.code === 'STALE_UPDATE')`).
+- `message` is written for people and shown on screen as-is.
+- `fieldErrors` lists which form fields broke which rule (only for validation errors).
+- `traceId` is only filled for unexpected server errors: it is a reference number to quote to support.
+
+The frontend reads this in `api/http.ts` (function `toApiError`) and turns it into an `ApiError` object there.
+>>> 11-18
+The seven fields, in the order they appear in the JSON. Jackson (the JSON library) writes a record's fields using their names, so the Java names here ARE the JSON names. `Instant` becomes text such as "2026-09-28T13:41:07Z"; `Map<String, String>` becomes a JSON object like `{"email": "Enter a valid e-mail address."}`.
+
+=== FILE backend/src/main/java/com/edumate/common/ApiException.java
+>>> SUMMARY
+When a service decides that a request cannot be completed (student not found, fee already paid, results already published …) it **throws** an `ApiException`. Throwing is like pulling an emergency cord: the current method stops immediately, and so does every method that called it, until something catches the exception. In EduMate the catcher is `GlobalExceptionHandler`, which turns it into an `ApiError` JSON answer.
+
+The exception carries three things: the HTTP status to send (404, 400, 409 …), a short code (`ALREADY_PAID`) and a human message. The four `static` helper methods make throwing short and consistent: `throw ApiException.conflict("ALREADY_PAID", "This fee has already been paid in full.");`.
+
+It extends `RuntimeException`, which in Java means methods do not have to declare "I might throw this" in their signature, keeping the code clean. Throwing inside a `@Transactional` method also makes Spring **roll back** the database changes of that request (unless told otherwise with `noRollbackFor`).
+>>> 15
+The constructor: build a new ApiException from a status, a code and a message.
+>>> 21-22
+`ApiException.notFound("Student")` → status 404, code NOT_FOUND, message "Student was not found.". `static` means you call it on the class itself, without having an object first.
+>>> 25-26
+`badRequest(code, message)` → status 400: the request itself is wrong (bad input, missing information).
+>>> 29-30
+`conflict(code, message)` → status 409: the request is fine, but the current state of the data does not allow it (already paid, already published, someone else saved first).
+>>> 33-34
+`forbidden(message)` → status 403 with code FORBIDDEN: you are logged in, but not allowed to do this particular thing (for example, a teacher opening another teacher's course).
+
+=== FILE backend/src/main/java/com/edumate/common/GlobalExceptionHandler.java
+>>> SUMMARY
+The **safety net** under every controller. Whatever goes wrong while a request is being handled (our own `ApiException`, a validation failure, a database rule, a file that is too large, or a real bug) ends up in one of the methods of this class. Each method builds an `ApiError` JSON answer with the right HTTP status.
+
+Two important security choices live here:
+- **No stack traces to users** (fixes the OWASP A05 finding "stack traces disclosed in two API error responses"). A stack trace shows file names, library versions and code paths an attacker could use. For unexpected errors, the user only gets a short reference such as `3f2c9a1b`, and the full details go to the server log under the same reference.
+- **Every "access denied" is written to the audit log** (expected result of test case TC-017).
+
+How Spring picks the method: it looks at the type of the exception and finds the `@ExceptionHandler` for the most specific matching type. The last one, for `Exception.class`, catches anything the others did not.
+>>> 36
+`@RestControllerAdvice`: "these handlers apply to every `@RestController` in the app", and what they return is sent as JSON.
+>>> 43
+Constructor: Spring hands in the `AuditLogger`, needed to record denied access.
+>>> 49-50
+Handles our own `ApiException`: take its status, code and message as they are and build the JSON answer with the helper `build(...)` at the bottom of this file.
+>>> 55-60
+Handles **validation failures**: a request body marked `@Valid` broke one of its rules (for example `@NotBlank` on the username). Spring collects every broken rule in a "binding result". We copy each field name and its message into an ordered map (`LinkedHashMap` keeps the order). `putIfAbsent` keeps only the first message per field if a field broke two rules. The answer is 400 with code VALIDATION_FAILED and the `fieldErrors` map, which the application form uses to show red messages under the right inputs.
+>>> 65-67
+Handles **optimistic-locking failures**: Hibernate found that the row's `@Version` number changed between reading and saving, i.e. someone else saved first. We answer 409 STALE_UPDATE instead of silently overwriting their work (the fix for design defect DR-01).
+>>> 72-75
+Handles **database rule violations** (a UNIQUE or CHECK constraint). The real database message is written only to the server log (line 73, with `log.warn`) because it can reveal table and column names. The user gets a neutral 409 message.
+>>> 79-81
+Handles uploads larger than `spring.servlet.multipart.max-file-size` (5 MB). Tomcat stops reading the file and Spring throws this; we answer 413 "Content Too Large" with a clear message.
+>>> 85-87
+Handles a request body that is not valid JSON (for example a missing quote or brace): 400 MALFORMED_JSON.
+>>> 90-94
+One method for three related problems: a required `?name=` parameter is missing, a required part of an upload form is missing, or a value in the URL has the wrong type (letters where a number is expected). All give 400 BAD_PARAMETER.
+>>> 98-100
+Handles calling an address with the wrong HTTP method, for example GET on a URL that only accepts POST: 405.
+>>> 104-105
+Handles a URL where nothing exists at all: 404 NOT_FOUND. (In practice most unknown `/api` URLs are already refused with 403 by the RoleMatrix's deny-by-default rule before they get here.)
+>>> 110-114
+Handles **access denied** raised inside the application (as opposed to by the security filter). Line 111 finds out who was asking: `getUserPrincipal()` is the logged-in user, or nobody. Lines 112-113 write an `ACCESS_DENIED` audit record naming the method and URL they tried. Line 114 answers 403.
+>>> 119-125
+The **last-resort handler** for anything unexpected (a real bug, a database that is down …).
+- Line 120 makes a short random reference: the first 8 characters of a UUID.
+- Line 121 writes the whole error, including the stack trace (the final `ex`), to the server log together with the reference.
+- Lines 122-124 build an ApiError whose message only contains the reference, never the technical details.
+- Line 125 sends it with status 500.
+When a user reports "reference 3f2c9a1b", a developer can search the log for it.
+>>> 128-132
+The small helper used by all handlers above: it fills an `ApiError` with the current time, the status number (`status.value()` turns `HttpStatus.CONFLICT` into 409), the code, the message, the URL that was called and the optional field errors, then wraps it in a `ResponseEntity` with the matching status. `private` = only this class can call it.
+
+=== FILE backend/src/main/java/com/edumate/common/audit/AuditEntry.java
+>>> SUMMARY
+One row of the **audit trail**: a permanent diary line saying *who* did *what* to *which record*, *when*, and what the value was *before* and *after*. For example, when a teacher changes an internal mark:
+
+<pre class="block">actor:       arjun.shetty
+action:      MARK_AMENDED
+entity_type: Mark
+entity_id:   183
+old_value:   internal=18.00
+new_value:   internal=22.00 (23BTRCS003, 23CS502; reason: Re-evaluation of IA-2 script)
+occurred_at: 2026-09-28T13:45:10Z</pre>
+
+In the SQA report, design defect **DR-04** (and test defect **DEF-022**) was that the old design stored only the new value, so a disputed mark could not be traced. This entity has separate `oldValue` and `newValue` columns, which is the fix.
+
+Entries are only ever added, never changed: that is why this class has getters but no setters.
+>>> 45-47
+An empty constructor that only Hibernate uses: when it reads a row it first creates an empty `AuditEntry`, then fills the fields. `protected` hides it from our own code.
+>>> 49-50
+The constructor our code uses (only `AuditLogger` calls it) to create a new diary line with all seven facts. The database adds the `id` itself when it is saved.
+
+=== FILE backend/src/main/java/com/edumate/common/audit/AuditRepository.java
+>>> SUMMARY
+The **repository** for audit entries: the object that reads and writes the `audit_log` table. We only write an interface with two method names; Spring Data generates the actual code (and the SQL) when the application starts, by reading the method names word by word. `JpaRepository` already provides `save`, `findById`, `findAll`, `count` and `delete`.
+>>> 13
+`findAllByOrderByOccurredAtDesc(Pageable)`: every audit entry, newest first, but only one "page" of them; the caller passes `PageRequest.of(0, 200)` = the first 200. Without the page limit a big audit log would be loaded entirely into memory.
+
+=== FILE backend/src/main/java/com/edumate/common/audit/AuditLogger.java
+>>> SUMMARY
+The **single place** in the whole backend that writes audit records (the RTM names this design element "AuditLogger"). Services call one method: `auditLogger.record(actor, action, entityType, entityId, oldValue, newValue)`.
+
+An important detail: `record` runs **inside the caller's transaction**. If the change being audited is later rolled back (because of an error), its audit line is rolled back too. The audit trail therefore never describes a change that did not actually happen.
+
+Very long values are cut to 4000 characters, because the database columns `old_value` / `new_value` hold at most 4000 characters, and an over-long value would make the whole save fail.
+>>> 17
+The maximum length of a stored value, matching `VARCHAR(4000)` in the database schema.
+>>> 27
+`@Transactional` with the default setting "REQUIRED": if the caller already has a transaction, join it; if not (for example `RestAuthHandlers` recording a 403), start a new small one.
+>>> 28-29
+The method everyone calls. `entityId` is an `Object`, so callers can pass a number (a Long id) or a text (such as "GET /api/reports/..."); it is turned into text on line 30 with `String.valueOf`.
+>>> 30-31
+Builds the new diary line: both values shortened by `trim`, and the time taken from the shared IST clock.
+>>> 32
+Saves it (an INSERT into `audit_log`).
+>>> 35-40
+`trim`: gives back the value unchanged when it is missing (`null`) or short enough; otherwise gives back only its first 4000 characters.
+
+=== FILE backend/src/main/java/com/edumate/common/audit/AuditController.java
+>>> SUMMARY
+Lets administrators and examination superintendents read the audit trail at `GET /api/audit`. Who may call it is decided by the RoleMatrix (ADMIN, EXAM_SUPERINTENDENT). The frontend page is `pages/admin/AuditPage.tsx`.
+
+Two ways to use it:
+- `GET /api/audit` → the latest 200 entries of any kind.
+- `GET /api/audit?entityType=Mark&entityId=183` → the full history of one record, newest first.
+>>> 22-24
+Answers GET at `/api/audit`. The two `@RequestParam(required = false)` parameters are optional `?entityType=` and `?entityId=` values from the URL; when missing they are `null`.
+>>> 25-27
+If both filters were given, return the history of that one record.
+>>> 28
+Otherwise return the newest 200 entries of all kinds. The list of `AuditEntry` objects is turned into a JSON array automatically.
+
+=== FILE backend/src/main/java/com/edumate/campus/Campus.java
+>>> SUMMARY
+One **campus** of the university, for example `JGC` (Jain Global Campus, Kanakapura) and `CCC` (City Campus, Bengaluru). EduMate is **multi-tenant**: one installation serves several campuses, and each campus's staff only see their own campus's data. Programmes, students, users, exam sessions and books all carry a `campus_code` pointing to one of these rows.
+
+Unlike most tables, the primary key here is not an automatic number but the short text code itself ("JGC"), because it is short, unique, and meaningful.
+>>> 15-16
+`@Id` on a `String`: the campus code IS the id. There is no `@GeneratedValue`, because we choose the code ourselves (in application.yml).
+>>> 31
+The constructor used by `TenantProvisioner` to create a new campus row.
+
+=== FILE backend/src/main/java/com/edumate/campus/CampusRepository.java
+>>> SUMMARY
+Reads and writes campuses. `JpaRepository<Campus, String>` means "for Campus rows, whose id is a String (the code)". No extra methods are needed: `findById("JGC")` and `save(...)` come ready-made.
+
+=== FILE backend/src/main/java/com/edumate/campus/TenantProvisioner.java
+>>> SUMMARY
+The SQA Plan's **Flexibility** objective says: "Additional campuses are onboarded without code change; a new tenant is provisioned by configuration alone." This class is how that works.
+
+Every time the backend starts, it reads the `edumate.tenants` list from `application.yml` and makes sure each campus exists in the database: missing campuses are created, existing ones get their name and city refreshed. So adding a third campus is a matter of adding three lines to the YAML file and restarting. No Java is touched.
+
+`ApplicationRunner` means Spring calls `run()` once, right after start-up. `@Order(1)` makes it run **before** `DemoDataSeeder` (which is `@Order(2)`), because the demo data needs the campuses to exist.
+>>> 40
+The method Spring calls once at start-up. `ApplicationArguments` are the command-line words; not needed here.
+>>> 41
+Goes through the campuses listed in application.yml, one at a time. `properties.tenants()` is the list; `tenant` is the current item.
+>>> 42
+Looks for a campus with this code in the database. `findById` returns an `Optional` (a box that may be empty); `orElse(null)` means "the campus, or null if the box is empty".
+>>> 43-45
+Not in the database yet: create it with the current time and write a note to the server log.
+>>> 46-48
+Already there: update its name and city in case they were changed in application.yml. No `save` call is needed: the campus was loaded inside a `@Transactional` method, so Hibernate notices the changes and writes them automatically when the method ends ("dirty checking").

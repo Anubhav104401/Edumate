@@ -1,0 +1,64 @@
+<h1>Start here: what this guide is and how to read it</h1>
+
+<p>This guide explains <strong>EduMate</strong>, the education-automation software built from the SQA activity report
+<em>"Automation Software for an Educational Organization"</em> (course 23CSE701, Anubhav Kumar, 23BTRCT015).
+The report calls the system <strong>EduAutomate</strong>; the code calls it <strong>EduMate</strong>. They are the same thing.</p>
+
+<p>It assumes you know <strong>nothing</strong> about programming. Every idea is explained the first time it appears,
+usually with an everyday comparison in a yellow box like this one:</p>
+
+<div class="callout kid"><strong>Like a school</strong>
+A big school has a gate with a guard, an office with files, teachers, a notice board, and a rule book.
+EduMate is the same, but made of programs: a guard (security), files (the database), workers (services),
+a notice board (the screens) and a rule book (the RoleMatrix and the settings).</div>
+
+<h2>What EduMate does</h2>
+<p>It runs the everyday paperwork of a university with several campuses:</p>
+<table>
+<thead><tr><th>Area</th><th>What people do in EduMate</th><th>Who</th></tr></thead>
+<tbody>
+<tr><td>Admissions</td><td>Apply online, upload scanned documents, get guardian consent for minors, be reviewed, shortlisted, offered a seat, enrolled; merit list with reserved seats</td><td>Applicant, admissions officer</td></tr>
+<tr><td>Attendance</td><td>Teachers take attendance per lecture; students and parents see their percentages</td><td>Faculty, student, guardian</td></tr>
+<tr><td>Examinations</td><td>Marks entry with an audit trail, hall-ticket eligibility, SGPA/CGPA computation, two-person approval, publication, reports</td><td>Faculty, exam superintendent, student</td></tr>
+<tr><td>Fees</td><td>Bills, online payment through a (simulated) bank gateway, receipts, account statements</td><td>Student, guardian, accounts officer</td></tr>
+<tr><td>Timetable</td><td>Automatic clash-free timetable, manual adjustment, clash detection, publication, workload</td><td>Administrator, faculty, student</td></tr>
+<tr><td>Library</td><td>Catalogue search, issue and return, fines</td><td>Librarian, student</td></tr>
+<tr><td>Administration</td><td>Audit log, message outbox, role matrix, dashboards for every role</td><td>Administrator</td></tr>
+</tbody></table>
+
+<h2>The two halves of this guide</h2>
+<ol>
+<li><strong>The chapters</strong> (this part) tell the story: computers from zero, the technologies, how the pieces talk to
+each other, how a request travels, security, the document upload system, the algorithms, why each choice was made,
+how to change things, how it is tested, how to run it, and questions an examiner may ask.</li>
+<li><strong>Every file, every line</strong> (the last part) goes through every file of the project.
+Open a file by clicking its name. Each row shows the line number, the line, and what it means. White explanations
+were written by hand; grey ones were produced automatically for repetitive lines (imports, closing brackets, comments,
+settings).</li>
+</ol>
+
+{{STATS}}
+
+<h2>Suggested reading paths</h2>
+<table>
+<thead><tr><th>If you want to…</th><th>Read</th></tr></thead>
+<tbody>
+<tr><td>understand the project from nothing</td><td>every chapter in order, then skim the files</td></tr>
+<tr><td>change a text, colour, message or limit</td><td><a href="#11-cookbook">Cookbook: changing things</a></td></tr>
+<tr><td>understand how the browser talks to the server</td><td><a href="#04-architecture-and-ports">Architecture and ports</a>, then <a href="#05-life-of-a-request">The life of one request</a></td></tr>
+<tr><td>understand file uploads in detail</td><td><a href="#08-document-upload">The document upload system</a></td></tr>
+<tr><td>prepare for a viva</td><td><a href="#10-decisions">Decisions and alternatives</a>, <a href="#14-viva">Viva questions</a>, <a href="#15-report-notes">Report discrepancies</a></td></tr>
+</tbody></table>
+
+<h2>Useful controls on this page</h2>
+<ul>
+<li>The <strong>search box</strong> at the top filters the file list by file name or title: type <code>Payment</code> or <code>messages</code> to see only those files. To find a word anywhere on the page (for example <code>bcrypt</code>), use your browser's own Find: <strong>Ctrl+F</strong> (<strong>Cmd+F</strong> on a Mac). Open all files first if the word may be inside one.</li>
+<li><strong>Open all / Close all</strong> in the file section opens every file at once (the page becomes very long).</li>
+<li>The <strong>theme button</strong> switches between light and dark.</li>
+<li>Blue links such as <a href="#f-frontend-src-i18n-messages-ts">messages.ts</a> jump to that file; links ending in a line number jump to that exact line.</li>
+</ul>
+
+<div class="callout warn"><strong>One area without hand-written line notes</strong>
+The files of the <code>attendance</code> package (and the three attendance screens and their tests) appear in the
+file section with automatic notes only; their hand-written line-by-line notes are not included in this edition.
+Everything else has hand-written notes.</div>

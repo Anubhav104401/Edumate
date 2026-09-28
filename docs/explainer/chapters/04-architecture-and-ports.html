@@ -1,0 +1,123 @@
+<h1>Architecture and ports: which program runs where, and how they connect</h1>
+
+<h2>The pieces</h2>
+<pre class="block">                 ┌────────────────────────── your computer ──────────────────────────┐
+  YOU ──► Browser│                                                                     │
+                 │  DEVELOPMENT (npm run dev + mvnw spring-boot:run)                   │
+                 │                                                                     │
+                 │   Browser ──► Vite :5173 ──/api/...──► Spring Boot :8080 ──► H2     │
+                 │               (serves React)            (the backend)     (in memory)│
+                 │                                                ├──► ./storage (uploads)
+                 │                                                └──► log (e-mail/SMS) │
+                 └─────────────────────────────────────────────────────────────────────┘
+
+                 ┌─────────────────── DOCKER (docker compose up --build) ─────────────┐
+  YOU ──► Browser│  :3000 ──► nginx :80 ──/api/...──► backend :8080 ──► postgres :5432│
+                 │           (serves built React)          │        └──► redis :6379   │
+                 │                                         └──► volume "uploads"        │
+                 └─────────────────────────────────────────────────────────────────────┘</pre>
+
+<h2>Every port in EduMate</h2>
+<table>
+<thead><tr><th>Port</th><th>Program</th><th>When</th><th>Who connects to it</th><th>Where it is set</th></tr></thead>
+<tbody>
+<tr><td><strong>5173</strong></td><td>Vite development server</td><td>development</td><td>your browser</td><td><a href="#f-frontend-vite-config-ts-L16"><code>vite.config.ts</code> line 16</a> (<code>strictPort</code>: never silently another port)</td></tr>
+<tr><td><strong>8080</strong></td><td>Spring Boot backend (embedded Tomcat)</td><td>always</td><td>Vite or nginx (forwarding <code>/api</code>); tests use no port at all</td><td><a href="#f-backend-src-main-resources-application-yml-L8"><code>application.yml</code> line 8</a>: <code>${PORT:8080}</code></td></tr>
+<tr><td><strong>3000</strong></td><td>nginx (inside its container: 80)</td><td>Docker</td><td>your browser</td><td><code>docker-compose.yml</code>: <code>"3000:80"</code></td></tr>
+<tr><td><strong>5432</strong></td><td>PostgreSQL</td><td>Docker</td><td>the backend only (not published to your computer)</td><td><code>application-docker.yml</code>: <code>jdbc:postgresql://postgres:5432/edumate</code></td></tr>
+<tr><td><strong>6379</strong></td><td>Redis</td><td>Docker</td><td>the backend only</td><td><code>application-docker.yml</code>: <code>REDIS_PORT:6379</code></td></tr>
+</tbody></table>
+
+<div class="callout kid"><strong>Port mapping "3000:80"</strong>
+Inside its container, nginx listens at door 80. Docker opens door 3000 on your computer and connects it to door 80
+inside. So you knock on 3000, and nginx answers from 80. The database and Redis have no door opened to your
+computer at all: only the backend, inside Docker's private network, can reach them. That is safer.</div>
+
+<h3>Changing a port</h3>
+<ul>
+<li><strong>Backend:</strong> start it with the environment variable <code>PORT=9090</code>; then change the proxy target in <code>vite.config.ts</code> (<code>'/api': 'http://localhost:9090'</code>).</li>
+<li><strong>Frontend (dev):</strong> change <code>port: 5173</code> in <code>vite.config.ts</code>.</li>
+<li><strong>Docker:</strong> change the left number in <code>"3000:80"</code> or <code>"8080:8080"</code> in <code>docker-compose.yml</code>.</li>
+</ul>
+
+<h2>Why the browser only ever talks to one port: the proxy</h2>
+<p>A browser treats <code>http://localhost:5173</code> and <code>http://localhost:8080</code> as two different
+<strong>origins</strong> (origin = scheme + host + port). For safety, a page may not read answers from another origin
+unless that server sends special <strong>CORS</strong> headers allowing it.</p>
+<p>EduMate avoids the whole problem. The page calls <code>/api/...</code> on its <em>own</em> origin, and the program that
+served the page forwards the call to the backend:</p>
+<pre class="block">development:  browser → http://localhost:5173/api/fees/me → Vite forwards → http://localhost:8080/api/fees/me
+Docker:       browser → http://localhost:3000/api/fees/me → nginx forwards → http://backend:8080/api/fees/me</pre>
+<p>That is why <a href="#f-frontend-src-config-ts-L6"><code>API_BASE</code> is an empty string</a>: the same frontend code
+works in both set-ups, and no CORS configuration exists that could be set too loosely.</p>
+<p><em>Alternative:</em> serve the frontend and backend from different origins and configure CORS on the backend.
+That is common when they are hosted separately (for example the frontend on a CDN). It works, but one careless
+wildcard (<code>*</code>) can let any website call the API with a user's credentials.</p>
+
+<h2>Inside the backend: four layers</h2>
+<pre class="block">HTTP request
+   │
+   ▼
+Security filter chain   ── checks the JWT and the RoleMatrix           (security/)
+   │
+   ▼
+Controller              ── reads the URL / JSON, calls one service      (…Controller.java)
+   │                        method, returns its answer as JSON
+   ▼
+Service                 ── the business rules and the transaction       (…Service.java, …Generator, …Registry)
+   │
+   ▼
+Repository              ── reads and writes rows                        (…Repository.java)
+   │
+   ▼
+Database (tables)       ── defined by Flyway (V1__create_schema.sql), mapped by entities (@Entity classes)</pre>
+<div class="callout kid"><strong>Like a bank</strong>
+The guard at the door checks your ID (security). The counter clerk takes your form (controller). The officer behind
+applies the bank's rules (service). The records room keeps the ledgers (repository and database). The clerk never
+changes a ledger directly; the officer never talks to customers.</div>
+<p><strong>Why layers?</strong> Each layer has one job, so it can be tested and changed alone. For example
+<code>SgpaCalculator</code> is tested without any web server or database. The alternative, putting SQL directly in
+controllers, is quicker for tiny programs but becomes a tangle where every change risks breaking something unrelated.</p>
+
+<h2>The backend's packages (modules)</h2>
+<table>
+<thead><tr><th>Package</th><th>Contains</th></tr></thead>
+<tbody>
+<tr><td><code>config</code></td><td>settings (<code>AppProperties</code>), the campus clock (Asia/Kolkata), web set-up, the demo-data seeder</td></tr>
+<tr><td><code>common</code></td><td>the error format (<code>ApiError</code>, <code>ApiException</code>, <code>GlobalExceptionHandler</code>) and the audit log</td></tr>
+<tr><td><code>security</code></td><td>users, roles, login, lockout, JWT, the RoleMatrix, <code>CurrentUser</code></td></tr>
+<tr><td><code>campus</code></td><td>campuses (tenants), created from <code>edumate.tenants</code> at start-up</td></tr>
+<tr><td><code>academic</code></td><td>programmes, courses, students, exam sessions</td></tr>
+<tr><td><code>attendance</code></td><td>attendance sessions and records, summaries, hall-ticket eligibility, shortfall notices</td></tr>
+<tr><td><code>exam</code></td><td>marks, grades, SGPA/CGPA, result sets, approval and publication, hall tickets, reports</td></tr>
+<tr><td><code>fees</code></td><td>bills, payments, the payment gateway (simulated), signatures, the ledger, receipts</td></tr>
+<tr><td><code>admissions</code></td><td>applications, the state machine, the merit list</td></tr>
+<tr><td><code>documents</code></td><td>scanned-document upload, storage and download</td></tr>
+<tr><td><code>consent</code></td><td>guardian consent for minors (one-time codes)</td></tr>
+<tr><td><code>timetable</code></td><td>the timetable solver, clash detection, publication, workload</td></tr>
+<tr><td><code>library</code></td><td>books, loans, fines</td></tr>
+<tr><td><code>notifications</code></td><td>the outbox, the dispatcher, the (logging) gateway</td></tr>
+<tr><td><code>dashboard</code>, <code>admin</code></td><td>home-page cards; the role-matrix view</td></tr>
+</tbody></table>
+<p>This is a <strong>modular monolith</strong>: one program, one database, but cleanly separated packages.
+<em>Alternative:</em> <strong>microservices</strong> (a separate program and database per module). That scales teams and
+parts independently, but every cross-module action becomes a network call that can fail half-way, and "pay a fee and
+credit the ledger exactly once" would need distributed transactions. For one university's system, a monolith is the
+simpler and safer choice.</p>
+
+<h2>Inside the frontend</h2>
+<pre class="block">main.tsx ──► App.tsx (routes) ──► Layout (menu + top bar) ──► the page for the address
+                                                                   │ uses
+                                    components/ (Toast, ConfirmDialog, ui, DocumentUpload, TimetableGrid)
+                                    hooks/useLoad ──► api/endpoints.ts ──► api/http.ts ──► fetch('/api/…')
+                                    i18n/messages.ts (every text)      styles/theme.css (every colour)</pre>
+
+<h2>Many campuses in one system (multi-tenancy)</h2>
+<p>The report asks for the <em>Flexibility</em> objective: new campuses without code changes. Each campus is a
+<strong>tenant</strong> with a code (<code>JGC</code>, <code>CCC</code>) listed under <code>edumate.tenants</code> in
+<code>application.yml</code>; <code>TenantProvisioner</code> creates missing ones at start-up. Programmes, students,
+books and users carry a <code>campus_code</code>. Every service compares it with the logged-in user's campus (read from
+the token), so a City Campus administrator (<code>ccc.admin</code>) never sees Jain Global Campus's students.</p>
+<p><em>Alternatives:</em> a separate database per campus (strongest isolation, but many databases to run and upgrade);
+or PostgreSQL row-level security (the database itself filters rows). The shared-table approach is the simplest to run
+and is tested in the demo. As the README says, the audit log and outbox are still shared by all campuses.</p>

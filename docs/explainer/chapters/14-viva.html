@@ -1,0 +1,155 @@
+<h1>Viva questions and answers</h1>
+
+<p>Short, honest answers to questions an examiner is likely to ask. Each points to the chapter or file with the details.</p>
+
+<h2>About the whole system</h2>
+<dl>
+<dt><strong>Q. What is EduMate in one sentence?</strong></dt>
+<dd>A multi-campus web application that automates admissions, attendance, examinations and results, fees, timetables
+and the library for a university, built from the SQA report's design, with every defect the report found fixed and
+covered by an automated test.</dd>
+
+<dt><strong>Q. What is the architecture?</strong></dt>
+<dd>A React + TypeScript single-page application talking JSON over HTTP to a Spring Boot backend (a modular monolith),
+which uses PostgreSQL (H2 in development), Redis for caching, a file-system object store for scans, and an outbox for
+e-mail/SMS (<a href="#04-architecture-and-ports">chapter 4</a>).</dd>
+
+<dt><strong>Q. Which ports are used and why only one reaches the browser?</strong></dt>
+<dd>5173 (Vite, dev), 8080 (backend), 3000 (nginx, Docker), 5432 (PostgreSQL) and 6379 (Redis), the last two only inside
+Docker. The browser only talks to 5173 or 3000, which forward <code>/api</code> to 8080, so there is one origin and no
+CORS configuration.</dd>
+
+<dt><strong>Q. Why a monolith and not microservices?</strong></dt>
+<dd>One university's system, one team: a monolith keeps "pay, credit the ledger, queue the receipt" in one database
+transaction. Microservices would add network failures and distributed transactions without a matching benefit at this
+scale.</dd>
+</dl>
+
+<h2>JSON, requests and the frontend</h2>
+<dl>
+<dt><strong>Q. How is a JSON request created and sent?</strong></dt>
+<dd>A page calls a typed function in <code>endpoints.ts</code>; <code>request()</code> in <code>http.ts</code> turns the
+object into text with <code>JSON.stringify</code>, adds <code>Content-Type</code>, <code>Accept</code> and
+<code>Authorization: Bearer …</code>, and sends it with <code>fetch</code>. On the server, Jackson turns the text into a
+Java record, Bean Validation checks it, and the controller's return value is turned back into JSON by Jackson
+(<a href="#05-life-of-a-request">chapter 5</a>).</dd>
+
+<dt><strong>Q. How are errors shown to users?</strong></dt>
+<dd>Every backend error has one JSON shape (<code>ApiError</code>: status, code, message, fieldErrors). The frontend turns it
+into an <code>ApiError</code> and shows its message in a toast or a red box; field errors go under the right inputs.</dd>
+
+<dt><strong>Q. Where would I change the text of a button or an error?</strong></dt>
+<dd>On-screen text: <code>frontend/src/i18n/messages.ts</code>. Business-rule errors: the Java service that raises them.
+Colours: <code>theme.css</code>. The cookbook lists every text with its location (<a href="#11-cookbook">chapter 11</a>).</dd>
+
+<dt><strong>Q. Why is the token in sessionStorage?</strong></dt>
+<dd>It survives a page refresh but disappears when the tab closes, so a forgotten login on a shared computer does not stay
+active. localStorage would persist; an HttpOnly cookie would bring back CSRF.</dd>
+</dl>
+
+<h2>Uploads</h2>
+<dl>
+<dt><strong>Q. How does the file upload work?</strong></dt>
+<dd>The browser checks size, extension and the first 8 bytes, then sends a <code>multipart/form-data</code> body
+(<code>type</code> + <code>file</code>) with <code>XMLHttpRequest</code> for a progress bar. The server rejects anything
+over 5 MB before the controller, then re-checks ownership, draft status, size, the real kind by magic bytes, and whether
+that kind is allowed for the document. It computes SHA-256, stores the bytes under a random key with an atomic rename,
+saves an index record, audits the upload, and cleans up files if the transaction fails
+(<a href="#08-document-upload">chapter 8</a>).</dd>
+
+<dt><strong>Q. Why not trust the file extension?</strong></dt>
+<dd>The name and the browser's Content-Type are chosen by the sender. A program renamed <code>marks.pdf</code> still starts
+with <code>MZ</code>; the magic-byte check refuses it (tested).</dd>
+
+<dt><strong>Q. Why not store files in the database?</strong></dt>
+<dd>It would bloat the database and slow backups. The report's architecture names an object store; the
+<code>ObjectStore</code> interface allows S3 or similar with a one-class change.</dd>
+
+<dt><strong>Q. What if the database fails after the file was written?</strong></dt>
+<dd>A transaction callback deletes the new file when the transaction does not commit, and old files are deleted only after a
+successful commit, so the disk and the database never disagree.</dd>
+</dl>
+
+<h2>Correctness and concurrency</h2>
+<dl>
+<dt><strong>Q. How is the double-credit defect (DEF-014) prevented?</strong></dt>
+<dd>An HMAC signature on the callback, an amount check, a row lock (<code>SELECT … FOR UPDATE</code>), a duplicate check
+on the bank reference, and UNIQUE constraints on the bank reference and the ledger reference. The test delivers the
+callback twice and asserts one credit.</dd>
+
+<dt><strong>Q. How is double publication (DEF-027) prevented?</strong></dt>
+<dd>Publishing is a single conditional UPDATE (<code>WHERE status = 'APPROVED'</code>); the database lets exactly one
+succeed. The test runs two threads released by a latch at the same instant.</dd>
+
+<dt><strong>Q. Optimistic or pessimistic locking?</strong></dt>
+<dd>Optimistic (<code>@Version</code>) for human editing (marks, attendance, applications, books): no one waits, conflicts
+are reported. Pessimistic (row lock) for payment callbacks, which must be serialised.</dd>
+
+<dt><strong>Q. Why BigDecimal?</strong></dt>
+<dd>Money and GPAs need exact decimals; <code>double</code> cannot represent 0.1 exactly.</dd>
+
+<dt><strong>Q. What does two-person approval guarantee?</strong></dt>
+<dd>No single person can publish results: two different superintendents must approve, recomputing clears approvals, and
+marks lock after the first approval (the Safety objective).</dd>
+</dl>
+
+<h2>Algorithms</h2>
+<dl>
+<dt><strong>Q. How are SGPA and CGPA computed?</strong></dt>
+<dd>SGPA = Σ(credits × grade point) ÷ Σ credits; CGPA adds earlier semesters as SGPA × credits; exact decimals, rounded
+half-up to 2 places once, at the end. TC-013 gives 138 ÷ 16 = 8.63.</dd>
+
+<dt><strong>Q. How does the merit list allocate seats?</strong></dt>
+<dd>Merit = 0.6 × entrance + 0.4 × qualifying; ranked with deterministic tie-breaks. Reserved seats = floor(total × share);
+OPEN seats go strictly by rank to everyone first, then reserved seats go by rank to remaining candidates of each
+category; the rest are wait-listed.</dd>
+
+<dt><strong>Q. How is the timetable generated?</strong></dt>
+<dd>A backtracking constraint-satisfaction search that always places the lecture with the fewest legal slots first
+(minimum remaining values), with a 200,000-step cap. Clashes are found by grouping lectures by teacher, section and room
+per slot.</dd>
+
+<dt><strong>Q. Complexity of the main algorithms?</strong></dt>
+<dd>Result computation: linear in the number of mark rows, with 2 queries. Merit list: O(n log n) for the sort.
+Clash detection: O(n). Timetable search: exponential in the worst case, but the heuristic and the small size (about 16
+lectures in 30 slots) make it milliseconds in practice.</dd>
+</dl>
+
+<h2>Security</h2>
+<dl>
+<dt><strong>Q. How are passwords stored?</strong></dt>
+<dd>bcrypt with cost 12 and a random salt; never the password itself. Unknown usernames still run a bcrypt check, so response
+times do not reveal which usernames exist.</dd>
+
+<dt><strong>Q. What is in the JWT and how is it protected?</strong></dt>
+<dd>Username, user id, name, role, campus, student id (if any), issue and expiry times, signed with HMAC-SHA256 using a
+server secret of at least 32 bytes. Changing any character invalidates the signature. It is readable, so it contains no
+secrets.</dd>
+
+<dt><strong>Q. Why is CSRF protection disabled?</strong></dt>
+<dd>The token travels in an Authorization header that JavaScript adds explicitly; browsers never attach it automatically,
+so a forged cross-site request carries no credentials.</dd>
+
+<dt><strong>Q. How was DEF-031 fixed so that it cannot return?</strong></dt>
+<dd>A single deny-by-default RoleMatrix (<code>anyRequest().denyAll()</code>) plus <code>RoleMatrixCoverageTest</code>,
+which fails the build if any controller address is missing from the matrix.</dd>
+
+<dt><strong>Q. How is a minor's consent verified?</strong></dt>
+<dd>A 6-digit SecureRandom code goes to the guardian's own e-mail/phone, is stored only as a bcrypt hash, expires in
+10 minutes, allows 5 attempts, and can be revoked; submission requires GRANTED consent.</dd>
+</dl>
+
+<h2>Quality assurance</h2>
+<dl>
+<dt><strong>Q. How do you know the fixes work?</strong></dt>
+<dd>64 backend tests (unit, integration through real HTTP, PostgreSQL compatibility) and 15 frontend tests, each mapped to a
+test case or defect in the report (<a href="#12-testing">chapter 12</a>).</dd>
+
+<dt><strong>Q. Did you find anything wrong in the report itself?</strong></dt>
+<dd>Yes: TC-013's expected SGPA, the review-effort percentage, and the count of security findings are inconsistent
+(<a href="#15-report-notes">chapter 15</a>).</dd>
+
+<dt><strong>Q. What are the limitations?</strong></dt>
+<dd>Smaller than the report's production system; ERP and DigiLocker not integrated; payment and SMS gateways simulated;
+audit log and outbox shared across campuses; tokens cannot be revoked before expiry.</dd>
+</dl>

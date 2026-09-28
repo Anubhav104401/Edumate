@@ -1,0 +1,138 @@
+=== FILE frontend/src/api/http.ts
+>>> SUMMARY
+**The one place where the frontend talks to the backend.** Every page calls a function in `endpoints.ts`, and every one of those calls `request()` in this file. Because there is only one place, every request is built and every error is handled **the same way**.
+
+**What happens when a page asks for data, step by step.** Suppose the student presses "Pay now", and the page calls `api.fees.initiate(12)`:
+
+1. `endpoints.ts` calls `request('POST', '/api/fees/payments', { feeDemandId: 12 })`.
+2. **JavaScript object → JSON text.** `JSON.stringify({ feeDemandId: 12 })` produces the text `{"feeDemandId":12}`. JSON ("JavaScript Object Notation") is plain text that any language can read. The network can only carry text and bytes, not JavaScript objects, so the object is turned into text first.
+3. **Headers** are added: labels that travel with the request.
+   - `Content-Type: application/json`: "the body is JSON".
+   - `Accept: application/json`: "please answer in JSON".
+   - `Authorization: Bearer eyJhbGciOi…`: the login token (the "wristband"), which proves who is asking.
+4. **Sending.** `fetch('/api/fees/payments', { method: 'POST', headers, body })` sends it. The address has no host or port, so it goes to the page's own origin (port 5173, or 3000 in Docker), where Vite or nginx forwards it to the backend on port 8080.
+5. On the backend, Spring Security checks the token and the RoleMatrix, and **Jackson** turns the JSON text back into a Java object (`JSON → InitiatePaymentRequest(feeDemandId=12)`). The controller runs, and Jackson turns the Java answer into JSON text again.
+6. **The answer comes back.** If its status is 200–299 (`response.ok`), `response.json()` turns the JSON text back into a JavaScript object for the page.
+7. **Errors.** Otherwise the backend's error JSON `{"status":409,"code":"ALREADY_PAID","message":"This fee has already been paid in full."}` becomes an `ApiError`, whose `message` is already written for people, so the page can show it as it is.
+
+The exact request as it travels:
+<pre class="block">POST /api/fees/payments HTTP/1.1
+Host: localhost:5173
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzdHVkZW50Ii…
+
+{"feeDemandId":12}</pre>
+
+**Why `fetch` and not a library like Axios?** `fetch` is built into every modern browser, so nothing needs to be installed. Axios adds conveniences (interceptors, automatic JSON), but this small file provides the same things in about 170 lines that anyone can read.
+
+**Why is the token in `sessionStorage`?** The alternatives:
+- `localStorage`: survives closing the browser. That is more convenient, but a forgotten login on a shared college computer would stay active;
+- a JavaScript variable only: lost on every page refresh, which is annoying;
+- an HttpOnly cookie: JavaScript cannot read it at all, which is safer against XSS, but it brings back CSRF protection and needs more server setup.
+
+`sessionStorage` survives a refresh and disappears when the tab is closed. The token also expires after 8 hours, and React's escaping plus the CSP header protect against XSS.
+>>> 16
+The name under which the token is kept in `sessionStorage`.
+>>> 19
+`ApiError`: a special kind of JavaScript `Error` that also carries the HTTP status, the machine-readable code, and the messages for individual form fields.
+>>> 20-22
+Its three extra fields. `readonly` means they cannot be changed after creation. `Record<string, string>` is an object from field name to message, e.g. `{ email: "Enter a valid e-mail address." }`.
+>>> 24
+The constructor. The `?` makes `fieldErrors` optional, and it may also be `null`.
+>>> 25-29
+Stores the message (in the normal `Error` way), a name for debugging, the status, the code, and the field errors (`?? {}` means "or an empty object if there are none").
+>>> 35-37
+Reads the token, or `null` if not logged in.
+>>> 39-45
+Saves the token after login, or removes it on logout (`setToken(null)`).
+>>> 48
+A function to call when the backend says 401 (the token has expired or is invalid). At first it does nothing; `AuthContext` replaces it with "log out and go to the login page".
+>>> 49-51
+How `AuthContext` registers that function.
+>>> 53
+The four HTTP methods EduMate uses: GET reads, POST creates or acts, PUT replaces, DELETE removes.
+>>> 59
+`request<T>`: sends one request and promises (`Promise<T>`) an answer of type `T`. `async` means it can wait for the network (`await`) without freezing the page.
+>>> 60
+Starts the headers with `Accept: application/json`.
+>>> 61
+The body to send; empty for now.
+>>> 62-63
+If the body is a `FormData` (a file upload), send it as it is. The browser itself writes the `multipart/form-data` Content-Type with its **boundary**, the separator line between parts. Writing that header by hand would leave out the boundary and break the upload.
+>>> 64-67
+Any other body: label it as JSON and turn it into JSON text with `JSON.stringify`.
+>>> 68-71
+If logged in, add `Authorization: Bearer <token>`. The back-ticks make a *template string*: `${token}` is replaced by the token's value.
+>>> 73-75
+Sends the request with `fetch` and waits for the answer.
+>>> 76-78
+`fetch` fails completely only when **no** answer arrived: the backend is not running, or the network is down. That becomes the message "Cannot reach the EduMate server…" (`t.errors.network`).
+>>> 79
+Hands the answer to `handleResponse`.
+>>> 82
+`handleResponse`: turns an answer into data or an error.
+>>> 83-85
+A 401 while holding a token means the token is no longer valid, so tell `AuthContext` to log out.
+>>> 86-88
+Not a success status (not 200–299) → turn it into an `ApiError` and throw it. The page's `catch` shows its message.
+>>> 89-91
+204 "No Content" (for example after a delete): there is nothing to read.
+>>> 92-95
+If the answer is JSON, turn its text into a JavaScript object with `response.json()`.
+>>> 96
+Otherwise return it as plain text.
+>>> 99-102
+`toApiError`: reads the backend's error JSON and builds an `ApiError` from its code, message and field errors. If the message is empty, a general message is used.
+>>> 103-107
+If the answer was **not** EduMate's JSON error (for example an HTML error page from a proxy), use a general message, or "The file is larger than the 5 MB limit." for status 413.
+>>> 114
+`download`: fetches a file (PDF, image, CSV) **with** the login token and returns its bytes as a `Blob`.
+>>> 115-118
+A normal link (`<a href>`) cannot be used for this, because the browser would not send the Authorization header, and the backend would answer 401.
+>>> 119-122
+An error becomes an `ApiError`; otherwise the bytes are returned as a Blob. A page can then show it or offer it for saving.
+>>> 129
+`uploadWithProgress`: sends a file upload and reports how far it has got (0–100%), for the progress bar.
+>>> 130-131
+`fetch` cannot report upload progress, so this uses the older `XMLHttpRequest` (XHR), wrapped in a Promise so pages can use it like `request`.
+>>> 132-137
+Opens a POST to the address, and adds the Accept and Authorization headers. No Content-Type is set, for the same boundary reason as above.
+>>> 138-142
+While the bytes travel, the browser repeatedly reports `loaded` and `total` bytes. For example 1,300,000 of 2,600,000 bytes → `onProgress(50)`.
+>>> 143
+No answer at all → a network error.
+>>> 144-150
+An answer arrived: try to read its text as JSON (if it is not JSON, treat the body as empty).
+>>> 151-154
+Success (200–299): hand the data to the page.
+>>> 155-157
+401: the login has expired, so log out.
+>>> 158-160
+Any other status: build an `ApiError` from the backend's error JSON, or a general message (or "too large" for 413). `?.` means "if this is not null, take its field".
+>>> 162
+Sends the form: the upload starts.
+>>> 167-172
+`errorMessage`: turns **anything** thrown into text for a toast. An `ApiError` already has a friendly message; for anything else (for example a bug in the page) the general message is used, so people never see raw technical text.
+
+=== FILE frontend/src/api/endpoints.ts
+>>> 54
+`query(params)`: builds the part of an address after `?`, for example `?courseId=3&section=A`.
+>>> 55
+`URLSearchParams` is the browser's tool for writing such text correctly. It **encodes** special characters, so a search for "a&b" does not break the address.
+>>> 56-58
+Adds each value that is not empty. `String(value)` turns numbers into text.
+>>> 61-62
+Returns `?` plus the text, or nothing at all if there were no values.
+>>> 65
+`api`: one object holding every backend call, grouped by module. A page writes `api.fees.mine()` and gets back typed data, without knowing the address.
+>>> 112-113
+The consolidated marks report as a CSV file: the same address with `format=csv`, fetched with `download` (with the token) because the answer is a file, not JSON.
+>>> 140
+`uploadDocument`: uploads one scanned document. It takes the application id, the document type, the chosen `File`, and a function that receives the progress.
+>>> 141-143
+Builds the multipart form: a text part `type` (e.g. `PHOTO`) and a file part `file`. These names must match `@RequestParam("type")` and `@RequestParam("file")` in `DocumentController`.
+>>> 144
+Sends it with progress reporting and promises the new document's details (`DocumentView`).
+>>> 146
+Fetches a stored document's bytes (with the token), for previewing or saving.

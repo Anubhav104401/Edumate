@@ -1,0 +1,116 @@
+=== FILE frontend/src/components/Toast.tsx
+>>> SUMMARY
+**Toasts** are the small messages that pop up in the bottom-right corner and vanish after 5 seconds: "Approval recorded.", "Book returned. Fine charged: ₹12.00.", "That code is not correct. Attempts left: 3." (They are named after toast popping out of a toaster.)
+
+Any page shows one with:
+<pre class="block">const toast = useToast();
+toast.success(t.apply.savedToast);    // green
+toast.error(errorMessage(err));       // red</pre>
+
+**To change how long they stay**, edit `TOAST_DURATION_MS` in `config.ts`. **To change their colours**, edit the `--good`, `--bad`, `--info` and `--warn` colours in `theme.css`.
+
+**Accessibility:** the stack of toasts is marked `role="status"` and `aria-live="polite"`, so screen readers read each new message aloud without interrupting what they are currently reading (WCAG 2.1, which the report's usability objective refers to).
+
+**Why toasts instead of `alert()`?** The browser's `alert()` freezes the whole page until OK is clicked, looks different in every browser, and cannot be styled. Toasts do not block work, and several can stack up.
+>>> 12
+The four kinds of toast.
+>>> 14-17
+One toast: a unique number, its kind, and its text.
+>>> 20-24
+What `useToast()` gives a page: four functions, one per kind.
+>>> 27
+The context, empty until the provider fills it.
+>>> 29-30
+The provider keeps the list of toasts currently on screen.
+>>> 31
+A counter for giving each toast a unique id. `useRef` keeps a value between draws **without** causing a redraw when it changes.
+>>> 33-35
+`dismiss(id)`: removes one toast. It keeps every item whose id is **not** this one.
+>>> 37-41
+`show(kind, text)`: takes the next id, adds the toast to the end of the list (`[...list, new]` makes a new list, which React needs in order to notice the change), and sets a timer to dismiss it after 5 seconds.
+>>> 43
+`show` depends only on `dismiss`.
+>>> 46-51
+The four functions pages call, each one `show` with its kind.
+>>> 53
+Re-created only if `show` changes (practically never).
+>>> 56-58
+Draws the app (`children`) and, after it, the toast stack, so toasts float above the pages.
+>>> 60
+The stack's box, announced by screen readers.
+>>> 61-62
+One box per toast. `key` helps React track which toast is which. The class, e.g. `toast toast-error`, sets its colour.
+>>> 64-65
+A × button to close it early. `aria-label` gives the button a spoken name ("Close").
+>>> 75-77
+`useToast` outside the provider is a programming mistake, so fail with a clear message.
+>>> 79
+Returns the four functions.
+
+=== FILE frontend/src/components/ConfirmDialog.tsx
+>>> SUMMARY
+**"Are you sure?" dialogs**, for actions that cannot easily be undone: publishing results, reversing an enrolment, removing a document.
+
+A page asks like this, and **waits** for the answer:
+<pre class="block">const confirm = useConfirm();
+if (await confirm(t.resultsManage.confirmPublish)) {
+  // the user clicked "Confirm"
+}</pre>
+
+**How the waiting works.** `confirm(...)` returns a *Promise*: a promise of an answer that will come later. It stores the promise's `resolve` function and shows the dialog. When a button is clicked, `resolve(true)` or `resolve(false)` is called, which fulfils the promise, and the page's `await` continues with that answer.
+
+**Why not the browser's `window.confirm()`?** It freezes the page, cannot be styled or translated, and looks different in every browser. This dialog uses EduMate's own look and `messages.ts` texts. Clicking outside it counts as **Cancel**, and **Confirm** has the keyboard focus, so Enter confirms.
+>>> 12
+The type of the `confirm` function: a message and an optional button label in, a promise of true/false out.
+>>> 14-17
+The question currently on screen: its message, the confirm button's label, and the `resolve` function that will deliver the answer.
+>>> 20
+The context.
+>>> 25-28
+`confirm(message, label)`: creates a Promise and stores its `resolve` together with the message, which makes the dialog appear. The button label defaults to "Confirm".
+>>> 31-33
+`answer(value)`: delivers the answer to the waiting page and hides the dialog.
+>>> 36-38
+Draws the app, and after it …
+>>> 39-40
+… if a question is waiting: a dimmed background covering the page. Clicking it answers "no".
+>>> 41
+The dialog box itself. `role="alertdialog"` and `aria-modal` tell screen readers it is a question that must be answered. `stopPropagation()` stops a click **inside** the box from also counting as a click on the background.
+>>> 43-44
+The buttons, aligned to the right. Cancel answers false.
+>>> 47-48
+Confirm (with the given label) answers true. `autoFocus` puts the keyboard focus on it.
+>>> 59-61
+Used outside the provider → a clear error.
+>>> 63
+Returns the `confirm` function.
+
+=== FILE frontend/src/components/ErrorBoundary.tsx
+>>> SUMMARY
+A **safety net around every page**. If a page crashes while drawing itself (for example the server sent data in an unexpected shape), React normally removes **everything** from the screen, leaving a blank white page. This component catches the crash and shows a friendly red message instead: "This page could not be displayed. Something unexpected happened while drawing it. Choose another page from the menu, or reload the browser tab." The top bar and menu keep working.
+
+**Where it came from.** While EduMate was being built, the Role matrix page crashed because Spring 7 sent HTTP methods as `{}` (see `AdminController`), and the whole app went blank. The backend was fixed, and this boundary was added so any **future** bug stays contained to one page.
+
+`Layout.tsx` wraps the current page in `<ErrorBoundary resetKey={location.pathname}>`. When the person goes to another page, the address changes, and the error is forgotten.
+
+**Why a class?** React lets only *class components* catch errors (`getDerivedStateFromError`); there is no hook for it yet. That is why this file looks different from the others.
+>>> 10-13
+Its inputs: the page to protect (`children`) and a `resetKey` (the current address).
+>>> 16-17
+Its memory: has the page failed?
+>>> 20
+A class component. `Component<Props, State>` states its input and memory shapes.
+>>> 21
+At first, nothing has failed.
+>>> 23-24
+React calls this when something inside crashes while drawing. Returning `{ failed: true }` makes the component draw the message instead.
+>>> 27-28
+Also called on a crash: writes the error and where it happened to the browser's console (F12), for developers.
+>>> 31-33
+After every update: if the address changed and we are in the failed state, reset, so the new page gets a fresh chance.
+>>> 37
+`render`: what to draw.
+>>> 38-40
+Failed → the red alert box, marked `role="alert"` so screen readers announce it. The texts are `t.errors.pageCrashedTitle` and `pageCrashedBody` in `messages.ts`.
+>>> 46
+Otherwise draw the page normally.

@@ -1,0 +1,116 @@
+=== FILE frontend/src/auth/AuthContext.tsx
+>>> SUMMARY
+**Remembers who is logged in** and makes that person available to every page through `useAuth()`.
+
+- **Login:** `POST /api/auth/login` with `{"username": "...", "password": "..."}`. The backend answers `{"token": "eyJ…", "user": {...}}`. The token is saved in `sessionStorage` and sent with every later request.
+- **Page refresh:** React's memory is wiped, but the token survived in `sessionStorage`. So on start-up, `GET /api/auth/me` asks the backend who the token belongs to, and the user is restored.
+- **Logout:** the token is thrown away. The backend does not need to be told, because it keeps **no session**: every request carries its own proof (the token). Once the token stops being sent, the person is logged out. (The token itself stays valid until it expires after 8 hours, which is why it is kept only for the life of the tab.)
+- **Expired token:** any 401 answer triggers a logout with the message "Your session has ended. Please log in again."
+
+**React hooks used here, in one line each:**
+- `useState`: a value that, when changed, makes React redraw;
+- `useEffect`: code that runs after drawing (for example fetching data);
+- `useCallback` / `useMemo`: keep the same function/object between draws, so child components are not redrawn needlessly;
+- `createContext` / `useContext`: share a value with every component inside a provider.
+>>> 17-22
+The shape of what `useAuth()` gives: the user (or `null`), whether the start-up check has finished (`ready`), and the `login` and `logout` functions.
+>>> 24
+Creates the context, empty (`null`) until the provider fills it.
+>>> 26
+The provider component. `children` is everything drawn inside it (the whole app).
+>>> 27
+The logged-in user; `null` at first.
+>>> 28
+`ready` is false until the start-up check is done, so pages can show "Loading…" rather than wrongly sending someone to the login page.
+>>> 29
+The toast helper, to show messages.
+>>> 31-36
+`logout`: remove the token, forget the user (which makes React show the login page), and show a message if one was given.
+>>> 39
+The list of values the function depends on (`[toast]`): it is only re-created if `toast` changes.
+>>> 43-45
+After the first draw, registers "log out with the 'session expired' message" as the function `http.ts` calls on any 401.
+>>> 48-51
+On first load: no saved token → nothing to restore, so we are ready.
+>>> 53-57
+A saved token exists → ask `/api/auth/me` who it belongs to. On success, remember the user. On failure (expired or tampered token), throw the token away. Either way, mark ready. `.then`, `.catch` and `.finally` are what to do on success, on failure, and always.
+>>> 58
+`[]`: run this only once, when the app starts.
+>>> 60-65
+`login`: sends the username and password, saves the token, remembers the user, and returns the user so the login page can greet them. If the backend answers 401 or 423, `api.auth.login` throws an `ApiError`, which the login page catches and shows.
+>>> 67
+Packs the four values into one object. `useMemo` keeps the same object while none of them change.
+>>> 68
+Makes that object available to everything inside the provider.
+>>> 72-74
+`useAuth`: reads the context. If a component is used outside `<AuthProvider>` (a programming mistake), it fails at once with a clear message.
+>>> 76
+Returns the login state.
+>>> 82-83
+`useUser`: for pages that can only be reached after login. If there is no user, something is badly wrong, so fail loudly.
+>>> 85
+Returns the user, now guaranteed not to be `null`, which saves every page from checking.
+
+=== FILE frontend/src/auth/RequireAuth.tsx
+>>> SUMMARY
+A **gate** in front of pages:
+- not logged in → go to the login page, remembering where the person wanted to go, so the login page can send them back afterwards;
+- logged in with the wrong role → show "You do not have access to this page.";
+- otherwise → show the page.
+
+The backend enforces the same rules again. This gate only saves people from opening pages whose data they could not load anyway.
+>>> 19-20
+The start-up check is still running: show "Loading…".
+>>> 22-23
+Nobody is logged in: go to `/login`. `replace` means the Back button will not return to the forbidden page, and `state={{ from: … }}` remembers the address they wanted.
+>>> 25-26
+Roles were given and the user's role is not among them: show the red "no access" message. The text is `t.errors.forbiddenPage` in `messages.ts`.
+>>> 28
+All checks passed: show the page. `<>…</>` is an invisible wrapper (a *fragment*).
+
+=== FILE frontend/src/hooks/useLoad.ts
+>>> SUMMARY
+**The standard way a page fetches data.** Almost every page starts like this:
+<pre class="block">const { data, error, loading, reload } = useLoad(() =&gt; api.fees.mine(), []);</pre>
+- `loading` is true while waiting (the page shows "Loading…");
+- `data` holds the answer when it arrives;
+- `error` holds a friendly message if it failed (the page shows it in a red box);
+- `reload()` fetches again (for example after saving something).
+
+The second argument, `deps` ("dependencies"), lists values that should cause a **new** fetch when they change. For example, the marks page passes `[courseId]`, so choosing another course reloads the sheet.
+
+**The "cancelled" trick.** If the person picks course A and then quickly course B, two requests are in flight. If A's answer arrives **after** B's, it would overwrite the screen with the wrong course. Each fetch therefore gets a `cancelled` flag, which is set when a newer fetch starts or the page closes, and a cancelled fetch's answer is ignored.
+
+**Why a custom hook?** Without it, every page would repeat the same 25 lines of state, loading and error handling, and each copy could have its own small bugs. Libraries such as TanStack Query do this (and much more, such as caching). For EduMate's needs, this small hook is enough, and nothing needs to be installed.
+>>> 12-17
+What the hook returns: the data (or `null`), an error message (or `null`), the loading flag, `reload`, and `setData` (to replace the data directly, for example after a save returned the new version).
+>>> 20
+`useLoad<T>`: `loader` is the function that fetches; `deps` are the values that trigger a new fetch; `enabled = true` allows a page to hold off fetching until, say, a course has been chosen.
+>>> 21-24
+Four pieces of state: data, error, loading (true at first if enabled), and `tick`, a counter that `reload` increases.
+>>> 27
+A new `load` function is made only when something in `deps` changes, and a new `load` is what triggers a new fetch below.
+>>> 29
+Runs after drawing, and again whenever `load`, `tick` or `enabled` changes.
+>>> 30-32
+Not enabled: not loading, and stop.
+>>> 34
+The flag for ignoring an out-of-date answer.
+>>> 35-36
+Starts: loading, and no old error.
+>>> 37
+Calls the loader (e.g. `api.fees.mine()`).
+>>> 38-39
+When the answer arrives, and this fetch was not cancelled, store it.
+>>> 41-42
+On failure (and not cancelled), store a friendly message.
+>>> 44-45
+Either way, no longer loading.
+>>> 47-48
+The *clean-up* function: React calls it before the next fetch or when the page closes. It marks this fetch as cancelled.
+>>> 50
+The values that make the effect run again.
+>>> 52
+`reload`: increases `tick` by one, which re-runs the effect.
+>>> 53
+Returns everything the page needs.

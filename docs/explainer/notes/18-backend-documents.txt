@@ -1,0 +1,269 @@
+=== FILE backend/src/main/java/com/edumate/documents/DocumentType.java
+>>> SUMMARY
+The **kinds of scanned document** an applicant can upload, and for each: the label shown on screen, which file kinds it accepts, and whether it is **required** before the application can be submitted.
+
+| Type | Label | Accepts | Required |
+|---|---|---|---|
+| PHOTO | Passport-size photograph | JPEG, PNG | yes |
+| ID_PROOF | Identity proof (Aadhaar card or passport) | PDF, JPEG, PNG | yes |
+| MARKSHEET_10 | Class 10 marks card | PDF, JPEG, PNG | no |
+| MARKSHEET_12 | Class 12 / qualifying examination marks card | PDF, JPEG, PNG | yes |
+| CATEGORY_CERTIFICATE | Category certificate (OBC / SC / ST) | PDF, JPEG, PNG | no |
+
+To add a new kind of document, add one line here (and its label in the frontend's `messages.ts` and `fileChecks.ts`). The upload rules, the "missing documents" list and the submit check all follow automatically.
+>>> 8-12
+The five document types. Each is written as `NAME(label, accepted kinds, required?)`. `Set.of(...)` makes a small fixed set of file kinds.
+>>> 18
+The enum's constructor stores the three values given in brackets.
+>>> 24-25
+`accepts(kind)`: is this file kind allowed for this document? For example `PHOTO.accepts(PDF)` is false.
+>>> 29-30
+All required types: every value, keeping only those marked required. Result: PHOTO, ID_PROOF, MARKSHEET_12.
+>>> 33-34
+The label, e.g. "Passport-size photograph".
+>>> 37-38
+The set of accepted kinds.
+>>> 41-42
+Whether this document is required.
+
+=== FILE backend/src/main/java/com/edumate/documents/FileKind.java
+>>> SUMMARY
+The only three **file kinds** EduMate accepts for scans: PDF, JPEG and PNG, each with its official "MIME type" (the name browsers use in the `Content-Type` header) and the file extension used when storing it.
+
+Why only these three? Scanned documents are always one of them, and every browser can display them. Accepting fewer kinds means fewer ways for a dangerous file to get in.
+>>> 5-7
+The three kinds: `PDF("application/pdf", "pdf")` and so on.
+>>> 12
+Stores the MIME type and extension given in brackets.
+>>> 17-18
+The MIME type, e.g. "image/png".
+>>> 21-22
+The extension, e.g. "png".
+
+=== FILE backend/src/main/java/com/edumate/documents/FileTypeSniffer.java
+>>> SUMMARY
+Finds out what a file **really** is by looking at its first few bytes, its **"magic number"**. Almost every file format begins with a fixed signature:
+
+| Kind | First bytes (hexadecimal) | As characters |
+|---|---|---|
+| PDF | 25 50 44 46 2D | `%PDF-` |
+| PNG | 89 50 4E 47 0D 0A 1A 0A | `\x89PNG\r\n\x1a\n` |
+| JPEG | FF D8 FF | (not printable) |
+
+**Why not trust the file name or the browser?** A file called `marks.pdf` can contain anything: the name is just a label the sender chose, and the `Content-Type` the browser sends is also chosen by the sender. A Windows program renamed to `marks.pdf` still starts with `MZ`, so the sniffer rejects it. The automated tests `UploadSafetyTest` and `AdmissionConsentIntegrationTest` check exactly this.
+>>> 19-21
+The three signatures as byte arrays. `(byte) 0x89` is needed because Java's `byte` only holds −128…127, and 0x89 (137) must be written as the byte with the same bit pattern.
+>>> 23
+`detect(content)`: gives back the recognised kind, or an empty Optional if the bytes match none of the three.
+>>> 24-32
+Tries PDF, then PNG, then JPEG, returning the first match.
+>>> 33
+None matched: an empty result, which the upload turns into "Only PDF, JPEG and PNG files are accepted."
+>>> 36
+`startsWith`: do the content's first bytes equal the signature?
+>>> 37-39
+No content, or fewer bytes than the signature: cannot match.
+>>> 40-44
+Compares byte by byte; any difference means no match.
+>>> 45
+Every byte matched.
+
+=== FILE backend/src/main/java/com/edumate/documents/ObjectStore.java
+>>> SUMMARY
+An **object store** is a place that keeps files by name ("key"), like a huge labelled cupboard: you put bytes in under a label, get them back by the label, or throw them away. The report's architecture lists "an object store for scanned documents".
+
+This file is only an **interface**: a promise of three abilities (put, get, delete) without saying how. The class `LocalFileObjectStore` keeps the ability promise using a folder on disk. In production one would write, say, an `S3ObjectStore` that keeps the same promise using cloud storage. Because `DocumentService` only talks to the interface, nothing else would change.
+
+**Why not keep files inside the database?** Scans are large (up to 5 MB each). Putting them in database rows makes backups and queries heavy and slow. The usual design, used here, is: the bytes go to the object store, and the database keeps only a small "index card" (`ApplicationDocument`) with the key, size, type and fingerprint.
+>>> 15
+`put(key, content)`: store these bytes under this key. `throws IOException` warns that saving can fail (disk full, for example).
+>>> 17
+`get(key)`: give back the stored file as a `Resource` Spring can send to the browser.
+>>> 19
+`delete(key)`: remove the stored file.
+
+=== FILE backend/src/main/java/com/edumate/documents/LocalFileObjectStore.java
+>>> SUMMARY
+The object store implemented as a **folder on disk**: `edumate.storage.root`, which is `./storage` by default (and `/app/storage` inside Docker, where it is a named volume so files survive restarts). A key such as `applications/7/3f2c…e1.pdf` becomes the file `./storage/applications/7/3f2c…e1.pdf`.
+
+Two safety details:
+- **Atomic writes.** The bytes are first written to a temporary `.part` file in the same folder, then renamed to the final name in one step. Anyone reading the folder sees either no file or the complete file, never half a file (for example if the server stops in the middle of writing).
+- **Path traversal protection.** A key like `../../windows/system.ini` would climb out of the storage folder. `resolve` normalises the path and refuses anything that does not stay inside the storage root. Keys are made by our own code, so this is a second line of defence.
+>>> 25
+Turns the configured folder into an absolute, cleaned-up path, once, when the store is created.
+>>> 30
+`put`: store bytes under a key.
+>>> 31
+The final path (checked to stay inside the root).
+>>> 32
+Creates the folder `applications/7/` if it does not exist yet.
+>>> 33
+Creates a temporary file such as `upload-123456.part` in that folder.
+>>> 34
+Writes all the bytes into the temporary file.
+>>> 35
+Renames the temporary file to the final name in one step (`ATOMIC_MOVE`), replacing any file with that name.
+>>> 39-44
+`get`: find the file; if it is missing on disk, fail with a clear message; otherwise return it as a `PathResource`, which Spring can stream to the browser without loading the whole file into memory.
+>>> 48-49
+`delete`: remove the file if it exists (no error if it is already gone).
+>>> 53-58
+`resolve`: joins the root and the key, removes any `.` and `..` parts (`normalize`), and checks the result still starts with the root folder. If not, the key was trying to escape, so refuse.
+
+=== FILE backend/src/main/java/com/edumate/documents/ApplicationDocument.java
+>>> SUMMARY
+The database **"index card"** for one uploaded document. The file's bytes are **not** stored in the database; they live in the object store under `storageKey`. This row records:
+- which application and which document type;
+- the cleaned-up original file name (shown to people);
+- the storage key (random and unguessable, e.g. `applications/7/3f2c9a1b-….pdf`);
+- the **real** content type found by sniffing the bytes (never the type the browser claimed);
+- the size in bytes;
+- the **SHA-256 fingerprint** of the bytes. If a stored file were ever changed, recomputing its fingerprint would give a different value, so anyone can prove the file is exactly what was uploaded;
+- when it was uploaded.
+
+=== FILE backend/src/main/java/com/edumate/documents/ApplicationDocumentRepository.java
+>>> SUMMARY
+Reads document records: all documents of an application (sorted by type), or the one document of a given type (each application has at most one document per type; uploading again replaces it).
+
+=== FILE backend/src/main/java/com/edumate/documents/DocumentService.java
+>>> SUMMARY
+The whole **server side of the document upload system**: upload, list, download and delete.
+
+**The upload pipeline, step by step** (method `upload`):
+1. **Who and when.** The caller must be the applicant who owns the application, and it must still be a DRAFT (after submission, documents are frozen).
+2. **Not empty, not too big.** An empty file is refused. The size limit is 5 MB. It is checked here, and also earlier by Spring itself (`spring.servlet.multipart.max-file-size: 5MB`), which stops reading an oversized upload and answers 413.
+3. **What is it really?** The first bytes decide the real kind (`FileTypeSniffer`). The file name and the type the browser sent are ignored for this decision.
+4. **Allowed for this document?** A photo must be JPEG or PNG; the others may also be PDF.
+5. **Fingerprint.** A SHA-256 hash of the bytes is computed.
+6. **Store the bytes** in the object store under a new random key: `applications/<application id>/<random UUID>.<real extension>`. Random keys cannot be guessed, and the extension always matches the real content.
+7. **Replace any previous file** of the same type: its database row is deleted, and its stored file is deleted **after** the transaction succeeds.
+8. **Save the index card** (`ApplicationDocument`) with a cleaned-up file name.
+9. **Audit** the upload, including the fingerprint.
+
+**Keeping disk and database in step.** The file is written to disk *before* the database transaction commits. If the transaction then fails (for example the database is unreachable), the new file would be left on disk with no record pointing to it. To prevent this, the service registers a "transaction callback": if the transaction does **not** commit, the new file is deleted again. Likewise, old files are deleted only **after** a successful commit, so a failed replacement never loses the old document.
+
+**Downloads** are allowed for the owning applicant and for admissions staff of the same campus. Every staff view is written to the audit log, because these can be a minor's personal documents (DPDP).
+>>> 47
+The size limit, 5 MB, written as 5 × 1024 × 1024 bytes. The `L` makes it a `long` number.
+>>> 56-57
+Constructor: the document repository, the admission service (for ownership checks), the sniffer, the object store, the audit logger and the clock.
+>>> 67
+`upload`: the logged-in user, the application id, the document type and the uploaded file (`MultipartFile` = one file from a multipart/form-data request).
+>>> 68
+Step 1: the application must be the caller's own and still a DRAFT, otherwise 404 or 409.
+>>> 69-71
+Step 2a: no file, or a file with 0 bytes → 400 EMPTY_FILE.
+>>> 72-74
+Step 2b: more than 5 MB → 400 FILE_TOO_LARGE.
+>>> 75
+Reads all the bytes into memory (at most 5 MB, so this is safe).
+>>> 76-77
+Step 3: sniff the real kind; none of PDF/JPEG/PNG → 400 UNSUPPORTED_FILE.
+>>> 78-81
+Step 4: this document type does not accept this kind → 400 WRONG_FILE_TYPE, e.g. "Passport-size photograph must be uploaded as [JPEG, PNG], not PDF."
+>>> 83
+Step 6a: the storage key, e.g. `applications/7/3f2c9a1b-4d5e-….pdf`.
+>>> 84
+Step 6b: writes the bytes to the object store.
+>>> 85
+If this transaction does not commit, delete the file just written (see summary).
+>>> 87-90
+Step 7: if the application already has a document of this type, delete its record now and its stored file after a successful commit.
+>>> 91-93
+Step 8: saves the index card: application, type, cleaned file name, key, real MIME type, size, SHA-256 and time.
+>>> 94-95
+Step 9: audit line, for example "PHOTO photo.png sha256=b1ff9c8e…".
+>>> 96
+Returns the new document's details to the browser (as `DocumentView`).
+>>> 100-102
+`list`: the documents of an application, for the applicant or staff who may see it.
+>>> 107
+`download`: one document's file.
+>>> 108-109
+Loads the record (404 if missing) and checks the caller may see its application.
+>>> 110-113
+When staff (not the applicant) open a document, write DOCUMENT_VIEWED to the audit log: who looked at which document of which application.
+>>> 114-119
+Opens the stored file and returns it with its real content type and file name. A disk error becomes an unexpected server error (500).
+>>> 123-129
+`delete`: only the owner, only while DRAFT. Deletes the record now, the stored file after commit, and writes an audit line.
+>>> 136
+`safeFilename`: makes an uploaded file's name safe to store and show.
+>>> 137
+A missing name becomes empty text.
+>>> 138
+Keeps only the part after the last `/` or `\`, so a name like `..\..\evil.exe` or `C:\Users\me\marks.pdf` loses its folders.
+>>> 139-140
+Separates the name from its extension, then removes every character that is not a letter, digit, space, dot, underscore, bracket or dash. For example `evil<script>` becomes `evilscript`.
+>>> 141-143
+If nothing is left, use the document type's name instead (e.g. `photo`).
+>>> 144-146
+At most 90 characters.
+>>> 147
+Always adds the extension of the **real** file kind: `evilscript.exe` that is really a PDF is stored as `evilscript.pdf`.
+>>> 150-155
+The SHA-256 fingerprint of the bytes, written as 64 hexadecimal characters.
+>>> 158-163
+Reads the uploaded file's bytes; a read failure (for example the upload was cut off) becomes 400 UPLOAD_FAILED.
+>>> 166-171
+Writes to the object store; a disk failure becomes an unexpected error, which also rolls the transaction back.
+>>> 174-183
+Registers "after this transaction finishes": if it did not commit (`status != STATUS_COMMITTED`), delete the file with this key.
+>>> 185-192
+Registers "after this transaction commits successfully": delete the file with this key (used for replaced or deleted documents).
+>>> 194-199
+Deletes a stored file; if that fails, only a warning is logged (the user's request has already succeeded, so it must not fail now).
+>>> 203-208
+The JSON of one document for the browser: id, type, label, file name, content type, size, SHA-256 and upload time. `of(d)` copies these out of the entity.
+>>> 212
+What `download` returns to the controller: the file, its content type and name.
+
+=== FILE backend/src/main/java/com/edumate/documents/DocumentController.java
+>>> SUMMARY
+The web addresses of the document system:
+
+| Method and URL | Who | Does |
+|---|---|---|
+| POST /api/admissions/applications/{id}/documents | APPLICANT | upload (multipart/form-data with fields `type` and `file`) |
+| GET /api/admissions/applications/{id}/documents | applicant, officer, admin | list |
+| GET /api/admissions/documents/{docId}/content | applicant, officer, admin | the file itself |
+| DELETE /api/admissions/documents/{docId} | APPLICANT | remove |
+
+**What an upload request looks like on the wire.** The browser sends one request whose body is split into "parts" by a boundary line:
+
+<pre class="block">POST /api/admissions/applications/1/documents HTTP/1.1
+Authorization: Bearer eyJhbGciOi...
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxk
+
+------WebKitFormBoundary7MA4YWxk
+Content-Disposition: form-data; name="type"
+
+PHOTO
+------WebKitFormBoundary7MA4YWxk
+Content-Disposition: form-data; name="file"; filename="me.png"
+Content-Type: image/png
+
+‰PNG ... (the raw bytes of the picture) ...
+------WebKitFormBoundary7MA4YWxk--</pre>
+
+Tomcat (the web server inside Spring Boot) reads this, enforces the 5 MB limit, and Spring hands the controller the text part as `type` and the file part as a `MultipartFile`.
+
+**Serving a file safely.** The download answer sets three headers: the real content type; `Content-Disposition: inline; filename="…"` (show it in the browser, with this name if saved); and `Content-Security-Policy: sandbox`, which makes the browser treat the file as untrusted, so even a specially crafted PDF cannot run scripts with EduMate's permissions. Spring Security also adds `X-Content-Type-Options: nosniff` so the browser does not second-guess the type.
+>>> 39
+`@PostMapping(... consumes = multipart/form-data)`: this method answers POST at `/applications/{applicationId}/documents`, and only accepts multipart form uploads.
+>>> 40-42
+The parameters: the logged-in user, the id from the address, the form field `type` (turned into a `DocumentType`; an unknown value is a 400) and the form field `file`.
+>>> 43
+Hands everything to `DocumentService.upload` and returns its answer as JSON.
+>>> 47-48
+GET the list of documents of an application.
+>>> 56-57
+GET one document's file: the service checks permissions, audits staff views and opens the file.
+>>> 58-64
+Builds the answer:
+- line 59: the real content type, e.g. `application/pdf`;
+- lines 60-62: `Content-Disposition: inline; filename="…"`, where the name is written in a way that is safe for any language (UTF-8);
+- line 63: `Content-Security-Policy: sandbox`;
+- line 64: the file's bytes as the body.
+>>> 68-70
+DELETE a document; answers 204 "No Content" (success, nothing to send back).

@@ -1,0 +1,189 @@
+=== FILE backend/src/main/java/com/edumate/config/DemoDataSeeder.java
+>>> SUMMARY
+Fills an **empty** database with **demonstration data**, so every screen has something to show the moment EduMate starts. It runs only when `edumate.demo.seed` is `true` (the dev and docker profiles) **and** the database has no users yet. If you restart with data already present, it does nothing. In production the setting is false.
+
+**What it creates:**
+- the main campus **JGC** with three programmes (B.Tech CSE with 60 seats, M.Tech CSE with 18, MBA with 30);
+- staff accounts for every role, and five teachers;
+- five 5th-semester courses;
+- four earlier exam sessions (with **published** history for semesters 1–4) and the current one;
+- 60 students in sections A and B, with guardians;
+- marks, fee demands and payments, library books and loans;
+- a **published timetable** for both sections, made by the real solver;
+- 32 admission applications, with placeholder scanned documents;
+- a small second campus **CCC**, to show that campuses cannot see each other's data.
+
+**Repeatable randomness.** `new Random(2026)` always produces the **same** sequence of "random" numbers. Every fresh start therefore creates exactly the same names, marks and payments, so screenshots, the README and this guide stay correct.
+
+**Placed on purpose.** A few records are not random, so the report's test cases can be shown live:
+- Aarav Sharma (23BTRCS007): grades S, A, B, B, C over credits 4, 4, 3, 3, 2 (**TC-013**), and his fee is not yet paid (**TC-005 / TC-006**);
+- 23BTRCS003: an internal mark of 18 in DBMS, to be corrected to 22 (**TC-012**);
+- Kiran Joshi (23BTRCS015): the SQA internal mark is missing (rule **R5**), which also blocks result computation until a teacher fills it in;
+- Ishaan Verma (23BTRCS012): fees overdue;
+- Rohan Gupta: a 17-year-old applicant who still needs guardian consent (**TC-020**).
+
+**Every demo account's password is `Edumate@2026`.** The login page lists the accounts (see `DEMO_USERNAMES` in `frontend/src/config.ts`).
+>>> 103-106
+`@Component`: Spring creates this class. `@Order(2)`: it runs after the campus set-up (order 1). `@ConditionalOnProperty(...)`: the class exists **only** if `edumate.demo.seed=true`. `implements ApplicationRunner`: Spring calls its `run` method once, after start-up.
+>>> 108
+The shared demo password.
+>>> 110-113
+The logger, the two campus codes, and the number of teaching weeks simulated.
+>>> 115-121
+First names and surnames to combine into student and applicant names.
+>>> 123
+The repeatable random generator (seed 2026).
+>>> 150-152
+Values set at the start of `run`: today's date, the current moment, and the demo password's bcrypt hash.
+>>> 154-162
+Constructor: every repository and helper the seeder writes with. It is long because the seeder touches every module.
+>>> 191
+`run`: called once by Spring after start-up. `@Transactional` makes the whole seeding one transaction: if anything fails, nothing is left half-created.
+>>> 192-194
+Users already exist → the database is not empty → do nothing.
+>>> 195-197
+Notes the start time (to report how long seeding took), today's date and the current moment.
+>>> 198
+Hashes the password **once** and reuses the hash for all accounts. bcrypt is slow on purpose (about 0.25 s per hash at cost 12), so hashing it 20 times would waste about 5 seconds.
+>>> 199
+Deletes placeholder document files left over from an earlier run (their database rows are gone, so the files would be orphans).
+>>> 201-203
+The three programmes of the main campus: code, name, level (UG/PG), seats and campus.
+>>> 205-215
+The staff accounts: username, full name, role and campus. The five teachers are kept in variables so courses can be assigned to them.
+>>> 217-222
+The five 5th-semester B.Tech courses: code, name, credits, weekly hours, programme, semester and teacher. The credits 4, 4, 3, 3, 2 add up to 16, the total used in TC-013.
+>>> 224-228
+Four earlier exam sessions, 21, 15, 9 and 3 months ago. Their results become the published history of semesters 1–4, which the CGPA needs.
+>>> 229-230
+The current exam session, 20 days from now.
+>>> 232-234
+Creates the 60 students and makes a quick "USN → student" look-up.
+>>> 235-239
+Finds Aarav and Ishaan and creates their logins: `student` (Aarav), `guardian` (Aarav's guardian, linked to Aarav) and `student2` (Ishaan).
+>>> 241-246
+Gives every student a random "ability" between 48 and 94 (used to make realistic marks), plus a second random trait used by another part of the demo data.
+>>> 250
+Creates the current semester's marks.
+>>> 251
+Creates the published results of semesters 1–4.
+>>> 252-256
+Creates fees, library, timetables, admissions and the second campus.
+>>> 258-259
+Logs a line such as "Demo data ready in 4210 ms. Log in with any demo account, password Edumate@2026".
+>>> 264-267
+`user`: creates one account. The e-mail is made from the username, e.g. `kavya.rao@edumate.test` (`.test` is a domain reserved for testing, so no real address is used).
+>>> 270-274
+Three students have fixed names, because the demo cases refer to them: number 7 Aarav Sharma, 12 Ishaan Verma, 15 Kiran Joshi.
+>>> 275-276
+`used` remembers names already given, so no two students share a name.
+>>> 277-283
+For students 1 to 60: use the fixed name if there is one; otherwise pick random first and last names until an unused combination turns up. `used.add(...)` returns false if the name was already there, so the `do … while` loop tries again.
+>>> 284
+The USN (university seat number), e.g. `23BTRCS007`: year 23, B.Tech, campus RC, CS branch, number 007 (`%03d` pads to 3 digits).
+>>> 285
+A date of birth somewhere in the 600 days from 1 January 2004.
+>>> 286-288
+Creates the student: USN, name, birth date, e-mail, phone, programme, semester 5, section A for numbers 1–30 and B for 31–60, and the campus.
+>>> 289-291
+Adds a guardian with the same surname. Aarav's guardian is always "Rajesh Sharma".
+>>> 292-294
+Saves the student and adds them to the list, which is returned at the end.
+>>> 361-362
+`seedMarks`: Aarav's fixed marks as (internal, external) pairs. The totals 92, 84, 75, 72, 65 give the grades S, A, B, B, C.
+>>> 363-367
+One mark row per student per course, collected in a list and saved together.
+>>> 368-370
+Aarav gets his fixed marks.
+>>> 371-377
+Everyone else gets realistic random marks:
+- line 372: a total around their ability, with some day-to-day wobble (`nextGaussian` gives a bell-curve random number), kept between 28 and 98;
+- line 373: the internal part is about 40% of the total, at most 40;
+- line 374: the external part is the rest, at most 60;
+- lines 375-376: never below 0.
+>>> 378-380
+**TC-012:** student 003's DBMS internal mark is 18.
+>>> 381-383
+**Rule R5:** Kiran Joshi's SQA internal mark is missing (`null`).
+>>> 384-388
+Creates each mark (rounded to 2 decimals, entered by "seed") and saves them all in one call.
+>>> 391-395
+`seedHistory`: Aarav's fixed SGPAs for semesters 1–4, the credits of each semester, and a running total of "SGPA × credits" per student (for the CGPA).
+>>> 396-399
+For each earlier semester: a result set, marked as already **published** with both approvals (by `examsup` and `examsup2`), dated some months back.
+>>> 400
+Adds this semester's credits to the running total of credits.
+>>> 401
+An empty list for this semester's student results.
+>>> 402-404
+Each student's SGPA: Aarav's fixed one, or a random one near their ability ÷ 10, kept between 5.2 and 9.8.
+>>> 405-409
+Rounds the SGPA, adds SGPA × credits to their running total, and computes the CGPA = total points ÷ total credits so far. This is the same weighted-average formula as `SgpaCalculator`.
+>>> 410-413
+Saves every student's result for this semester (all PASS, all credits earned).
+>>> 419-426
+`seedFees`: every student owes ₹62,500 for semester 5. Ishaan's due date was 5 days ago; everyone else's is in 15 days. Each demand is also written to the ledger as a debit.
+>>> 427
+Who has not paid: Aarav, Ishaan, and about 12% of the others at random.
+>>> 428-435
+Everyone else paid 10 days ago: a SUCCESS payment with an order number, bank reference and receipt number, and the matching credit in the ledger.
+>>> 441-454
+`seedLibrary`: twelve textbooks. The ISBNs are made up for the demo (starting 97893000000…), so they do not point at real catalogue entries.
+>>> 455-458
+Saves each title with 2 to 5 copies.
+>>> 459-460
+Aarav borrowed two books: one 20 days ago (6 days overdue with a 14-day loan, so the fine is ₹12) and one 3 days ago.
+>>> 461-470
+Twelve more random loans to other students, if a copy is available.
+>>> 473-477
+`lend`: takes a copy and saves a loan due after the configured number of days.
+>>> 482-484
+`seedTimetables`: publishes a week for section B, then A. `busy` collects the teachers' taken slots, so A is planned around B.
+>>> 485-490
+The list of lectures: each course as many times as its weekly hours, the longest courses first.
+>>> 491
+Uses the **real** timetable solver.
+>>> 492-500
+Saves each lecture as PUBLISHED in the section's home room, and marks the teacher as busy in that slot.
+>>> 506-509
+`seedAdmissions`: Priya Nair, an adult applicant with a DRAFT application to M.Tech (login `applicant`).
+>>> 511-517
+Rohan Gupta, 17 years and 3 months old, with a DRAFT application to B.Tech and his guardian's details (login `applicant.minor`). He needs guardian consent before he can submit.
+>>> 519-521
+Categories to choose from (weighted towards GEN, as in real applicant pools) and the states demo applications can be in.
+>>> 522-532
+30 more applications to M.Tech with random names, ages, categories, scores and states, each with placeholder documents, so the officer's list and the merit list have data.
+>>> 535-541
+`newApplication`: creates, fills and saves an application, then gives it its real number (the same two-step numbering as `AdmissionService.create`).
+>>> 542-548
+If the application should not be a draft: first submit it (sometime in the last 20 days), then move it on to the target state if that is further along.
+>>> 552-554
+`attachPlaceholderDocuments`: one file per required document type, a PNG for the photo and a PDF for the others.
+>>> 555-556
+Creates the file bytes (see the helpers below).
+>>> 557-562
+Stores the file under a random key, exactly as a real upload would be.
+>>> 563-567
+Saves its "index card" with the size and SHA-256 fingerprint.
+>>> 571-574
+`seedSecondCampus`: City Campus (CCC) with a BCA programme and an exam session.
+>>> 575-580
+Five first-semester BCA students.
+>>> 581
+CCC's own admin, "Anil Varadaraj". Logging in as `ccc.admin` shows only CCC's data, which demonstrates tenant isolation.
+>>> 586-588
+Rounds a mark to 2 decimals, leaving a missing mark missing.
+>>> 590-600
+Deletes the `storage/applications` folder's contents from an earlier run. `Files.walk` lists every file and folder; sorting in reverse deletes the files inside a folder before the folder itself. A failure only logs a warning.
+>>> 603-627
+`placeholderPdf`: builds a **real, valid PDF** by hand. A PDF is text with numbered "objects":
+- line 604: removes the characters `(`, `)` and `\`, which have special meaning inside PDF text;
+- line 605: the page's drawing instructions: "BT … ET" = begin/end text, font size 16, position, then the two lines of text;
+- lines 606-612: the five objects: catalogue, page list, the page, its content, and the font (Helvetica);
+- lines 613-618: writes `%PDF-1.4` (the magic bytes that `FileTypeSniffer` checks) and each object, remembering where each one starts;
+- lines 619-625: the cross-reference table listing each object's byte position, and the trailer telling a PDF reader where to begin;
+- line 626: turns the text into bytes (ISO-8859-1, one byte per character, so the positions are exact).
+>>> 630-646
+`placeholderPng`: draws a 120 × 150 dark-blue rectangle with the person's initials in white (the capital letters of their name), and saves it as PNG bytes. This stands in for a passport photograph.
+>>> 648-654
+The SHA-256 fingerprint of some bytes, as 64 hexadecimal characters.

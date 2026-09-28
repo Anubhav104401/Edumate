@@ -1,0 +1,152 @@
+<h1>Cookbook: how to change any text, colour, message, alert or limit</h1>
+
+<p>EduMate was built so that the things people most often want to change each live in <strong>one known place</strong>.
+This chapter is a set of recipes. After a change:</p>
+<ul>
+<li><strong>frontend files</strong> (<code>frontend/…</code>): the browser updates by itself within a second while <code>npm run dev</code> runs;</li>
+<li><strong>backend files</strong> (<code>backend/…</code>): stop the backend (Ctrl+C) and start it again (<code>mvnw spring-boot:run</code>);</li>
+<li>then run the tests (<a href="#12-testing">chapter 12</a>), because some tests check exact messages.</li>
+</ul>
+
+<h2>Recipe 1: change any text on the screen</h2>
+<p>Every word the frontend shows is in <a href="#f-frontend-src-i18n-messages-ts"><code>frontend/src/i18n/messages.ts</code></a>,
+in one object called <code>t</code>, grouped by screen:</p>
+<pre class="block">login: {
+  title: 'Sign in to EduMate',
+  submit: 'Sign in',                      ← change the words between the quotes
+  …
+},</pre>
+<p>Pages never contain the words themselves; they write <code>{t.login.submit}</code>. So changing
+<code>'Sign in'</code> to <code>'Log in'</code> changes the button everywhere it appears.</p>
+<h3>Texts with blanks in them</h3>
+<pre class="block">issuedToast: (title: string, due: string) =&gt; `“${title}” issued. Due back on ${due}.`,</pre>
+<p>This is a small function: the page fills in <code>title</code> and <code>due</code>. You may reword everything
+<strong>outside</strong> the <code>${…}</code> parts, and move those parts around, but keep their names. The text is
+written between back-ticks (<code>`</code>).</p>
+<h3>Rules for editing safely</h3>
+<ul>
+<li>Change only the text between the quotes. Keep the key on the left (<code>submit:</code>) and the comma at the end.</li>
+<li>If your text contains an apostrophe, use double quotes around it: <code>guardianTitle: "Your child's fees",</code>.</li>
+<li>The <code>satisfies Record&lt;…&gt;</code> lines make TypeScript check that every status, role and document type has a text. If you delete one, <code>npm run build</code> tells you.</li>
+<li>To translate the whole app (for example to Hindi or Kannada), translate the values in this one file.</li>
+</ul>
+
+<h3>The complete catalogue of on-screen texts</h3>
+<p>Every key, its current words, and every place in the code that shows it (click a place to see the line):</p>
+{{MESSAGES_CATALOGUE}}
+
+<h2>Recipe 2: change an error message that comes from the backend</h2>
+<p>Business-rule messages ("This fee has already been paid in full.") are written in Java, next to the rule that
+produces them, and the frontend shows them exactly as sent. To reword one, find it in the table below, open the file
+at the given line, and edit the text in quotes. <strong>Do not change the code</strong> (the <code>"ALREADY_PAID"</code>
+part): tests and screens use it.</p>
+{{BACKEND_MESSAGES}}
+<h3>Form-field messages</h3>
+<p>Messages under individual form fields come from the rules on the request records, for example
+<a href="#f-backend-src-main-java-com-edumate-admissions-ApplicationForm-java"><code>ApplicationForm.java</code></a>:</p>
+<pre class="block">@NotBlank(message = "Enter your full name.") @Size(max = 120) String fullName,</pre>
+<p>The browser shows its own copy of these first (<code>t.apply.validation</code> in <code>messages.ts</code>); change
+both if you want the same words either way.</p>
+<h3>General messages</h3>
+<p>The messages for malformed JSON, bad parameters, too-large files, conflicting edits, "permission denied" and
+unexpected errors are in <a href="#f-backend-src-main-java-com-edumate-common-GlobalExceptionHandler-java"><code>GlobalExceptionHandler.java</code></a>.
+Login messages are in <a href="#f-backend-src-main-java-com-edumate-security-LoginAttemptService-java"><code>LoginAttemptService.java</code></a>.
+The general frontend messages (server unreachable, session ended, page crashed) are under <code>errors</code> in
+<code>messages.ts</code>.</p>
+
+<h2>Recipe 3: change a colour, font or size</h2>
+<p>Every colour and size is a <strong>CSS variable</strong> in
+<a href="#f-frontend-src-styles-theme-css"><code>frontend/src/styles/theme.css</code></a>:</p>
+<table>
+<thead><tr><th>Variable</th><th>Light value</th><th>Used for</th></tr></thead>
+<tbody>
+<tr><td><code>--color-primary</code></td><td><span style="background:#1f4e79;color:#fff;padding:0 6px">#1f4e79</span></td><td>buttons, links, the active menu item</td></tr>
+<tr><td><code>--color-primary-hover</code></td><td>#173c5e</td><td>a button under the mouse</td></tr>
+<tr><td><code>--color-primary-soft</code></td><td>#e3eef8</td><td>pale blue backgrounds</td></tr>
+<tr><td><code>--color-page</code></td><td>#f4f6f9</td><td>the grey page background</td></tr>
+<tr><td><code>--color-surface</code></td><td>#ffffff</td><td>cards, tables, dialogs</td></tr>
+<tr><td><code>--color-sidebar</code></td><td><span style="background:#10263d;color:#fff;padding:0 6px">#10263d</span></td><td>the left menu</td></tr>
+<tr><td><code>--color-text</code> / <code>--color-text-muted</code></td><td>#1b2430 / #5b6878</td><td>normal / grey text</td></tr>
+<tr><td><code>--color-good</code> / <code>-soft</code></td><td>#1e7a46 / #e3f4ea</td><td>green: success toasts, "Paid", good cards</td></tr>
+<tr><td><code>--color-warn</code> / <code>-soft</code></td><td>#9a6200 / #fdf1dc</td><td>amber: warnings, "Due", required badges</td></tr>
+<tr><td><code>--color-bad</code> / <code>-soft</code></td><td>#b42318 / #fde8e6</td><td>red: errors, "Overdue", F grades, clashes</td></tr>
+<tr><td><code>--font-body</code> / <code>--font-mono</code></td><td>Segoe UI… / Cascadia Mono…</td><td>normal text / codes like USNs and order numbers</td></tr>
+<tr><td><code>--text-xs</code> … <code>--text-2xl</code></td><td>12px … 30px</td><td>text sizes</td></tr>
+<tr><td><code>--space-1</code> … <code>--space-6</code></td><td>4px … 32px</td><td>gaps and padding</td></tr>
+<tr><td><code>--radius-sm/md/lg</code></td><td>6 / 10 / 14px</td><td>corner roundness</td></tr>
+<tr><td><code>--sidebar-width</code></td><td>248px</td><td>width of the left menu</td></tr>
+</tbody></table>
+<p>Example: to make EduMate maroon, set <code>--color-primary: #7a1f2b;</code> and <code>--color-primary-hover: #5e1721;</code>.
+Every button, link and highlight follows. <strong>Dark mode</strong> has its own values in the
+<code>@media (prefers-color-scheme: dark)</code> block of the same file; change them too. Layout rules (how cards, tables,
+the menu and the upload box are arranged) are in <a href="#f-frontend-src-styles-app-css"><code>app.css</code></a>; they
+use the variables, so they rarely need editing.</p>
+
+<h2>Recipe 4: change pop-up messages, confirmations and alert boxes</h2>
+<table>
+<thead><tr><th>What</th><th>Where the words are</th><th>Where the behaviour is</th></tr></thead>
+<tbody>
+<tr><td>Toast texts (green/red pop-ups)</td><td><code>messages.ts</code>, keys ending in <code>Toast</code> (e.g. <code>apply.savedToast</code>, <code>library.issuedToast</code>)</td><td><code>components/Toast.tsx</code></td></tr>
+<tr><td>How long toasts stay</td><td>–</td><td><code>TOAST_DURATION_MS</code> in <code>config.ts</code> (5000 = 5 s)</td></tr>
+<tr><td>"Are you sure?" questions</td><td><code>messages.ts</code>, keys starting with <code>confirm</code> (e.g. <code>resultsManage.confirmPublish</code>)</td><td><code>components/ConfirmDialog.tsx</code>; button labels <code>common.confirm</code>, <code>common.cancel</code></td></tr>
+<tr><td>Coloured information boxes</td><td>the page's keys in <code>messages.ts</code> (e.g. <code>apply.lockedNotice</code>)</td><td><code>Alert</code> in <code>components/ui.tsx</code>; colours from <code>--color-info/good/warn/bad</code></td></tr>
+<tr><td>Red error box with "Try again"</td><td>the message comes from the backend or <code>errors</code> in <code>messages.ts</code>; the button is <code>common.retry</code></td><td><code>ErrorBanner</code> in <code>components/ui.tsx</code></td></tr>
+<tr><td>Page-crash message</td><td><code>errors.pageCrashedTitle</code>, <code>errors.pageCrashedBody</code></td><td><code>components/ErrorBoundary.tsx</code></td></tr>
+<tr><td>Dashboard card words</td><td>in Java: <a href="#f-backend-src-main-java-com-edumate-dashboard-DashboardService-java"><code>DashboardService.java</code></a></td><td>colour by the card's tone</td></tr>
+<tr><td>E-mail / SMS texts</td><td>in Java, at each <code>notifications.enqueue(…)</code> (e.g. <code>AdmissionService</code>, <code>ConsentRegistry</code>, <code>PaymentOrchestrator</code>)</td><td>the outbox</td></tr>
+</tbody></table>
+
+<h2>Recipe 5: change a rule or a limit</h2>
+<table>
+<thead><tr><th>Rule</th><th>Current</th><th>Change it in</th></tr></thead>
+<tbody>
+<tr><td>Attendance threshold</td><td>75%</td><td><code>edumate.academic.attendance-threshold-percent</code> in <code>application.yml</code> <em>and</em> <code>ATTENDANCE_THRESHOLD</code> in <code>config.ts</code></td></tr>
+<tr><td>Login token lifetime</td><td>8 hours</td><td><code>edumate.security.token-validity-hours</code></td></tr>
+<tr><td>Lockout</td><td>5 failures → 15 minutes</td><td><code>edumate.security.max-failed-logins</code>, <code>lockout-minutes</code></td></tr>
+<tr><td>Library loan / fine</td><td>14 days, ₹2/day, max ₹200</td><td><code>edumate.library.loan-days</code>, <code>fine-per-day</code>, <code>max-fine</code> (and the text <code>library.finePolicy</code>)</td></tr>
+<tr><td>Books per student</td><td>3</td><td><code>MAX_OPEN_LOANS</code> in <code>LibraryService.java</code></td></tr>
+<tr><td>Merit-score weights</td><td>0.60 / 0.40</td><td><code>edumate.admissions.entrance-weight</code>, <code>qualifying-weight</code> (and the text <code>merit.subtitle</code>)</td></tr>
+<tr><td>Reserved seat shares</td><td>OBC 0.27, SC 0.15, ST 0.075</td><td><code>edumate.admissions.reserved-share</code></td></tr>
+<tr><td>Programme seats</td><td>B.Tech 60, M.Tech 18, MBA 30</td><td>the <code>program</code> table (demo values in <code>DemoDataSeeder.java</code>)</td></tr>
+<tr><td>Upload size</td><td>5 MB</td><td>four places, listed in <a href="#08-document-upload">chapter 8</a></td></tr>
+<tr><td>Accepted document kinds / required documents</td><td>see chapter 8</td><td><code>DocumentType.java</code> <em>and</em> <code>ACCEPTED_KINDS</code> / <code>REQUIRED_DOCUMENTS</code> in <code>fileChecks.ts</code></td></tr>
+<tr><td>Consent code validity / attempts</td><td>10 minutes / 5</td><td><code>OTP_VALID_MINUTES</code>, <code>MAX_ATTEMPTS</code> in <code>ConsentRegistry.java</code></td></tr>
+<tr><td>Message sending</td><td>every 5 s, 50 at a time, 3 tries</td><td><code>NotificationDispatcher.java</code></td></tr>
+<tr><td>Grade bands, external minimum</td><td>R-2023 (S ≥ 90 … F; external ≥ 21/60)</td><td><code>GradeScale.java</code></td></tr>
+<tr><td>Who may call which address</td><td>see the Role matrix page</td><td><code>RoleMatrix.java</code> (then run <code>RoleMatrixCoverageTest</code>)</td></tr>
+<tr><td>Campuses</td><td>JGC, CCC</td><td><code>edumate.tenants</code> in <code>application.yml</code></td></tr>
+<tr><td>Ports</td><td>5173, 8080, 3000</td><td>see <a href="#04-architecture-and-ports">chapter 4</a></td></tr>
+</tbody></table>
+
+<h2>Recipe 6: add a new page with a menu link</h2>
+<ol>
+<li>Create <code>frontend/src/pages/…/MyNewPage.tsx</code> (copy a simple one such as <code>MyLibraryPage.tsx</code>).</li>
+<li>Add its texts to <code>messages.ts</code>.</li>
+<li>Add a <code>&lt;Route path="my-new" element={only(['STUDENT'], &lt;MyNewPage /&gt;)} /&gt;</code> in <code>App.tsx</code>.</li>
+<li>Add <code>{ to: '/my-new', label: t.nav.myNew }</code> to the role's menu in <code>navigation.ts</code>.</li>
+<li>If it needs new data: a controller method, its service, a line in <code>RoleMatrix.java</code>, and an entry in <code>api/endpoints.ts</code>.</li>
+</ol>
+
+<h2>Recipe 7: add a new document type</h2>
+<ol>
+<li>Add a line to <code>DocumentType.java</code>, e.g. <code>TRANSFER_CERTIFICATE("Transfer certificate", Set.of(FileKind.PDF), false),</code>.</li>
+<li>Add it to <code>DocumentType</code> in <code>api/types.ts</code>, <code>ACCEPTED_KINDS</code> in <code>fileChecks.ts</code>, <code>documentTypes</code> in <code>messages.ts</code>, and <code>DOCUMENT_ORDER</code> in <code>ApplyPage.tsx</code>.</li>
+<li>No database change is needed: the type is stored as text.</li>
+</ol>
+
+<h2>Recipe 8: add a campus</h2>
+<p>Add an entry under <code>edumate.tenants</code> in <code>application.yml</code> (code, name, city) and restart:
+<code>TenantProvisioner</code> creates it. Then create its programmes and an administrator account for it.</p>
+
+<h2>Recipe 9: change the demo data or demo accounts</h2>
+<p>The demo data is made by <a href="#f-backend-src-main-java-com-edumate-config-DemoDataSeeder-java"><code>DemoDataSeeder.java</code></a>
+(names, marks, fees, books, applications). The password is <code>DEMO_PASSWORD</code> there and in <code>config.ts</code>.
+The list and descriptions of accounts on the login page are <code>DEMO_USERNAMES</code> in <code>config.ts</code> and
+<code>login.demoAccounts</code> in <code>messages.ts</code>. Several tests rely on specific demo records (Aarav's marks,
+Kiran's missing mark, Rohan's age), so change those only together with the tests.</p>
+
+<h2>Recipe 10: regenerate this guide after changing code</h2>
+<pre class="block">python docs/explainer/build_explainer.py --report</pre>
+<p>It re-reads every file, so the code shown here is always the current code. <code>--report</code> lists any lines that
+no longer have an explanation (for example after you add lines); hand-written explanations are in
+<code>docs/explainer/notes/*.txt</code>, and these chapters are in <code>docs/explainer/chapters/*.html</code>.</p>

@@ -1,0 +1,152 @@
+<h1>The life of one request: from a click to the database and back</h1>
+
+<p>This chapter follows two real journeys through the real code, step by step. The first is <strong>logging in</strong>.
+The second is <strong>opening "My fees"</strong>. Every step links to the line that does it.</p>
+
+<h2>Journey 1: logging in</h2>
+
+<h3>Step 1: the person types and presses "Sign in" (browser)</h3>
+<p><a href="#f-frontend-src-pages-LoginPage-tsx-L28"><code>LoginPage.handleSubmit</code></a> runs. It stops the browser's
+old-fashioned page reload, checks that both boxes are filled, and calls
+<a href="#f-frontend-src-auth-AuthContext-tsx-L60"><code>login(username, password)</code></a> from <code>AuthContext</code>,
+which calls <a href="#f-frontend-src-api-endpoints-ts-L67"><code>api.auth.login</code></a>:</p>
+<pre class="block">request&lt;LoginResponse&gt;('POST', '/api/auth/login', { username, password })</pre>
+
+<h3>Step 2: the JavaScript object becomes JSON text (browser)</h3>
+<p>In <a href="#f-frontend-src-api-http-ts-L59"><code>request()</code></a>, the body is an ordinary JavaScript object:</p>
+<pre class="block">{ username: "student", password: "Edumate@2026" }        ← a JavaScript object in memory</pre>
+<p><a href="#f-frontend-src-api-http-ts-L66"><code>JSON.stringify(body)</code></a> turns it into text that can travel
+over the network:</p>
+<pre class="block">{"username":"student","password":"Edumate@2026"}         ← a string of 49 characters</pre>
+<p>and the headers are set: <code>Content-Type: application/json</code> ("the body is JSON") and
+<code>Accept: application/json</code> ("please answer in JSON"). There is no token yet, so no
+<code>Authorization</code> header.</p>
+
+<h3>Step 3: fetch sends it (browser → port 5173)</h3>
+<p><a href="#f-frontend-src-api-http-ts-L75"><code>fetch('/api/auth/login', { method: 'POST', headers, body })</code></a>.
+The address has no host, so it goes to the page's own origin: <code>http://localhost:5173</code>. On the wire:</p>
+<pre class="block">POST /api/auth/login HTTP/1.1
+Host: localhost:5173
+Accept: application/json
+Content-Type: application/json
+Content-Length: 49
+
+{"username":"student","password":"Edumate@2026"}</pre>
+<div class="callout warn"><strong>About passwords on the wire</strong>
+On <code>localhost</code> the request never leaves your computer. In a real deployment the site must use
+<strong>https</strong>, so this body is encrypted between the browser and the server.</div>
+
+<h3>Step 4: Vite forwards it (port 5173 → port 8080)</h3>
+<p>Vite sees the path starts with <code>/api</code> (<a href="#f-frontend-vite-config-ts-L19">vite.config.ts line 19</a>)
+and sends the same request to <code>http://localhost:8080/api/auth/login</code>. (In Docker, nginx does the same:
+<a href="#f-frontend-nginx-conf-L21">nginx.conf line 21</a>.)</p>
+
+<h3>Step 5: Tomcat receives it (backend)</h3>
+<p>Spring Boot contains a web server, <strong>Tomcat</strong>, listening on port 8080. Tomcat reads the bytes, understands
+the HTTP, and hands the request to Spring.</p>
+
+<h3>Step 6: the security guard (Spring Security filter chain)</h3>
+<p>Before any EduMate code runs, the request passes through Spring Security, configured in
+<a href="#f-backend-src-main-java-com-edumate-security-SecurityConfig-java-L41"><code>SecurityConfig</code></a>. The
+RoleMatrix says <code>POST /api/auth/login</code> is <strong>public</strong> (you cannot have a token before logging
+in), so it is let through.</p>
+
+<h3>Step 7: the right method is found, and JSON becomes a Java object (Jackson)</h3>
+<p>Spring's <em>DispatcherServlet</em> looks for a method whose mapping matches <code>POST /api/auth/login</code> and finds
+<a href="#f-backend-src-main-java-com-edumate-security-AuthController-java-L31"><code>AuthController.login</code></a>.
+Its parameter is <code>@Valid @RequestBody LoginRequest request</code>, so:</p>
+<ol>
+<li><strong>Jackson</strong> reads the JSON text and builds a Java record: <code>new LoginRequest("student", "Edumate@2026")</code>. It matches JSON field names to the record's component names.</li>
+<li><strong>Bean Validation</strong> checks the rules written on the record (<code>@NotBlank</code>, <code>@Size(max = 60)</code>). If one fails, the method never runs; instead <code>GlobalExceptionHandler</code> answers 400 with <code>{"code":"VALIDATION_FAILED","fieldErrors":{"username":"Username is required."}}</code>.</li>
+<li>If the body is not JSON at all, the answer is 400 <code>MALFORMED_JSON</code>, never a Java stack trace.</li>
+</ol>
+
+<h3>Step 8: the password check (service + database)</h3>
+<p><a href="#f-backend-src-main-java-com-edumate-security-LoginAttemptService-java-L54"><code>LoginAttemptService.authenticate</code></a>:</p>
+<ol>
+<li>Finds the user by username. The repository method <code>findByUsername</code> becomes SQL like <code>SELECT * FROM app_user WHERE username = ?</code>. The <code>?</code> is filled in safely, so a username like <code>' OR 1=1 --</code> is just a strange name, not an attack (no SQL injection).</li>
+<li>If the account is locked (5 failures in the last 15 minutes): 423.</li>
+<li>Compares the typed password with the stored <strong>bcrypt hash</strong> (<a href="#07-security">chapter 7</a>). Wrong → count the failure, answer 401 "Invalid username or password."</li>
+<li>Right → reset the failure counter and write <code>LOGIN_SUCCESS</code> to the audit log.</li>
+</ol>
+
+<h3>Step 9: the token is made</h3>
+<p><a href="#f-backend-src-main-java-com-edumate-security-JwtTokenService-java-L34"><code>JwtTokenService.issue</code></a>
+writes a <strong>JWT</strong>: three parts joined by dots, <code>header.payload.signature</code>. The payload (decoded) is:</p>
+<pre class="block">{
+  "iss": "edumate-backend",
+  "sub": "student",                 ← username
+  "iat": 1790575200,                ← issued at (seconds since 1 Jan 1970)
+  "exp": 1790604000,                ← expires 8 hours later
+  "uid": 12, "name": "Aarav Sharma", "role": "STUDENT", "campus": "JGC", "sid": 7
+}</pre>
+<p>The signature is HMAC-SHA256 of the first two parts, computed with the server's secret key. Changing even one
+character of the payload (say <code>"role":"ADMIN"</code>) makes the signature wrong, so the server refuses it.</p>
+
+<h3>Step 10: the Java answer becomes JSON (Jackson again)</h3>
+<p>The method returns <code>new LoginResponse(token, expiresAt, me)</code>. Spring sees the method belongs to a
+<code>@RestController</code>, so Jackson writes the record as JSON: each record component becomes a field, an
+<code>Instant</code> becomes an ISO date-time text, an enum becomes its name:</p>
+<pre class="block">HTTP/1.1 200
+Content-Type: application/json
+
+{"token":"eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOi…","expiresAt":"2026-09-28T14:00:00Z",
+ "user":{"id":12,"username":"student","fullName":"Aarav Sharma","role":"STUDENT","campusCode":"JGC","studentId":7}}</pre>
+
+<h3>Step 11: back in the browser</h3>
+<p>The response travels back through Vite. In <a href="#f-frontend-src-api-http-ts-L92"><code>handleResponse</code></a>,
+the status is 200 and the type is JSON, so <code>response.json()</code> turns the text back into a JavaScript object.
+<code>AuthContext</code> saves the token in <code>sessionStorage</code> and remembers the user. React notices that the
+state changed and redraws. The login page sees a user and navigates to the dashboard.</p>
+
+<h2>Journey 2: opening "My fees"</h2>
+
+<table>
+<thead><tr><th>#</th><th>Where</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>browser</td><td>The student clicks "Fees" in the menu. React Router changes the address to <code>/fees</code> <strong>without</strong> asking the server for a page, and shows <a href="#f-frontend-src-pages-student-MyFeesPage-tsx"><code>MyFeesPage</code></a>.</td></tr>
+<tr><td>2</td><td>browser</td><td>The page's <a href="#f-frontend-src-pages-student-MyFeesPage-tsx-L24"><code>useLoad(() =&gt; api.fees.mine(), [])</code></a> starts; the screen shows "Loading…".</td></tr>
+<tr><td>3</td><td>browser</td><td><a href="#f-frontend-src-api-endpoints-ts-L119"><code>api.fees.mine()</code></a> calls <code>request('GET', '/api/fees/me')</code>. A GET has no body; the token is added: <code>Authorization: Bearer eyJ…</code>.</td></tr>
+<tr><td>4</td><td>Vite → Tomcat</td><td>Forwarded to port 8080, as before.</td></tr>
+<tr><td>5</td><td>security</td><td>The resource-server filter reads the <code>Bearer</code> token, <strong>checks its signature and expiry</strong> with the secret key, and turns the claim <code>role: STUDENT</code> into the authority <code>ROLE_STUDENT</code>.</td></tr>
+<tr><td>6</td><td>RoleMatrix</td><td><a href="#f-backend-src-main-java-com-edumate-security-RoleMatrix-java-L92"><code>allow(GET, "/api/fees/me", STUDENT, GUARDIAN)</code></a>: allowed. (An accounts officer would get 403; no token at all, 401.)</td></tr>
+<tr><td>7</td><td>controller</td><td><a href="#f-backend-src-main-java-com-edumate-fees-FeeController-java-L31"><code>FeeController.mine(CurrentUser me)</code></a>. The <code>CurrentUser</code> parameter is filled by <a href="#f-backend-src-main-java-com-edumate-security-CurrentUserArgumentResolver-java-L29"><code>CurrentUserArgumentResolver</code></a> from the token's claims: id 12, role STUDENT, campus JGC, student id 7. The student id comes from the <strong>signed token</strong>, never from the URL, so nobody can ask for another student's fees by changing a number.</td></tr>
+<tr><td>8</td><td>service</td><td><a href="#f-backend-src-main-java-com-edumate-fees-FeeAccountService-java-L39"><code>FeeAccountService.accountOf(7)</code></a> loads the student, their bills, payments and ledger through repositories.</td></tr>
+<tr><td>9</td><td>Hibernate → database</td><td>Each repository method becomes SQL, for example <code>SELECT … FROM fee_demand WHERE student_id = ? ORDER BY due_date</code>. The database returns rows, and Hibernate turns each row into a Java object (an <em>entity</em>).</td></tr>
+<tr><td>10</td><td>service</td><td>For each bill: paid = sum of successful payments; balance = amount − paid; status PAID / OVERDUE / DUE. All money is <code>BigDecimal</code>, exact to the paisa.</td></tr>
+<tr><td>11</td><td>Jackson</td><td>The <code>FeeAccount</code> record becomes JSON: <code>{"studentId":7,"usn":"23BTRCS007","fullName":"Aarav Sharma","outstanding":62500.00,"demands":[…],"payments":[],"ledger":[…]}</code></td></tr>
+<tr><td>12</td><td>browser</td><td><code>response.json()</code> → object → <code>useLoad</code> stores it in <code>data</code> → React redraws: the amber "Amount outstanding ₹62,500.00" card, the bills table with "Pay now", the statement.</td></tr>
+</tbody></table>
+
+<h2>What if something goes wrong on the way?</h2>
+<table>
+<thead><tr><th>Problem</th><th>Where it is caught</th><th>What the person sees</th></tr></thead>
+<tbody>
+<tr><td>backend not running</td><td><code>fetch</code> fails in <code>http.ts</code></td><td>red toast or box: "Cannot reach the EduMate server. Check that the backend is running on port 8080."</td></tr>
+<tr><td>token expired (after 8 hours)</td><td>security filter → 401 → <code>onUnauthorized</code></td><td>logged out with "Your session has ended. Please log in again."</td></tr>
+<tr><td>wrong role</td><td>RoleMatrix → 403</td><td>"You do not have permission to do this." (and an audit entry)</td></tr>
+<tr><td>business rule refused</td><td>service throws <code>ApiException</code> → <code>GlobalExceptionHandler</code></td><td>the service's own message, e.g. "This fee has already been paid in full."</td></tr>
+<tr><td>two people saved the same record</td><td><code>@Version</code> check → <code>ObjectOptimisticLockingFailureException</code></td><td>409 "Someone else changed this record while you were editing it. Reload and try again."</td></tr>
+<tr><td>a bug in the server</td><td>the catch-all handler</td><td>500 "Something went wrong on our side. Please quote reference 3f2c9a1b to support." The details go only to the server log.</td></tr>
+<tr><td>a bug while drawing the page</td><td><code>ErrorBoundary</code></td><td>"This page could not be displayed." The menu keeps working.</td></tr>
+</tbody></table>
+
+<h2>The error JSON, always the same shape</h2>
+<pre class="block">{
+  "timestamp": "2026-09-28T05:12:44.120Z",
+  "status": 409,
+  "code": "SAME_APPROVER",
+  "message": "You gave the first approval. A second, different exam superintendent must approve.",
+  "path": "/api/exams/result-sets/5/approve",
+  "traceId": null,
+  "fieldErrors": null
+}</pre>
+<p>Defined by <a href="#f-backend-src-main-java-com-edumate-common-ApiError-java"><code>ApiError</code></a>, produced by
+<a href="#f-backend-src-main-java-com-edumate-common-GlobalExceptionHandler-java"><code>GlobalExceptionHandler</code></a>,
+read by <a href="#f-frontend-src-api-http-ts-L99"><code>toApiError</code></a>. Because every error has a machine-readable
+<code>code</code> <em>and</em> a human <code>message</code>, the screens can show the message directly, and tests can
+check the code.</p>
+
+<h2>A file upload is different in one way</h2>
+<p>An upload is not JSON: the body is <code>multipart/form-data</code>, a format that can carry both text fields and
+raw file bytes. <a href="#08-document-upload">Chapter 8</a> follows one upload byte by byte.</p>

@@ -1,0 +1,306 @@
+=== FILE backend/src/main/java/com/edumate/fees/PaymentOrchestrator.java
+>>> SUMMARY
+Handles **fee payments through the payment gateway** (FR-08; the report names this design element PaymentOrchestrator). A payment happens in two steps:
+
+1. **initiate**: the student clicks "Pay now". EduMate creates a payment *order* for the amount still due and sends the browser to the gateway's page (in this project, the demo gateway page `/pay/ORD-…`).
+2. **handleCallback**: after the bank has taken (or declined) the money, the gateway calls EduMate's callback address with the result, signed with a shared secret. EduMate records the payment, credits the student's fee ledger, and issues a receipt number.
+
+**The defect this fixes.** Design review found **DR-02** and system testing confirmed it as **DEF-014**: "Replayed payment gateway callback credits the fee ledger twice". Gateways sometimes deliver the same callback more than once (a network retry, for example). The old handler credited ₹62,500 again each time, so the ledger showed ₹1,25,000 paid. The handler must be **idempotent**: receiving the same callback twice must have the same effect as receiving it once.
+
+Four guards now make sure a payment is credited exactly once:
+- **Signature check**: a callback whose HMAC signature does not match is refused, so nobody can fake a "payment successful" message.
+- **Row lock**: the payment row is locked while a callback is processed, so two copies arriving together are handled one after the other, never interleaved.
+- **Duplicate recognition**: a callback carrying the bank reference that is already recorded is answered "DUPLICATE_IGNORED" and changes nothing.
+- **Database uniqueness**: the payment's bank reference and the ledger credit's reference are UNIQUE columns, so even a mistake in the code could not store a second credit.
+
+The whole callback runs in **one transaction**, so the payment status, the ledger credit and the receipt are saved together or not at all.
+>>> 35-36
+The two possible outcomes of a callback, as fixed words: PROCESSED (this callback changed something) and DUPLICATE_IGNORED (it was a repeat).
+>>> 48-50
+Constructor: the payment, demand and student repositories, the fee ledger, the signature checker, the receipt-number maker, the notification service, the audit logger and the clock.
+>>> 64
+`initiate`: start paying one fee demand (bill), as the logged-in student or guardian `me`.
+>>> 65
+The student whose fee is being paid, taken from the login token (never from the request), so a guardian can only pay for their own child.
+>>> 66-68
+Loads the bill, but only if it belongs to that student. `filter(...)` empties the Optional box when the bill is someone else's, and then `orElseThrow` answers 404, the same answer as for a bill that does not exist, so nothing is revealed about other students' bills.
+>>> 69
+The amount still due = bill amount − everything already paid successfully against it.
+>>> 70-72
+Nothing left to pay → 409 ALREADY_PAID.
+>>> 73-74
+A new order number such as `ORD-81D4440CAE9D45BA`: "ORD-" followed by the first 16 characters of a random UUID without dashes, in capitals. It is random so it cannot be guessed.
+>>> 75
+Saves the new payment in the INITIATED state.
+>>> 76-77
+Audit line: who started which order for how much.
+>>> 78
+Returns the order number, amount, description and the page to go to (`/pay/ORD-…`). The frontend then moves the browser there.
+>>> 83
+`handleCallback`: process one message from the gateway. It is called by the public callback URL and, in this project, by the demo gateway.
+>>> 84-89
+**Guard 1, the signature.** Recompute the signature from the callback's fields with the shared secret and compare. If it does not match, write CALLBACK_REJECTED to the audit log and answer 400 BAD_SIGNATURE.
+>>> 90-91
+**Guard 2, the row lock.** Load the payment with `SELECT … FOR UPDATE`: this row stays locked until this transaction ends, and a second callback for the same order waits here. 404 if the order does not exist.
+>>> 92-96
+The amount in the callback must equal the order's amount exactly (`compareTo(...) != 0` compares by value). Otherwise refuse with 400 AMOUNT_MISMATCH and audit it.
+>>> 98-103
+**Guard 3, duplicate recognition.** If this callback's bank reference (`txnRef`) is the one already stored on the payment, this is a repeat. Record CALLBACK_DUPLICATE_IGNORED and return without changing anything.
+>>> 104-109
+The payment is already successful but under a **different** bank reference: something unusual happened (possibly the student was charged twice by the bank). Refuse, and record both references so the accounts office can reconcile.
+>>> 111
+The current time for the records below.
+>>> 112-113
+The bank says SUCCESS: capture the payment (method below).
+>>> 114-118
+The bank says FAILURE: mark the payment failed with the bank's reason (or "Declined by the bank" if none was given), and audit it. The student can try again with a new order.
+>>> 119
+**Guard 4.** Writes the changes to the database now, inside the transaction, so a UNIQUE rule violation shows up here and undoes everything rather than being saved half-way.
+>>> 120
+Returns PROCESSED with the payment's new status, receipt number or failure reason.
+>>> 123-127
+`capture`: make a receipt number, mark the payment SUCCESS with the bank reference and receipt, and add a CREDIT line to the student's fee ledger with the bank reference as its reference (unique per credit).
+>>> 128-129
+Audit line: from INITIATED to SUCCESS, the amount and receipt number.
+>>> 130-135
+Queues a receipt e-mail to the student (sent later by the dispatcher). The dedup key `receipt:<number>` makes sure it is queued only once.
+>>> 138-140
+Builds the answer object from the outcome word and the payment's current state.
+>>> 144
+What `initiate` returns (as JSON): order number, amount, description and the checkout page path.
+>>> 148-149
+What each callback returns: the outcome, the order, the payment's status, the receipt number (if paid) and the failure reason (if failed).
+
+=== FILE backend/src/main/java/com/edumate/fees/GatewaySignature.java
+>>> SUMMARY
+Proves that a payment callback **really came from the payment gateway** and was not changed on the way.
+
+EduMate and the gateway share a secret text (`edumate.payment.gateway-secret`). For every callback the gateway computes
+
+<pre class="block">signature = HMAC-SHA256(secret, "orderId|txnRef|status|amount")
+e.g. with the development secret "dev-gateway-secret-change-me":
+            HMAC-SHA256(secret, "ORD-81D4440CAE9D45BA|TXN000123456789|SUCCESS|62500.00")
+         →  "a7554c0ad616b24f68cda993fd88209343bc813a41fc8a951f355e697c9dd56f"</pre>
+
+and sends it along. EduMate computes the same thing with its copy of the secret. If anyone changed even one character (say, the amount), the two results are completely different. Without the secret it is practically impossible to produce a matching signature.
+
+HMAC is like a wax seal that only the two parties can make. It is the same method the gateways used in India (Razorpay, PayU and others) use for their callbacks.
+>>> 26
+The algorithm's standard Java name.
+>>> 31
+Turns the secret text into bytes once, when the component is created.
+>>> 34
+`sign`: compute the signature for these four fields.
+>>> 35-42
+- Line 36: get an HMAC-SHA256 calculator.
+- Line 37: give it the secret key.
+- Line 38: feed it the joined fields as bytes; `doFinal` returns the 32-byte result.
+- Line 39: write those bytes as 64 hexadecimal characters (0-9, a-f).
+- Lines 40-41: Java requires handling the (practically impossible) case that the algorithm is missing.
+>>> 46-53
+`verify`: a missing signature is simply wrong (lines 47-49). Otherwise compute the expected signature and compare it with the given one using `MessageDigest.isEqual`, which always takes the same time. An ordinary comparison stops at the first different character, and an attacker could measure those tiny time differences to guess a signature one character at a time.
+>>> 55-56
+The text that is signed: the four fields joined with `|`.
+
+=== FILE backend/src/main/java/com/edumate/fees/MockPaymentGateway.java
+>>> SUMMARY
+A **pretend bank** for the demonstration, standing in for a real payment gateway's test sandbox. The demo page `/pay/ORD-…` calls it. It builds exactly the signed callback a real gateway would send and passes it to `PaymentOrchestrator.handleCallback`, the same method that serves the real callback URL.
+
+The `deliveries` choice (1 to 3) sends the **same** callback several times, to show test case **TC-006** live: "Replay the gateway success callback for the same transaction ID → second callback recognised as duplicate and ignored; ledger credited once."
+
+`complete` is deliberately **not** `@Transactional`: each delivery runs in its own transaction, as separate real HTTP calls would.
+>>> 26
+A strong random-number generator for making bank references.
+>>> 32-33
+Constructor: the payment repository, the orchestrator and the signature maker.
+>>> 40-42
+`checkout`: the details shown on the demo bank page (order, amount, status), only for the student's own order.
+>>> 46-47
+`complete`: approve or decline the payment, delivering the callback `deliveries` times.
+>>> 48-50
+Only 1 to 3 deliveries are allowed.
+>>> 51
+Loads the student's own order (404 otherwise).
+>>> 52
+A made-up bank reference: "TXN" followed by 12 random digits (`%012d` pads with zeros).
+>>> 53-54
+The status word and the amount written exactly as the gateway would ("62500.00").
+>>> 55-57
+Builds the callback, signed with the shared secret, with a failure reason only when declined.
+>>> 59-63
+Sends the same callback `deliveries` times and collects each answer (PROCESSED, then DUPLICATE_IGNORED …) for the page to show.
+>>> 66-70
+Loads an order by its number, but only if it belongs to the logged-in student; otherwise 404.
+>>> 74
+What the demo bank page shows before paying.
+
+=== FILE backend/src/main/java/com/edumate/fees/FeeLedger.java
+>>> SUMMARY
+The **fee account book** of each student (the report's design element FeeLedger). It works like a bank passbook:
+- a **DEBIT** line is money the student owes (a bill, e.g. "Semester 5 tuition fee ₹62,500");
+- a **CREDIT** line is money the student paid (with the bank reference);
+- the **balance owed** = all debits − all credits.
+
+Lines are only ever **added**, never edited or deleted, so the full history can always be checked. A mistake would be corrected by adding another line, as accountants do.
+
+"Fee fully paid" (one of the four inputs of the hall-ticket decision table) means the balance is zero or less.
+>>> 27-29
+Adds a DEBIT line (money owed).
+>>> 33-35
+Adds a CREDIT line (money received).
+>>> 40-41
+The balance owed, calculated by the database in one query.
+>>> 45-46
+True when nothing is owed. `signum()` gives −1, 0 or +1 for negative, zero or positive.
+>>> 50-51
+All lines of one student, oldest first, for the account statement.
+
+=== FILE backend/src/main/java/com/edumate/fees/FeeLedgerRepository.java
+>>> SUMMARY
+Reads the ledger. The `balance` query adds up a student's lines in the database, counting debits as + and credits as −.
+>>> 16-19
+`sum(case when e.entryType = 'DEBIT' then e.amount else -e.amount end)` adds +amount for debits and −amount for credits. `coalesce(…, 0)` gives 0 when the student has no lines at all (a sum over nothing would otherwise be empty/null).
+>>> 20
+The method returning that balance as a BigDecimal.
+
+=== FILE backend/src/main/java/com/edumate/fees/PaymentRepository.java
+>>> SUMMARY
+Reads and writes payments, including the special **locking read** used by the callback handler, and a sum of what has been paid against a bill.
+>>> 25-27
+`@Lock(PESSIMISTIC_WRITE)` turns this read into `SELECT … FOR UPDATE`: the row is locked until the transaction ends. A second transaction asking for the same row waits. This is the "row lock" guard of the idempotent callback.
+>>> 34-35
+The total successfully paid against one bill: the sum of the amounts of its SUCCESS payments, or 0 if there are none.
+
+=== FILE backend/src/main/java/com/edumate/fees/ReceiptNumberGenerator.java
+>>> SUMMARY
+Makes **receipt numbers** such as `RCPT-20260928-000052`: "RCPT-", the date (year, month, day), and the payment's database id padded to 6 digits. Because the payment id is already unique, two receipts can never get the same number, which is the expected result of test case TC-005 ("receipt generated with a unique number").
+>>> 18
+`BASIC_ISO_DATE` writes a date as 20260928.
+>>> 26-28
+Works out the day in the campus time zone, then joins the parts. `%06d` means "whole number, at least 6 digits, padded with zeros".
+
+=== FILE backend/src/main/java/com/edumate/fees/GatewayCallback.java
+>>> SUMMARY
+The exact **JSON the payment gateway sends** to `POST /api/payments/gateway/callback`, with a rule on every field. Example:
+
+<pre class="block">{ "orderId": "ORD-81D4440CAE9D45BA", "txnRef": "TXN000123456789", "status": "SUCCESS",
+  "amount": "62500.00", "signature": "a7554c0ad616…", "failureReason": null }</pre>
+
+The amount travels as **text** with exactly two decimals, so the signature is computed over exactly the same characters on both sides.
+>>> 12-17
+The six fields and their rules: order number, bank reference and signature are required; `status` must be exactly SUCCESS or FAILURE; `amount` must look like digits, a dot and exactly two digits (for example 62500.00); `failureReason` is optional.
+
+=== FILE backend/src/main/java/com/edumate/fees/FeeDemand.java
+>>> SUMMARY
+A **bill** raised on a student, e.g. "Semester 5 tuition fee, ₹62,500.00, due 13 October 2026". When a bill is raised, a matching DEBIT line is also added to the student's fee ledger. Payments point to the bill they pay.
+>>> 42
+The constructor used to raise a bill: which student, what for, how much, the due date, and when it was raised.
+
+=== FILE backend/src/main/java/com/edumate/fees/FeeDemandRepository.java
+>>> SUMMARY
+Reads bills. `findByStudentIdOrderByDueDate` gives a student's bills with the earliest due date first, for the "My fees" page.
+
+=== FILE backend/src/main/java/com/edumate/fees/Payment.java
+>>> SUMMARY
+One **attempt to pay** a bill through the gateway. It starts as INITIATED when the student clicks "Pay now", and becomes SUCCESS or FAILED when the gateway's callback arrives.
+
+Two ids matter:
+- `gatewayOrderId`: **our** number for the attempt (ORD-…), created by EduMate before the student goes to the bank;
+- `gatewayTxnRef`: the **bank's** reference for the money movement, arriving with the callback.
+Both are UNIQUE in the database. The uniqueness of `gateway_txn_ref` is the database-level half of the fix for DR-02 / DEF-014: the same bank transaction can never be stored against two payments.
+
+`@Version` protects the row against two simultaneous changes.
+>>> 68
+Creates a new INITIATED payment for a student, bill, amount and order number, stamping the creation and update times.
+>>> 77-83
+Marks the payment successful: stores the bank reference and receipt number, clears any earlier failure reason, and updates the time.
+>>> 85-90
+Marks the payment failed: stores the bank reference and the reason given by the bank.
+>>> 92-93
+True if the payment succeeded. Writing `SUCCESS.equals(status)` (constant first) is a small safe habit: it gives false instead of crashing if `status` were ever null.
+
+=== FILE backend/src/main/java/com/edumate/fees/FeeLedgerEntry.java
+>>> SUMMARY
+One **line** of a student's fee account book: DEBIT (a bill) or CREDIT (a payment), the amount, a description and a reference. For credits the reference is the bank's transaction reference.
+
+The database rule `UNIQUE (entry_type, reference)` means one bank transaction can be credited **only once**, even if some code tried to credit it twice. This is the last line of defence behind the idempotent callback handler.
+>>> 52-53
+The constructor used by `FeeLedger.debit` and `FeeLedger.credit`.
+
+=== FILE backend/src/main/java/com/edumate/fees/FeeAccountService.java
+>>> SUMMARY
+Builds the **fee pages** (read-only):
+- `accountOf(student)`: everything on "My fees": the amount outstanding, each bill with how much is paid and its status (PAID, DUE or OVERDUE), each payment attempt, and the full account statement.
+- `accountByUsn(usn)`: the same, looked up by USN, for the accounts office (only students of the officer's own campus).
+- `recentPayments()`: the latest 200 payments of any student, for the accounts office.
+- `payment(orderId)`: one payment, for its owner or accounts staff.
+>>> 30-31
+Constructor: bills, payments and students repositories, the fee ledger and the clock.
+>>> 39
+`accountOf`: the full fee account of one student.
+>>> 40-41
+Loads the student (404 if missing) and today's date (for "overdue").
+>>> 42-50
+One `DemandView` per bill (earliest due first):
+- line 44: how much has been paid against it;
+- line 45: what is still due, never shown below zero (`max(ZERO)`);
+- line 46: PAID if nothing is due; otherwise OVERDUE if the due date has passed; otherwise DUE;
+- lines 47-48: the row for the page.
+>>> 51-52
+The student's payment attempts, newest first, each turned into a `PaymentView`.
+>>> 53-56
+The account statement: each ledger line turned into a small `LedgerLine` (time, type, amount, description, reference).
+>>> 57-58
+The whole account: who, the outstanding balance (from the ledger), bills, payments and statement.
+>>> 62-66
+Accounts office lookup: finds the student by USN (spaces trimmed, capitals, so "23btrcs020" works), only within the officer's campus; 404 otherwise. Then builds their account.
+>>> 69-70
+The newest 200 payments, for the accounts office's "Recent payments" table.
+>>> 74-82
+One payment by order number. Accounts officers and administrators may see any; anyone else only their own (their linked student). For someone else's order the answer is 404, so that other students' order numbers are not even confirmed to exist.
+>>> 84-85
+The JSON of a fee account.
+>>> 88-89
+The JSON of one bill row.
+>>> 92-98
+The JSON of one payment, with `of(p)` copying the fields out of a `Payment` entity.
+>>> 101
+The JSON of one statement line.
+
+=== FILE backend/src/main/java/com/edumate/fees/FeeController.java
+>>> SUMMARY
+The fee web addresses under `/api/fees`:
+
+| URL | Who | Does |
+|---|---|---|
+| GET /me | STUDENT, GUARDIAN | my fee account |
+| POST /payments  body `{"feeDemandId": 7}` | STUDENT, GUARDIAN | start paying a bill |
+| GET /payments | ACCOUNTS_OFFICER, ADMIN | recent payments |
+| GET /payments/{orderId} | owner or accounts staff | one payment |
+| GET /ledger?usn=23BTRCS020 | ACCOUNTS_OFFICER, ADMIN | a student's account |
+>>> 32-33
+GET /api/fees/me: the student comes from the login token.
+>>> 38-39
+POST /api/fees/payments: reads `{"feeDemandId": …}` from the body and starts the payment.
+>>> 43-44
+GET /api/fees/payments: recent payments.
+>>> 48-49
+GET /api/fees/payments/{orderId}: one payment (ownership checked in the service).
+>>> 53-54
+GET /api/fees/ledger?usn=…: a student's account for the accounts office.
+>>> 57
+The body of "start paying": the bill's id, required.
+
+=== FILE backend/src/main/java/com/edumate/fees/PaymentGatewayController.java
+>>> SUMMARY
+The addresses the **payment gateway** uses, plus the two used by the demo bank page:
+- `POST /api/payments/gateway/callback`: the gateway reports the result. This URL is **public** in the RoleMatrix (the gateway has no EduMate login); it is protected by the HMAC signature instead.
+- `GET /api/payments/gateway/mock/{orderId}` and `POST …/complete`: the demo bank page, for logged-in students and guardians only.
+>>> 37-38
+The callback: the JSON body is checked against `GatewayCallback`'s rules (`@Valid`), then handled by the orchestrator.
+>>> 42-43
+The demo bank page's details.
+>>> 47-49
+The demo bank's "Approve" / "Decline" buttons, with how many times to deliver the callback.
+>>> 53
+The body of those buttons: `{"success": true, "deliveries": 3}`, deliveries between 1 and 3.

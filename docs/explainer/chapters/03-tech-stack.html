@@ -1,0 +1,115 @@
+<h1>The tech stack: every tool, why it was chosen, and what else could have been used</h1>
+
+<p>A <strong>tech stack</strong> is the list of languages, frameworks and tools a project is built with, stacked like
+layers: the browser at the top, the database at the bottom. The SQA report fixes the main layers
+("a React single-page application, a Spring Boot REST backend, PostgreSQL, Redis, an object store"), and EduMate follows
+it exactly. The table gives every piece with its version.</p>
+
+<div class="callout kid"><strong>Like building a house</strong>
+Languages are the raw materials (bricks, wood). Frameworks are ready-made parts (doors, windows): you could make your
+own, but using tested ones is faster and safer. Tools are the builder's equipment (the crane, the measuring tape).</div>
+
+<h2>The whole stack at a glance</h2>
+<table>
+<thead><tr><th>Layer</th><th>Technology (version)</th><th>Job in EduMate</th></tr></thead>
+<tbody>
+<tr><td rowspan="6">Frontend (browser)</td><td>TypeScript 7.0</td><td>The language of the frontend: JavaScript plus types</td></tr>
+<tr><td>React 19.3</td><td>Builds the screens out of components; redraws what changes</td></tr>
+<tr><td>React Router 8.4</td><td>Chooses the page for each address (<code>/fees</code>, <code>/results</code>…)</td></tr>
+<tr><td>Vite 8.3</td><td>Development server on port 5173 (with the <code>/api</code> proxy) and production bundler</td></tr>
+<tr><td>Vitest 5 + jsdom</td><td>Runs the frontend tests</td></tr>
+<tr><td>Plain CSS with variables</td><td>All colours and sizes in <code>theme.css</code>, layout in <code>app.css</code></td></tr>
+<tr><td rowspan="9">Backend (server)</td><td>Java 21 (runs on JDK 21 or newer)</td><td>The language of the backend</td></tr>
+<tr><td>Spring Boot 4.1 (Spring Framework 7)</td><td>The framework: web server, dependency injection, configuration</td></tr>
+<tr><td>Spring Web MVC + embedded Tomcat</td><td>Receives HTTP requests, calls the right controller method</td></tr>
+<tr><td>Jackson 3</td><td>Turns JSON text into Java objects and back</td></tr>
+<tr><td>Jakarta Bean Validation</td><td><code>@NotBlank</code>, <code>@Email</code>, <code>@Size</code>… rules on incoming JSON</td></tr>
+<tr><td>Spring Security 7 + OAuth2 Resource Server</td><td>Checks the login token (JWT) and the RoleMatrix on every request</td></tr>
+<tr><td>Spring Data JPA + Hibernate 7</td><td>Maps Java classes to database tables; writes most SQL itself</td></tr>
+<tr><td>Spring Cache (+ Redis in Docker)</td><td>Remembers published results so results morning does not overload the database</td></tr>
+<tr><td>Spring Boot Actuator</td><td><code>/actuator/health</code> for "is the server alive?"</td></tr>
+<tr><td rowspan="3">Database</td><td>PostgreSQL 17 (Docker / production)</td><td>The real database</td></tr>
+<tr><td>H2 2.4 in PostgreSQL mode (laptop)</td><td>An in-memory database, so development needs nothing installed</td></tr>
+<tr><td>Flyway 12</td><td>Creates the tables from <code>V1__create_schema.sql</code>; tracks schema versions</td></tr>
+<tr><td rowspan="3">Build and run</td><td>Maven 3.9 via the Maven Wrapper</td><td>Downloads Java libraries, compiles, tests, packages the backend</td></tr>
+<tr><td>npm (Node.js 20+)</td><td>Downloads JavaScript packages, runs the frontend scripts</td></tr>
+<tr><td>Docker + Docker Compose; nginx 1.27; Redis 7</td><td>The production-like set-up with one command</td></tr>
+<tr><td rowspan="3">Testing</td><td>JUnit 5 + AssertJ + MockMvc</td><td>64 backend tests: unit and integration</td></tr>
+<tr><td>embedded-postgres (PostgreSQL 17 binaries)</td><td>A real PostgreSQL inside the test run (Compatibility objective)</td></tr>
+<tr><td>Vitest</td><td>15 frontend tests</td></tr>
+</tbody></table>
+
+<h2>Why each main piece, and what else could have been used</h2>
+
+<h3>Java + Spring Boot for the backend</h3>
+<p><strong>Chosen because:</strong> the report names a Spring Boot REST backend. Java is strongly typed (many mistakes are
+caught before running), has exact decimal arithmetic (<code>BigDecimal</code>, essential for money and GPAs), and Spring
+Boot gives security, transactions, validation and database access as tested parts, with no need to build them.</p>
+<table>
+<thead><tr><th>Alternative</th><th>What would change</th></tr></thead>
+<tbody>
+<tr><td>Node.js (Express / NestJS)</td><td>One language (TypeScript) on both sides. But JavaScript numbers are floating-point, so money and GPA need extra libraries, and transactions and locking need more hand-work.</td></tr>
+<tr><td>Python (Django)</td><td>Very fast to write, with a built-in admin site. Slower at run time, and dynamically typed, so more mistakes surface only when the code runs.</td></tr>
+<tr><td>C# (ASP.NET Core)</td><td>Technically very similar to Spring; would suit a Windows-centred university. Not what the report specifies.</td></tr>
+</tbody></table>
+
+<h3>React + TypeScript for the frontend</h3>
+<p><strong>Chosen because:</strong> the report names a React single-page application. React describes each screen as a
+function of its data: when the data changes, React redraws only what changed. TypeScript checks that the frontend uses
+the backend's JSON correctly (for example that <code>sgpa</code> is a number) before the app even runs.</p>
+<table>
+<thead><tr><th>Alternative</th><th>What would change</th></tr></thead>
+<tbody>
+<tr><td>Angular</td><td>A complete framework with more built in (forms, HTTP client) but much more to learn and more code per screen.</td></tr>
+<tr><td>Vue or Svelte</td><td>Smaller and gentler to learn; equally able. Fewer people and libraries than React in Indian industry.</td></tr>
+<tr><td>Server-rendered pages (Thymeleaf)</td><td>No separate frontend at all; every click reloads a page. Simpler, but slower to use, and the report asks for an SPA.</td></tr>
+<tr><td>Plain JavaScript instead of TypeScript</td><td>No build-time type checks: a misspelt field name becomes an empty spot on screen instead of a build error.</td></tr>
+</tbody></table>
+
+<h3>PostgreSQL (and H2 for laptops)</h3>
+<p><strong>Chosen because:</strong> the report names PostgreSQL. It is free, very reliable, and has strict transactions,
+row locks (<code>SELECT … FOR UPDATE</code>, used for payments), and UNIQUE and CHECK rules. EduMate relies on all of
+these for correctness. H2 in PostgreSQL mode lets anyone run EduMate on a laptop with nothing installed; the
+<code>PostgresCompatibilityTest</code> proves the same code also works on a real PostgreSQL.</p>
+<table>
+<thead><tr><th>Alternative</th><th>What would change</th></tr></thead>
+<tbody>
+<tr><td>MySQL / MariaDB</td><td>Would work with small SQL changes; historically looser with data by default.</td></tr>
+<tr><td>MongoDB (document database)</td><td>No joins or multi-row transactions in the same way; the cohort queries, the ledger and "exactly once" guarantees would be much harder.</td></tr>
+<tr><td>PostgreSQL on laptops too (instead of H2)</td><td>More realistic, but every developer must install and run a database first.</td></tr>
+</tbody></table>
+
+<h3>JWT tokens for login</h3>
+<p><strong>Chosen because:</strong> the backend stays <em>stateless</em>: it remembers nothing between requests, so any
+number of backend copies can serve any request. The token proves who the user is with an HMAC-SHA256 signature.
+See <a href="#07-security">chapter 7</a> for the alternatives (server sessions with cookies, OAuth with a university
+identity provider).</p>
+
+<h3>Vite</h3>
+<p><strong>Chosen because:</strong> it starts in under a second and refreshes a component the moment its file is saved.
+Its proxy removes the need for CORS rules in development. <em>Alternatives:</em> webpack (slower, much more
+configuration); Create React App (no longer maintained).</p>
+
+<h3>Flyway</h3>
+<p><strong>Chosen because:</strong> the database structure is written as numbered SQL files and applied in order, exactly
+once, on every database: laptop, test, production. <em>Alternative:</em> let Hibernate create tables automatically
+(<code>ddl-auto: update</code>). That is convenient, but it cannot express every rule (CHECK constraints, exact
+indexes), and it can silently alter a production database. EduMate sets <code>ddl-auto: none</code>.</p>
+
+<h3>Redis</h3>
+<p><strong>Chosen because:</strong> the report lists Redis for cache data. On results morning thousands of students
+ask for the same published results; Redis answers from memory in well under a millisecond. On a laptop, a simple
+in-memory cache replaces it (<code>spring.cache.type: simple</code>).</p>
+
+<h3>nginx and Docker</h3>
+<p><strong>nginx</strong> serves the built frontend files and forwards <code>/api</code> to the backend, adding
+security headers. <strong>Docker</strong> packs each program with everything it needs, so the same four containers
+(PostgreSQL, Redis, backend, frontend) run identically on any machine: <code>docker compose up --build</code>.</p>
+
+<h3>Deliberately <em>not</em> used</h3>
+<ul>
+<li><strong>No UI component library</strong> (Material UI, Bootstrap): plain CSS with variables keeps every colour in one file (<code>theme.css</code>) and keeps the app small.</li>
+<li><strong>No state-management library</strong> (Redux): React's own state, context and the small <code>useLoad</code> hook are enough for these screens.</li>
+<li><strong>No HTTP library</strong> (Axios): the browser's built-in <code>fetch</code>, wrapped in one small file (<code>http.ts</code>).</li>
+<li><strong>No Lombok</strong> in Java: getters are written out, so every line can be read and explained.</li>
+</ul>

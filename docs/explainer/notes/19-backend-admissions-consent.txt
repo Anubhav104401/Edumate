@@ -1,0 +1,442 @@
+=== FILE backend/src/main/java/com/edumate/admissions/AdmissionStatus.java
+>>> SUMMARY
+Every **state** an admission application can be in: DRAFT (still being filled in), SUBMITTED, UNDER_REVIEW, SHORTLISTED, OFFERED, ENROLLED, and the three "stop" states REJECTED, WITHDRAWN and ENROLMENT_REVERSED. The arrows between them are in `AdmissionStateMachine`.
+
+=== FILE backend/src/main/java/com/edumate/admissions/AdmissionAction.java
+>>> SUMMARY
+The **actions** (on screen, buttons) that move an application from one state to the next. Each action has a button label in the frontend's `messages.ts` under `admissions.actions`.
+
+=== FILE backend/src/main/java/com/edumate/admissions/AdmissionApplication.java
+>>> SUMMARY
+One person's **application for admission** to one programme: personal details, category (GEN / OBC / SC / ST), the two scores used for the merit list, guardian details (needed if the applicant is under 18), the current status, and the reason for the last decision.
+
+It has a `@Version` counter, like marks and attendance. If an officer and an admin both act on the same application at the same moment, the second save is refused instead of silently overwriting the first.
+
+**Why two scores and no single "merit" field?** The merit score is **calculated** (0.6 × entrance + 0.4 × qualifying). Storing it as well would allow the stored number and the formula to disagree. `MeritListGenerator` calculates it fresh every time.
+>>> 92-97
+Creates a new application with its (temporary) number, the applicant's user id and the creation time. The form fields are filled in separately by `fill`.
+>>> 100-115
+`fill`: copies all the form's fields into the application and updates the "last changed" time. It is used both when creating the application and for each "Save changes".
+>>> 117
+`moveTo`: changes the state. The state machine has already checked that this move is allowed.
+>>> 118-120
+Moving to SUBMITTED also records the submission time. This time is one of the merit list's tie-breakers.
+>>> 121-123
+Records the new state, the reason (only for rejections and reversals), and the time of the change.
+>>> 130-132
+The temporary number, `TMP-` + 16 random hexadecimal characters.
+
+**Why is it needed?** The real number, e.g. `APP-2026-000042`, contains the database id, and the id exists only after the first save. The column is NOT NULL and UNIQUE, so the first save needs a unique value, and a random one is used.
+
+(While building EduMate, the first version used a full 36-character UUID. The database refused it because the column holds at most 30 characters, so it was shortened to 20.)
+>>> 134-136
+Replaces the temporary number with the real one. The change is saved at the end of the transaction.
+>>> 139-141
+`isMinorOn(day)`: is the applicant younger than 18 on that day? `Period.between(birth, day).getYears()` counts **complete** years, so someone whose 18th birthday is tomorrow is still 17 today.
+
+=== FILE backend/src/main/java/com/edumate/admissions/AdmissionApplicationRepository.java
+>>> SUMMARY
+Reads admission applications: the applicant's own (most recent) application, all applications of a programme in given states (for the merit list), and a **search** for the officer's list.
+>>> 19-26
+The search query, in JPQL:
+- it joins each application to its programme, keeping only this campus's programmes;
+- `(:status is null or a.status = :status)`: if no status filter was chosen, every status matches;
+- `(:q = '' or … like '%q%')`: if the search box is empty, everything matches; otherwise the name **or** the application number must contain the typed text, ignoring capital letters (`lower`);
+- newest first.
+
+Writing the filters this way means one query serves all four cases (with or without a status, with or without search text), instead of four separate queries.
+>>> 27-29
+The method running it. `@Param("campus")` connects each Java value to the `:campus`, `:status` and `:q` placeholders.
+
+=== FILE backend/src/main/java/com/edumate/admissions/ApplicationForm.java
+>>> SUMMARY
+The **JSON the application form sends**, with a rule on each field. The browser checks the same rules first (see `frontend/src/utils/validation.ts`), but **the server always checks again**, because anyone can send a request without using EduMate's page, for example with `curl`.
+
+If any rule fails, `GlobalExceptionHandler` answers 400 with one message per field, e.g. `{"fieldErrors": {"email": "Enter a valid e-mail address."}}`, and the form shows each message under its field.
+
+A JSON body this record accepts looks like this:
+<pre class="block">{
+  "fullName": "Priya Nair",
+  "dateOfBirth": "2007-03-14",
+  "email": "priya.nair@example.com",
+  "phone": "+91 98450 12345",
+  "programId": 1,
+  "category": "OBC",
+  "entranceScore": 82.5,
+  "qualifyingPercent": 91.2,
+  "guardianName": null,
+  "guardianEmail": null,
+  "guardianPhone": null
+}</pre>
+
+The messages written in this file are the ones shown to users. To change the wording, change the `message = "…"` text here.
+>>> 20
+Full name: must not be empty or only spaces (`@NotBlank`), at most 120 characters.
+>>> 21-22
+Date of birth: required, and must be in the past. JSON sends it as text `"2007-03-14"`, which Jackson turns into a `LocalDate`.
+>>> 23-24
+E-mail: required, must look like an e-mail address, at most 160 characters.
+>>> 25
+Phone: either empty (`^$`) or 7 to 20 characters made of digits, `+`, spaces and dashes.
+>>> 26
+Programme: its id number is required.
+>>> 27
+Category: exactly GEN, OBC, SC or ST.
+>>> 28-29
+Entrance score: between 0 and 100. It may be left empty while the form is a draft, but submitting then fails with "Enter your entrance score…".
+>>> 30-31
+Qualifying percentage: between 0 and 100, same as above.
+>>> 32-35
+Guardian's name, e-mail and phone: optional here (adults do not need them), but required before a minor can request guardian consent.
+
+=== FILE backend/src/main/java/com/edumate/admissions/AdmissionStateMachine.java
+>>> SUMMARY
+The admission lifecycle written as a **table of allowed arrows** (Fig. 3.2 of the report). A "state machine" is a very simple idea: a thing is always in exactly one state, and it can only move along the arrows drawn for it.
+
+<pre class="block">DRAFT ──SUBMIT──► SUBMITTED ──START_REVIEW──► UNDER_REVIEW ──SHORTLIST──► SHORTLISTED
+SHORTLISTED ──OFFER──► OFFERED ──ENROL──► ENROLLED ──REVERSE_ENROLMENT (admin, reason)──► ENROLMENT_REVERSED
+WITHDRAW (applicant): from DRAFT, SUBMITTED, OFFERED
+REJECT (officer, reason): from UNDER_REVIEW, SHORTLISTED</pre>
+
+**DR-07 fix.** The design review found "no transition out of ENROLLED; enrolment cannot be reversed when made in error". The last row of the table adds that arrow, only for an ADMIN and only with a reason, and every use is audited.
+
+**Why a table?** The alternative is a pile of `if` statements spread over the code ("if status is X and action is Y and role is Z…"). With a table, every rule is visible in one place, a test can check every row (`AdmissionStateMachineTest`), and the screen can ask "which buttons should this person see?" (`allowedActions`) from the very same table. The buttons and the rules can therefore never disagree.
+>>> 46-48
+One arrow: from which state, by which action, to which state, which role may take it, and whether a reason must be written.
+>>> 50-61
+The eleven arrows. For example line 56: from UNDER_REVIEW, the action REJECT leads to REJECTED, only an ADMISSIONS_OFFICER may do it, and a reason is required.
+>>> 64
+`resolve`: find the arrow for "this state + this action + this role", or explain why not.
+>>> 65-69
+Looks for an arrow starting at this state with this action. If none exists, the move is impossible → 409, e.g. "An application that is DRAFT cannot be ENROL."
+>>> 70-72
+The arrow exists but belongs to another role → 403, e.g. "Only ADMIN can REVERSE_ENROLMENT an application."
+>>> 73
+The move is allowed: return the arrow (its `to` state and `reasonRequired` flag are used next).
+>>> 77-82
+`allowedActions`: every action this role may take from this state. The application page shows exactly these as buttons.
+>>> 84-86
+All arrows, for tests and documentation.
+
+=== FILE backend/src/main/java/com/edumate/admissions/AdmissionService.java
+>>> SUMMARY
+Everything applicants and admissions officers do with applications: create, save the draft, change state, list, view.
+
+**The three extra checks before SUBMIT** (on top of the state machine):
+1. both scores entered;
+2. every required document uploaded (photo, ID proof, Class 12 marks card);
+3. for a **minor** (under 18): guardian consent must be GRANTED. This is test case TC-020 and requirement NFR-07, added after requirement review RR-02 found it missing from SRS v2.0 (DPDP Rules, 2025).
+
+**If consent is revoked later**, a minor's application can still be *stopped* (withdrawn or rejected) but not *moved forward* (reviewed, shortlisted, offered…). Continuing to process a child's data without consent would break the law, while stopping is always allowed.
+
+**Who may see what:** an applicant sees only their own application; officers and admins see applications of their own campus only. For any other application the answer is "not found", so nobody can even discover whether an application with that id exists.
+
+Every change writes an audit line, and every state change also queues an e-mail to the applicant through the outbox.
+>>> 40-41
+The actions still allowed when a minor's consent is not in force: WITHDRAW and REJECT.
+>>> 52-53
+Constructor: repositories, the state machine, consent records, documents, notifications, audit logger and clock.
+>>> 67-71
+"My application": the applicant's most recent application, or 404 if they have not applied yet (the page then shows an empty form).
+>>> 74
+`create`: a new application from the form.
+>>> 75-79
+One application per applicant: if they already have one that is not WITHDRAWN, refuse with "You already have an application. Edit it instead."
+>>> 80
+The chosen programme must exist and belong to the applicant's campus.
+>>> 81-84
+Creates the application with a temporary number, fills in the form and saves it (now it has an id).
+>>> 85
+The real number, e.g. `APP-2026-000042`: the year, then the id padded to 6 digits (`%06d`).
+>>> 86-88
+Audit line, then the full application view as the answer.
+>>> 92-98
+`update` ("Save changes"): only the owner, only while DRAFT; fills in the new values and writes an audit line.
+>>> 102
+`transition`: carry out one action (a button press) on an application.
+>>> 103
+Loads the application, checking that the caller may see it.
+>>> 104
+Asks the state machine whether this move is allowed for this role (409 or 403 if not).
+>>> 105
+A reason made only of spaces counts as no reason; otherwise spaces at the ends are removed.
+>>> 106-108
+Rejecting or reversing without a reason → 400 "Please give a reason for this decision."
+>>> 109
+Is the applicant a minor today?
+>>> 110-111
+SUBMIT: run the three extra checks (below).
+>>> 112-115
+Any other action on a minor's application, except WITHDRAW or REJECT, needs consent in force; otherwise 409 CONSENT_REVOKED.
+>>> 117-119
+Remembers the old state, moves to the new one, and `flush` writes it to the database at once. If someone else changed the application meanwhile, the version check fails here, before any e-mail is queued.
+>>> 120-121
+Audit line, e.g. action ADMISSION_SHORTLIST, old value UNDER_REVIEW, new value SHORTLISTED.
+>>> 122-127
+Queues an e-mail to the applicant: "Dear Priya Nair, the status of your application APP-2026-000042 is now SHORTLISTED." The last value is the **deduplication key** (application + new state + version), so the same event can never be queued twice.
+>>> 128
+Returns the updated application.
+>>> 132-140
+The officer's list: first a small map of programme id → name (one query), then the search, and each application is turned into one table row (`ApplicationSummary`).
+>>> 143-145
+One application's full view, if the caller may see it.
+>>> 149-163
+`requireVisible`: loads the application (404 if missing); an applicant may see it only if it is theirs; anyone else only if its programme is on their campus. Otherwise → 404, deliberately **not** 403 (see summary).
+>>> 165-174
+`requireOwnDraft`: visible, owned by the caller, and still a DRAFT. Used for editing, uploading documents and deleting them. After submission → 409 "A submitted application can no longer be edited."
+>>> 176-190
+The three SUBMIT checks:
+- lines 177-180: scores missing → 400 SCORES_MISSING;
+- lines 181-185: required documents missing → 400, listing them by label, e.g. "Upload these documents first: Passport-size photograph, Identity proof (Aadhaar card or passport).";
+- lines 186-189: a minor without granted consent → 409 GUARDIAN_CONSENT_REQUIRED.
+>>> 192-196
+Missing documents: the set of types already uploaded, then every required type not in that set.
+>>> 198-201
+Is the **latest** consent record of this application GRANTED? (An older granted record followed by a revoked one does not count.)
+>>> 203-207
+The programme must exist on the caller's campus; otherwise 400 "Choose a programme from the list."
+>>> 209-213
+Copies the form into the application, tidying it: names trimmed, e-mail in lower case, empty optional fields stored as "nothing" (null).
+>>> 215-217
+`blankToNull`: empty or only spaces → null; otherwise trimmed.
+>>> 219-231
+Builds the full view for the page. Besides the stored fields it adds:
+- the age and "minor?" flag;
+- the consent status: NOT_REQUIRED for adults, otherwise the latest record's status, or NOT_REQUESTED;
+- the programme's name;
+- the list of missing documents;
+- the buttons this user may press (`allowedActions`).
+>>> 234-241
+The JSON of one application on its detail page.
+>>> 244-247
+The JSON of one row in the officer's applications table.
+
+=== FILE backend/src/main/java/com/edumate/admissions/MeritListGenerator.java
+>>> SUMMARY
+**Ranks the applicants of a programme and allocates seats** (FR-05; the report calls this design element MeritListGenerator).
+
+**Step 1: merit score.** `0.60 × entrance score + 0.40 × qualifying %`, rounded to 2 decimals. The weights come from `application.yml` (`edumate.admissions.entrance-weight` and `qualifying-weight`), so the university can change them without touching code.
+
+**Step 2: ranking.** Highest merit score first. When two scores are equal, the tie is broken by, in order:
+1. the higher entrance score;
+2. the higher qualifying %;
+3. the **older** applicant (earlier date of birth);
+4. the earlier submission;
+5. the application number.
+
+Application numbers are unique, so no two applicants can ever tie completely. Running the list twice on the same data therefore **always** gives exactly the same order. This matters: a list whose order changes between runs cannot be defended when a family challenges it.
+
+**Step 3: seats.** For the demo's 60 seats and the shares in `application.yml`:
+
+| Category | Share | Seats |
+|---|---|---|
+| OBC | 27% | floor(16.2) = 16 |
+| SC | 15% | floor(9.0) = 9 |
+| ST | 7.5% | floor(4.5) = 4 |
+| OPEN | the rest | 60 − 29 = 31 |
+
+"Floor" means rounding **down**, so reserved seats never exceed their percentage. OPEN seats go strictly by rank to everyone, whatever their category. Then each reserved category's seats go, by rank, to candidates of that category who did not already get an OPEN seat. A high-ranking OBC candidate therefore takes an OPEN seat and leaves the OBC seat for the next OBC candidate. Everyone left is wait-listed in rank order (W1, W2, …).
+
+**Speed.** Everything is **one** database query and one sort in memory (O(n log n)). The report measured the old N+1 version at 14.2 minutes and the corrected one at 6.1 minutes (DR-03).
+
+**Other ways it could have been done.** Ranking inside SQL (`ORDER BY … LIMIT`) would work for step 2 but not for step 3, which needs the two passes. A "best of both" algorithm that moves candidates between OPEN and reserved seats is used by some national counselling bodies. It is more complex, and the report does not ask for it.
+>>> 42-44
+Which applications are ranked: every state from SUBMITTED onwards, except REJECTED, WITHDRAWN and ENROLMENT_REVERSED. Drafts are not ranked.
+>>> 54-55
+Constructor: repositories, settings and clock.
+>>> 60-61
+Reads the two weights from the settings once.
+>>> 62-68
+Builds the ranking rule as a chain of comparisons:
+- line 63: merit score, highest first (`reverseOrder`);
+- line 64: then entrance score, highest first;
+- line 65: then qualifying %, highest first;
+- line 66: then date of birth, earliest (= oldest applicant) first;
+- line 67: then submission time, earliest first, with "never submitted" last (`nullsLast`);
+- line 68: then application number, alphabetically.
+>>> 72-75
+`generate`: the programme must exist on the caller's campus.
+>>> 77-80
+**The one query**: all applications of this programme in the ranked states, keeping only those with both scores.
+>>> 81
+Sorts them with the ranking rule above.
+>>> 83
+Works out the seats per category (line 118 onwards).
+>>> 84-85
+A counter of filled seats per category, all starting at 0.
+>>> 86
+`allocation[i]` will hold the seat given to the i-th ranked candidate: "OPEN", "OBC", … or nothing.
+>>> 89-92
+**Pass 1:** walks down the ranking giving OPEN seats until they run out. The first 31 candidates get OPEN seats, whatever their category.
+>>> 94-101
+**Pass 2:** walks down the ranking again. A candidate without a seat, whose category has reserved seats with some still free, gets one. GEN has no reserved seats, so GEN candidates are skipped here.
+>>> 103-112
+Builds the final list. Each candidate gets their rank (position + 1), details, merit score and seat. Candidates with no seat get "WAITLIST" and the next wait-list number (`++waitlist` adds 1 first, then uses it).
+>>> 113-114
+Returns the programme, the seat matrix, how many seats of each kind were filled, the time and the list.
+>>> 118-131
+`seatMatrix`: for each reserved category, seats = total × share, rounded down (`RoundingMode.FLOOR`). OPEN gets whatever is left. OPEN is put first in the result so it appears first on screen.
+>>> 133-137
+The merit score formula, rounded to 2 decimals (HALF_UP: 81.245 → 81.25).
+>>> 139-141
+The JSON of the whole merit list.
+>>> 143-147
+The JSON of one ranked candidate. `waitlistNumber` is `Integer` (not `int`) so it can be empty for candidates who have a seat.
+
+=== FILE backend/src/main/java/com/edumate/admissions/AdmissionController.java
+>>> SUMMARY
+The admission web addresses:
+
+| Method and URL | Who | Does |
+|---|---|---|
+| GET /api/admissions/my-application | APPLICANT | their own application |
+| POST /api/admissions/applications | APPLICANT | create |
+| PUT /api/admissions/applications/{id} | APPLICANT | save draft |
+| GET /api/admissions/applications?status=&q= | officer, admin | search the list |
+| GET /api/admissions/applications/{id} | all three | one application |
+| POST /api/admissions/applications/{id}/transitions | all three (each only their arrows) | press an action button |
+| GET /api/admissions/merit-list?programId= | officer, admin | the merit list |
+
+**Why is changing state a POST to `/transitions` and not a PUT with a new status?** A PUT of `{"status":"ENROLLED"}` would let the browser pick the *destination*. With an action (`{"action":"ENROL"}`), the browser only asks to press a button; the server decides the destination using its table. The browser can never jump straight from DRAFT to ENROLLED.
+>>> 28-31
+Constructor: the admission service and the merit list generator.
+>>> 33-36
+GET "my application".
+>>> 38-41
+POST a new application. `@Valid` checks the `ApplicationForm` rules before this method runs.
+>>> 43-47
+PUT to save the draft of application `{id}`, with the same checks.
+>>> 49-54
+GET the list. `?status=SUBMITTED&q=priya` are both optional (`required = false`).
+>>> 56-59
+GET one application.
+>>> 62-66
+POST an action, with a body such as `{"action": "REJECT", "reason": "Qualifying marks below the programme minimum."}`.
+>>> 68-71
+GET the merit list of a programme.
+>>> 73-74
+The JSON body of a transition: the action is required; the reason is optional and at most 300 characters.
+
+=== FILE backend/src/main/java/com/edumate/consent/ConsentRecord.java
+>>> SUMMARY
+A **guardian's consent** for processing a minor applicant's personal data (DPDP Act, 2023 and DPDP Rules, 2025). Each row records the purpose, the guardian's name and contact, the status (PENDING → GRANTED → REVOKED), and the one-time code.
+
+**The code (OTP) is never stored in readable form**, only its bcrypt hash, the same way passwords are stored. Someone who could read the database still could not learn the code. Once consent is granted or revoked, the hash is also erased, because it is no longer needed.
+
+A new request creates a **new row** rather than changing the old one, so the table is a full history: who consented, when, and when it was withdrawn.
+>>> 20-22
+The three statuses, as text constants.
+>>> 65-74
+A new PENDING consent: application, purpose, guardian name and contact, the hashed code, when the code expires, and when this row was created.
+>>> 76-78
+One more wrong code entered.
+>>> 80-84
+Consent GRANTED now: record the time and erase the code's hash.
+>>> 86-90
+Consent REVOKED now: record the time and erase the hash.
+
+=== FILE backend/src/main/java/com/edumate/consent/ConsentRepository.java
+>>> SUMMARY
+Reads consent records: the latest one of an application (used to decide "is consent in force?"), and all of them newest first (the history shown on the page).
+
+=== FILE backend/src/main/java/com/edumate/consent/ConsentRegistry.java
+>>> SUMMARY
+**Verifiable guardian consent** for applicants under 18 (NFR-07; the report calls this design element ConsentRegistry). Requirement review RR-02 (severity S1) found it missing from SRS v2.0.
+
+**How "verifiable" works:**
+1. The minor applicant fills in the guardian's name and e-mail (or phone) and presses "Send code to guardian".
+2. EduMate creates a random 6-digit code, stores only its bcrypt hash, and sends the code to the **guardian's** inbox or phone through the outbox.
+3. The guardian reads the message and, if they agree, tells the applicant the code.
+4. The applicant types it in. If it matches, consent is GRANTED.
+
+Only someone with access to the guardian's inbox or phone can complete step 4. That is the "verifiable" part.
+
+**Limits:**
+- the code expires after **10 minutes** (410 "This code has expired");
+- after **5 wrong codes**, that code is locked (409 "Too many wrong codes");
+- consent can be **revoked** at any time by the applicant or an admin, as the Act requires. After that, the application can be withdrawn or rejected but not moved forward.
+
+**Demo mode.** With `edumate.demo.expose-otp: true` (the dev profile), the code is also returned to the browser and shown on screen, so the demo works without a real e-mail inbox. In production this setting is false, and the code is only ever in the guardian's message.
+
+**Why 6 digits and SecureRandom?** One million possible codes and at most 5 tries gives an attacker a 5-in-a-million chance. `SecureRandom` is Java's cryptographically strong random generator. The ordinary `Random` is predictable, so someone who saw a few codes could work out the next ones.
+>>> 37
+The purpose text stored on every consent record.
+>>> 39-41
+The limits: a code is valid for 10 minutes, at most 5 wrong attempts, and one shared secure random generator.
+>>> 51-53
+Constructor: repositories, the password encoder (bcrypt, used here for the code), notifications, audit logger, settings and clock.
+>>> 65
+`requestGuardianConsent`: send a new code.
+>>> 66
+Only the applicant who owns the application, only while DRAFT.
+>>> 67-69
+Not a minor → 400 "Guardian consent is needed only for applicants under 18."
+>>> 70-71
+Where to send the code: the guardian's e-mail if given, otherwise their phone.
+>>> 72-75
+No guardian name, or no way to contact them → 400 "Enter the guardian's name and e-mail or phone in the application first."
+>>> 77
+The code: a random number from 0 to 999,999, written with 6 digits (`%06d`), so 42 becomes "000042".
+>>> 78-81
+Saves a PENDING consent with the **hashed** code and an expiry time 10 minutes from now.
+>>> 82-87
+Queues the message: an e-mail if there is a guardian e-mail, otherwise an SMS. The last value is the deduplication key `consent-otp:<id>`.
+>>> 88-89
+Audit line with the contact **masked**, e.g. "code sent to guardian ra*********om". The audit log itself never holds the full contact.
+>>> 90
+Returns the new consent. The code is included only in demo mode.
+>>> 94
+`@Transactional(noRollbackFor = ApiException.class)`: normally an error undoes everything the transaction did. Here a wrong code must still **count** as an attempt, so errors of type ApiException do not undo the attempt counter.
+>>> 95-99
+`verify`: only the owner's DRAFT; the latest consent must be PENDING, otherwise 400 "Request a consent code first."
+>>> 100
+The current time, read once so every check below uses the same moment.
+>>> 101-103
+Expired → 410 GONE.
+>>> 104-106
+Already 5 wrong attempts → 409, even if this code is correct. Otherwise someone could keep guessing forever.
+>>> 107-111
+The code does not match the stored hash (bcrypt `matches`) → count the attempt and answer "That code is not correct. Attempts left: 3."
+>>> 112-115
+Correct: consent GRANTED, audit line, return the updated consent.
+>>> 120-134
+`revoke`:
+- lines 121-123: load the consent and its application;
+- lines 124-126: only the applicant who owns it, or an admin (anyone else gets "not found");
+- lines 127-129: only GRANTED consent can be revoked;
+- lines 130-133: revoke it, audit (GRANTED → REVOKED) and return it.
+>>> 137-141
+Is the latest consent of this application GRANTED?
+>>> 144-146
+The full consent history of an application, newest first.
+>>> 148-156
+`ownDraft`: the application must belong to the caller (otherwise 404) and still be a DRAFT (otherwise 409).
+>>> 159-164
+`mask`: keeps the first 2 and last 2 characters and replaces the rest with `*`. Contacts of 4 characters or fewer become `****`.
+>>> 166-170
+Builds the JSON view of a consent, always with the contact masked.
+>>> 173-176
+The JSON of one consent. `demoOtp` is empty unless demo mode is on.
+
+=== FILE backend/src/main/java/com/edumate/consent/ConsentController.java
+>>> SUMMARY
+The web addresses behind the applicant's "Guardian consent" card:
+
+| Method and URL | Does |
+|---|---|
+| POST /api/consent/applications/{id}/request | send a new code to the guardian |
+| POST /api/consent/applications/{id}/verify | check the code: body `{"otp": "123456"}` |
+| GET /api/consent/applications/{id} | the consent history |
+| POST /api/consent/{consentId}/revoke | withdraw consent |
+>>> 27-30
+Constructor: the consent registry and the admission service (to check who may see an application's history).
+>>> 32-35
+POST: request a code.
+>>> 37-41
+POST: verify a code. `@Valid` first checks that the code is exactly 6 digits.
+>>> 43-47
+GET: the history, after checking the caller may see this application.
+>>> 49-52
+POST: revoke.
+>>> 54
+The body of "verify": `otp` must be exactly six digits (`\d{6}`), otherwise 400 "The code has 6 digits."
