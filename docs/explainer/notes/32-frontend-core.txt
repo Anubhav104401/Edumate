@@ -1,11 +1,13 @@
 === FILE frontend/src/main.tsx
 >>> SUMMARY
-The **very first frontend code that runs**. The browser loads `index.html`, which loads this file. It loads the two stylesheets and tells React to draw `<App />` inside `<div id="root">`.
->>> 11
+The **very first frontend code that runs**. The browser loads `index.html`, which loads this file. It loads the fonts and the stylesheets, then tells React to draw `<App />` inside `<div id="root">`.
+
+**The order of the stylesheet imports matters.** Later styles win when two rules are equally specific, so the order is: fonts → Lenis's small helper styles → `theme.css` (the design tokens) → `app.css` (how everything looks) → `landing.css` (the public pages).
+>>> 18
 `document.getElementById('root')` finds the empty div in `index.html`. The `!` tells TypeScript "I am sure this is not null" (the div is always there). `createRoot(...)` makes that div React's drawing area, and `.render(...)` draws what follows into it.
->>> 12
+>>> 19
 `<StrictMode>`: a development-only helper. It deliberately runs some code twice to reveal hidden mistakes (for example effects that forget to clean up). It has no effect in the production build.
->>> 13
+>>> 20
 The whole application.
 
 === FILE frontend/src/App.tsx
@@ -14,57 +16,70 @@ The **map of the whole frontend**: which address shows which page, and which rol
 
 **Routing** means choosing what to show based on the address in the browser's address bar. React Router watches the address. When it changes (a menu link is clicked, or the user presses Back), it shows the matching page **without asking the server for a new HTML page**.
 
-**The layers, from outside to inside:**
+**The layers, from outside to inside** (each "provider" makes something available to every component inside it, without passing it through each level by hand; this is React's *context* feature):
 1. `BrowserRouter`: routing, using the real address bar;
-2. `ToastProvider`: any page can pop up a short message;
-3. `ConfirmProvider`: any page can ask "Are you sure?";
-4. `AuthProvider`: who is logged in, and the login/logout functions;
-5. `Routes`: the address → page table.
+2. `ThemeProvider`: light / dark / "same as my computer", and the theme switch;
+3. `MotionConfig`: one setting for every animation: honour the computer's "reduce motion" option;
+4. `SmoothScroll`: Lenis smooth scrolling for the whole page;
+5. `ToastProvider`: any page can pop up a short message;
+6. `ConfirmProvider`: any page can ask "Are you sure?";
+7. `AuthProvider`: who is logged in, and the login/logout functions;
+8. `Routes`: the address → page table.
 
-Each "provider" makes something available to **every** component inside it, without passing it through each level by hand. This is React's *context* feature.
+The order is not arbitrary: an inner layer may use an outer one. The toasts need the theme (to be light or dark), the confirm dialog needs smooth scrolling (to pause it while open), and the login state needs toasts (to say "Your session has ended").
+
+**Code splitting.** Before release 3.0 all pages were in one big JavaScript file, downloaded in full on the first visit. Now every page is loaded **lazily**: its code is a separate small file, fetched the first time that page is opened. `npm run build` prints one file per page (`MyFeesPage-….js`, 5 kB). The login page stays in the main file, because almost every visit starts there.
 
 **Two guards:**
-- every page except `/login` is inside `<RequireAuth>`: not logged in → sent to the login page;
+- every page except `/login` and `/welcome` is inside `<RequireAuth>`: not logged in → sent to the login page (or, for the bare address `/`, to the welcome page);
 - `only([...roles], page)` additionally checks the role: logged in but the wrong role → a "not allowed" message.
 
-**Important:** these guards only decide what the **screen** shows. The real protection is the backend's RoleMatrix, which checks every request. Someone who changes the frontend's code in their own browser still gets 403 from the server. The frontend guard exists for **convenience**: people are not shown pages they cannot use.
+**Important:** these guards only decide what the **screen** shows. The real protection is the backend's RoleMatrix, which checks every request. Someone who changes the frontend's code in their own browser still gets 403 from the server.
 
-**To add a page:** create the page file, add a `<Route>` here, and add a menu line in `navigation.ts`.
->>> 39
+**To add a page:** create the page file, add a `lazyPage(...)` line and a `<Route>` here, and add a menu line (with an icon) in `navigation.ts`.
+>>> 24-25
+`lazyPage(load, name)`: a small helper around React's `lazy()`. `lazy` expects a file whose **default** export is the component, but EduMate's pages use **named** exports (`export function MyFeesPage`). So the helper waits for the file (`load()`), then hands `lazy` an object whose `default` is the named component. `K extends string` lets TypeScript check that the name really exists in that file.
+>>> 28-52
+One line per page. `() => import('./pages/…')` is a **dynamic import**: it is not run now, only when the page is first needed. Vite sees each dynamic import and puts that page into its own file. The public welcome page is lazy too, because it holds the biggest animations and a signed-in user never needs it.
+>>> 54
 The two roles that see the student pages: a student, and a guardian (who sees their linked child's data).
->>> 42
-`only(roles, page)`: a small helper that wraps a page in a role check.
->>> 43
-Returns `<RequireAuth roles={...}>` with the page inside it.
->>> 46
-The `App` component: a function that returns what to draw.
->>> 47
+>>> 58
+`only(roles, page)` returns `<RequireAuth roles={...}>` with the page inside it.
+>>> 62
 `return (`: the drawing starts. The HTML-like tags are **JSX**, which is translated into ordinary JavaScript function calls.
->>> 48
-Routing via the browser's address bar.
->>> 49-51
-The three providers described above.
->>> 52
+>>> 63-64
+Routing via the browser's address bar, then the theme.
+>>> 66
+`reducedMotion="user"`: every `motion` animation checks the operating system's "reduce motion" accessibility setting. When it is on, things still fade but no longer slide, grow or bounce, which can cause dizziness for some people.
+>>> 67-70
+Smooth scrolling, toasts, confirm dialogs and the login state, as described above.
+>>> 71
+`<TopLoader />`: the thin glowing line at the very top that appears while any request to the backend is on its way.
+>>> 72
+`<Suspense fallback={null}>`: while the code of a lazy page outside the layout (the welcome page) is still downloading, show nothing for that split second. Pages inside the layout have their own, nicer fallback: a skeleton (see `motion/PageTransition.tsx`).
+>>> 73
 The table of routes; the first matching route is shown.
->>> 53
+>>> 74
+`/welcome` shows the public welcome page, for everyone.
+>>> 75
 `/login` shows the login page, for everyone.
->>> 54-60
-A route with **no path of its own** that wraps all other routes: it requires login and draws the `Layout` (the top bar and left menu). The page itself appears inside the layout, where `Layout` places an `<Outlet />`.
->>> 61
+>>> 76-79
+A route with **no path of its own** that wraps all other routes: it requires login and draws the `Layout` (the side menu and top bar). The page itself appears inside the layout.
+>>> 83
 `index`: the address `/` shows the dashboard.
->>> 63-69
+>>> 85-91
 The student-side pages. `pay/:orderId` has a **parameter**: in `/pay/ORD-81D4…`, the part after `/pay/` is read by the page as `orderId`. "My timetable" is also open to faculty.
->>> 71-73
+>>> 93-95
 The faculty pages: taking attendance, the course's attendance overview, and marks entry.
->>> 75-76
+>>> 97-98
 The exam superintendent's results workflow, and the reports page (also for admins).
->>> 78-81
+>>> 100-103
 Admissions: the applications list, the merit list, and one application's detail (`:id` is its number), for officers and admins. `/apply` is for applicants.
->>> 83-84
+>>> 105-106
 The accounts officer's payments list and the librarian's desk.
->>> 86-89
+>>> 108-111
 Administration: timetable management, the audit log (also for exam superintendents), the outbox, and the role matrix.
->>> 90
+>>> 112
 `*` matches anything not listed above: the "page not found" screen.
 
 === FILE frontend/src/config.ts
@@ -72,49 +87,111 @@ Administration: timetable management, the audit log (also for exam superintenden
 Frontend **settings that are neither text nor colours**. (Text lives in `i18n/messages.ts`, colours in `styles/theme.css`.)
 
 Some values here must **match the backend**. They are repeated so the browser can warn **before** sending anything (for example "this file is larger than 5 MB") instead of after a slow upload. If you change one side, change the other too. Even if they disagree, the backend's value always wins, because the server checks again.
->>> 6
+
+Release 3.0 added the settings of the new interface at the end: how smooth the scrolling is, where the browser remembers the theme and the collapsed menu, the command-menu key, and when each lecture period starts.
+>>> 7
 `API_BASE = ''`: every backend address starts from the page's own origin, so requests go to `/api/...` on the same host and port. In development Vite forwards them to port 8080; in Docker nginx does. The frontend code is the same in both cases.
->>> 9
+>>> 10
 The attendance threshold shown on screen (75%). It must match the backend's `edumate.academic.attendance-threshold-percent`.
->>> 12
+>>> 13
 The largest upload: 5 × 1024 × 1024 = 5,242,880 bytes. It must match `spring.servlet.multipart.max-file-size: 5MB`.
->>> 15
+>>> 16
 The demo password shown on the login page.
->>> 18-35
+>>> 19-36
 The demo usernames listed on the login page, in display order. `as const` makes TypeScript treat the list as fixed, so `messages.ts` can be checked to have a description for each one.
->>> 38
+>>> 39
+`DEMO_ROLES`: the role of every demo account, so the login page can show the matching icon (a graduation cap for students, a shield for administrators…). `(typeof DEMO_USERNAMES)[number]` means "any one of the usernames above", so TypeScript insists that **every** demo account has a role here and that no unknown name sneaks in.
+>>> 40-55
+One line per demo account. Names containing a dot (`'kavya.rao'`) need quotes, because a dot is not allowed in a bare JavaScript key.
+>>> 59
 Show the demo helper only in development. `import.meta.env.DEV` is `true` under `npm run dev` and `false` in `npm run build`, so a production build never advertises the demo accounts.
->>> 41
+>>> 62
 How long a toast stays on screen: 5,000 ms = 5 seconds.
->>> 44-45
+>>> 65-66
 The timetable grid's days (1–5 = Monday–Friday) and periods (1–6), the same as the backend's `TimetableSolver.DAYS` and `PERIODS`.
+>>> 69
+Smooth scrolling strength. Each animation frame, Lenis moves the page 10% (0.1) of the remaining distance to where the wheel asked it to go, which gives a soft glide that slows down as it arrives. `1` would turn the smoothing off.
+>>> 72
+The `localStorage` key for the theme choice. `public/theme-init.js` reads the same key before the page is drawn, so the two must stay identical.
+>>> 75
+The `localStorage` key for "the side menu is collapsed".
+>>> 78
+The command menu opens with Ctrl + K (Windows, Linux) or ⌘ + K (Mac), a convention shared by many modern web apps.
+>>> 81
+The top loading line appears only if a request takes longer than 150 ms, so quick answers do not make it flicker.
+>>> 84
+When each period starts, counted in **minutes after midnight**: 9 × 60 = 540 is 9:00, 14 × 60 = 840 is 2:00 pm. Index 0 is unused so that `PERIOD_STARTS[1]` is period 1. The timetable uses this to highlight the lecture running right now.
+>>> 87
+Each lecture is taken to last 55 minutes.
 
 === FILE frontend/src/navigation.ts
 >>> SUMMARY
-The **left-hand menu** for each role: which links appear, and in which order. The link texts come from `messages.ts` (`t.nav.…`), so renaming a menu item means changing only that text.
+The **side menu** for each role: which links appear, in which order, under which small heading, and with which **icon**. The link texts come from `messages.ts` (`t.nav.…`), so renaming a menu item means changing only that text.
+
+This one list feeds five places, so they can never disagree: the side menu, the command menu (Ctrl+K), the breadcrumb in the top bar, the icon and heading above each page title, and the "Jump back in" shortcuts on the dashboard.
 
 A menu link without a matching route in `App.tsx` would lead to "page not found", and a route without a menu link is reachable only by typing its address. So always add both.
 
 Students and guardians share one menu (a guardian sees their child's pages).
->>> 8-11
-The shape of one menu item: `to` (the address) and `label` (the text shown).
->>> 13-21
-The student/guardian menu: dashboard, attendance, hall ticket, results, fees, timetable, library.
->>> 23
+>>> 39-45
+The shape of one menu item: `to` (the address), `label` (the text shown), `icon` (a Lucide icon component, such as `Wallet`) and `section` (the small heading it sits under, such as "Finance").
+>>> 47
+`s` is a short name for the section headings, to keep the lines below readable.
+>>> 48
+The dashboard item, shared by every role, under the heading "Overview".
+>>> 50-57
+The student/guardian menu: dashboard; attendance, hall ticket, results and timetable under "My studies"; fees under "Finance"; library under "Library".
+>>> 60
 `MENU`: for **every** role, its list of links. `Record<Role, NavItem[]>` makes TypeScript insist that every role has an entry: adding a role without a menu is a compile error.
->>> 24-25
+>>> 61-62
 Students and guardians use the same menu.
->>> 26-32
-Faculty: dashboard, take attendance, course attendance, marks entry, my timetable.
->>> 33-38
-Exam superintendent: dashboard, results workflow, reports, audit log.
->>> 39-43
+>>> 63-68
+Faculty: dashboard, take attendance, course attendance, marks entry, my timetable (all under "Teaching").
+>>> 70-74
+Exam superintendent: dashboard, results workflow and reports (under "Examinations"), audit log (under "Administration").
+>>> 76-79
 Admissions officer: dashboard, applications, merit list.
->>> 44-47
+>>> 81
 Accounts officer: dashboard, payments.
->>> 48-51
+>>> 82
 Librarian: dashboard, library desk.
->>> 52-55
+>>> 83
 Applicant: dashboard, "My application".
->>> 56-62
-Admin: dashboard, timetable, reports, audit log, outbox, role matrix.
+>>> 84-90
+Admin: dashboard, then timetable, reports, audit log, outbox and role matrix, all under "Administration". (Keeping one heading together matters: the test in `navigation.test.ts` fails if a heading would appear twice in one menu.)
+>>> 95
+`ROLE_ICONS`: one icon per role, shown next to each demo account on the login page and on the role cards of the welcome page. `Record<Role, …>` again forces an icon for every role.
+>>> 96-104
+A graduation cap for students, a person for guardians, a presentation board for faculty, a seal for the exam superintendent, an in-tray for admissions, a bank for accounts, bookshelves for the librarian, a form for applicants, a shield for administrators.
+>>> 112
+`best`: the best match found so far (none yet).
+>>> 113
+Look at every menu item of this role.
+>>> 114
+Does the address belong to this item? The dashboard `/` only matches `/` exactly (otherwise every address would match it). Other items match their own address, or any address **under** it: `/admissions/7` is under `/admissions`. Adding the `/` before comparing means `/attendance-x` is not mistaken for part of `/attendance`.
+>>> 115-116
+Among several matches, keep the longest address: `/admissions/merit` beats `/admissions` for the merit-list page.
+>>> 119
+The best match, or `undefined` if the page is not in the menu (such as the payment page `/pay/ORD-…`).
+
+=== FILE frontend/src/navigation.test.ts
+>>> SUMMARY
+Automated checks of `navigation.ts`, run by `npm test`. They guard the rules that the menu, the command menu and the breadcrumb all rely on.
+>>> 5
+The list of every role, taken from the menu itself.
+>>> 7
+A group of checks about `MENU`.
+>>> 8-15
+For every role: the first link is the dashboard, every link has an icon and a heading, and the role has an icon of its own.
+>>> 19-22
+Headings must stay together. The line keeps only the first item of every run of equal headings (["Overview", "Admin", "Admin", "Exams"] → ["Overview", "Admin", "Exams"]); if a heading were split into two runs, it would appear twice in that list, and a `Set` (which drops repeats) would be smaller than the list.
+>>> 26-29
+No role may list the same address twice.
+>>> 34
+Checks of `findNavItem`.
+>>> 35-37
+The dashboard matches only `/`, and a page outside the menu matches nothing.
+>>> 40-42
+A detail page (`/admissions/7`) belongs to its list (`/admissions`), while the merit list keeps its own, longer match.
+>>> 45-46
+A look-alike address is not treated as a sub-page.

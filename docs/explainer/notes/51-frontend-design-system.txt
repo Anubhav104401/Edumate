@@ -1,0 +1,139 @@
+=== FILE frontend/src/i18n/messages.ts
+>>> SUMMARY
+**Every word the user sees**, in one file. Pages never contain text of their own: they write `t.fees.title`, and the words live here. To change a label, a button, a toast or an alert, change it here; nothing else needs to change. The chapter *Every text on screen* lists each entry with every file and line that shows it.
+
+Entries written as `(x) => \`…${x}…\`` are sentences with a blank that the program fills in (a number, a name).
+
+Release 3.0 added the texts of the new interface: `theme` (the light/dark switch), `palette` (the Ctrl+K command menu), `landing` (the whole public welcome page), `preview` (the made-up figures in the decorative previews), and a few words per page (for example `attendance.overall`, `hallTicket.stampYes`, `results.trendTitle`).
+
+`satisfies Record<Role, string>` after a group (for example `roles` or `landing.roleBlurbs`) makes the compiler check that there is a text for **every** role, so a new role cannot be forgotten.
+>>> 15
+`export const t = {`: the start of the one big object holding every text on screen. Pages write `t.fees.title` instead of the text itself, so changing a text here changes it everywhere it is used.
+>>> 847
+`} as const;`: the end of the object. `as const` makes every text fixed (read-only) and lets TypeScript know each exact key, so a typo such as `t.fees.titel` is a build error rather than an empty spot on screen.
+
+=== FILE frontend/src/styles/theme.css
+>>> SUMMARY
+**The design tokens**: every colour, font, size, corner radius, shadow and animation speed of EduMate, named once. Everything else refers to them by name, for example `var(--color-primary)`. Change a value here and it changes on every screen.
+
+**Colours for light and dark mode on one line.** Each colour is written as `light-dark(<light value>, <dark value>)`. The browser uses the first value when the page is in light mode and the second in dark mode. Which mode applies is decided by `color-scheme`:
+- `color-scheme: light dark` on `:root` = "follow the computer's setting";
+- `:root[data-theme="light"]` / `[data-theme="dark"]` (set by the theme switch) force one of them.
+
+**OKLCH colours.** Colours are written as `oklch(L C H)`: **L**ightness from 0 (black) to 1 (white), **C**hroma (how colourful) from 0 (grey) to about 0.37, and **H**ue as an angle on the colour wheel (25 red, 65 amber, 155 green, 264 blue, 300 violet). Unlike the older `#1f4e79` hex codes, equal changes in L look equally lighter to the eye, so a whole palette can be tuned by adjusting one number.
+
+**Mixed colours.** Soft backgrounds are made from the main colours with `color-mix(in oklab, var(--color-good) 12%, transparent)`: 12% of the green, the rest see-through. Mixing happens in the OKLab colour space, which has no hue angle, so mixing blue with white can never drift through pink on the way.
+
+**Motion tokens.** `--ease-out` is the curve most things move with (fast start, gentle stop). `--ease-spring` is a spring written as a `linear()` curve: it overshoots slightly and settles, like something with a little weight.
+
+**Chart colours.** `--chart-1` (blue) and `--chart-2` (orange) are the two line colours of the grade chart. They were checked with a colour-vision validator so that people with colour-blindness can still tell the lines apart, in both themes.
+
+**Stacking order.** The `--z-…` numbers decide what is drawn on top: the top bar (40) is under the side menu drawer (50), which is under dialogs (90), toasts (100) and the loading line (110).
+
+=== FILE frontend/src/styles/app.css
+>>> SUMMARY
+**How every kind of element looks and moves** inside the signed-in app. Colours, sizes and speeds are not written here: they come from `theme.css` (for example `var(--color-primary)`), so this file describes shapes, spacing and behaviour.
+
+The file is organised in sections, each starting with a comment such as `/* ---------- Buttons ---------- */`:
+| Section | What it styles |
+|---|---|
+| Basics | page background, fonts, links, headings, the keyboard focus ring, thin scrollbars |
+| Page frame | the grid of side menu + main area, the side menu, the sliding active-page pill, the collapsed (icons-only) menu |
+| Top bar | the bar that turns into frosted glass once the page scrolls (`backdrop-filter: blur(...)`) |
+| Menus, tooltips, dialogs, command palette | the pop-ups drawn by Radix UI and cmdk |
+| Cards, stat tiles | the white panels; the dashboard tiles with their mouse-following light ("spotlight") |
+| Buttons, forms, tables, badges, alerts, toasts | the everyday controls |
+| Page-specific | attendance rings, the hall-ticket admit card, the grade chart, the fee timeline, the attendance roster, step trackers, the role matrix, the 404 page |
+| Animations | table rows that cascade in, and **scroll-driven reveals** |
+| Reduced motion, narrow screens, printing | the rules that adapt everything to the person and the device |
+
+**Scroll-driven reveals.** Near the end, `.content .card` gets `animation-timeline: view()`. The animation is driven not by the clock but by **how far the card has scrolled into view**: as a card enters from the bottom of the window, it fades and rises into place. The browser runs this itself, without any JavaScript, and older browsers that do not understand it simply show the cards (the rules sit inside `@supports`).
+
+**Reduced motion.** `@media (prefers-reduced-motion: reduce)` shortens every animation and transition to almost nothing for people who asked their computer for less motion.
+
+**Phones.** Below 960 px wide the side menu becomes a drawer that slides in from the left, the search box shrinks to an icon, and the hall ticket's stub moves below the ticket.
+
+=== FILE frontend/src/styles/landing.css
+>>> SUMMARY
+Styles for the two **public pages**: the welcome page (`/welcome`) and the sign-in page (`/login`). They use bigger type and more colour than the working screens, because they are EduMate's shop window.
+
+Notable pieces:
+- `.noise::after`: a faint film-grain texture (an SVG noise pattern written inline as a `data:` picture) over the gradients, which keeps large areas of colour from looking flat.
+- `.glow-pill`: a pill whose border is a slowly turning rainbow of brand colours. `@property --spin` registers the angle as a real `<angle>`, which is what allows the browser to animate it.
+- `.l-title` and `.word`: the huge headline. Each word sits in a box that clips it, so it can slide up from below as if appearing through a slot.
+- `.mock`: the product preview under the headline, built from real HTML (not a screenshot). `perspective` on its parent lets it be tilted back in 3D; the page's code straightens it as you scroll.
+- `.marquee`: two rows of chips that slide sideways forever; `mask-image` fades them out at both edges; hovering pauses them.
+- `.journey`: the pinned picture (`position: sticky`) with steps scrolling past it.
+- `.h-scroll` / `.h-sticky` / `.h-track`: the role gallery. The section is 320% of the window tall; inside it, a window-sized box sticks to the screen while the row of cards is moved sideways by the page's code. On phones and for reduced motion it becomes an ordinary row you can swipe.
+- `.auth…`: the sign-in page, split into a colourful left half (hidden on narrow screens) and the form on the right.
+
+=== FILE frontend/src/theme/ThemeContext.tsx
+>>> SUMMARY
+**Light mode, dark mode, or "same as my computer"**, available to every component through `useTheme()`.
+
+It does three things:
+1. **Remembers** the choice in `localStorage`, so it survives closing the browser (and `public/theme-init.js` can re-apply it before the page is drawn).
+2. **Applies** it by writing `data-theme="light"` or `"dark"` on the `<html>` element, or removing the attribute for "system". `theme.css` switches every colour from that.
+3. **Animates** the switch with the browser's **View Transitions API**: the browser takes a picture of the page as it is, we change the theme, and the new page is revealed through a circle that grows from the button that was clicked, until it covers the whole window.
+
+Browsers without View Transitions, and people who asked for reduced motion, get an instant switch instead.
+>>> 29
+The three choices a person can make.
+>>> 30
+What is actually shown: always light or dark ("system" is resolved to one of them).
+>>> 33
+Where the switch was clicked, in window pixels. `clientX` / `clientY` are the names mouse events use, so an event can be passed straight in.
+>>> 35-39
+What `useTheme()` gives a component: the `choice`, the `resolved` theme, `setChoice(…)` to pick one, and `toggle()` to flip between light and dark.
+>>> 43-46
+The three options with their icon and label, shared by the user menu in the top bar and the command menu, so both always offer the same choices in the same order.
+>>> 49
+The media query that is true while the computer is in dark mode.
+>>> 50
+The shared context; `null` until a `ThemeProvider` fills it.
+>>> 53-55
+`readSaved()`: read the remembered choice. Only the exact values `light` and `dark` count; anything else means "system".
+>>> 56-57
+If the browser refuses storage (for example a private window), fall back to "system".
+>>> 62-64
+`save()`: for "system" the remembered value is removed (following the computer is the default); otherwise it is stored.
+>>> 65
+If storage is refused, the change still applies, it is just not remembered.
+>>> 72-74
+`apply()`: puts the choice on `<html>` (`document.documentElement`). `delete root.dataset.theme` removes the `data-theme` attribute altogether.
+>>> 79
+`useSyncExternalStore`: React's safe way to read a value that lives outside React (here: the computer's dark-mode setting) and redraw when it changes.
+>>> 80-83
+The first function tells React how to **listen**: when the setting changes (for example the computer switches to dark mode at sunset), call `onChange`. The returned function stops listening. The `?.` means "only if the browser has `matchMedia`" (the pretend browser used by tests does not).
+>>> 85
+The second function tells React how to **read** the current value.
+>>> 91-92
+The computer's setting, and the theme actually shown: for "system" it follows the computer, otherwise it is the person's choice.
+>>> 94
+Whenever the choice changes, write it onto `<html>`. `useLayoutEffect` does this before the screen is painted, so no frame is drawn in the wrong colours.
+>>> 96
+`setChoice`: change the theme, with the animation when possible. `useCallback` keeps the same function between redraws, so components using it are not redrawn needlessly.
+>>> 97-100
+The change itself: `flushSync` makes React apply the new state **immediately** (normally React may wait a moment and group changes). The View Transition must see the new page as soon as `change` returns, so waiting is not allowed here. Then the attribute is written and the choice saved.
+>>> 102-105
+No animation if the browser does not support View Transitions, or if the person asked for reduced motion: just change.
+>>> 107-108
+Where the circle starts: the clicked point, or near the top-right corner (where the switch is) when no point was given.
+>>> 110
+How big the circle must finally be: the distance from its centre to the farthest corner of the window (Pythagoras, `Math.hypot`), so that it covers everything.
+>>> 111
+`startViewTransition(change)`: the browser photographs the current page, runs `change`, then shows the old picture on top of the new page while animating between them.
+>>> 112-116
+When the transition is ready, animate the **new** picture (`::view-transition-new(root)`) with a `clip-path` that grows from a 0-pixel circle to the full radius, over 700 ms with the same gentle curve as `--ease-out` in `theme.css`. What is outside the circle still shows the old picture, so the new theme seems to spread outwards.
+>>> 119
+If the browser skipped the transition (for example the tab was hidden), there is nothing to do: the theme has changed anyway.
+>>> 120
+The `[]` means this function never needs to be re-created.
+>>> 122-124
+`toggle`: switch to the opposite of what is shown now.
+>>> 127
+The value shared with every component; `useMemo` keeps the same object until one of its parts changes.
+>>> 128
+Provide it to everything inside.
+>>> 132-136
+`useTheme()`: read the shared value. If a component uses it outside a `ThemeProvider`, the mistake is reported immediately with a clear message instead of failing mysteriously later.

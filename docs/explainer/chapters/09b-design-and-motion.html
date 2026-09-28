@@ -1,0 +1,293 @@
+<h1>The new look (Release 3.0): design system, motion and scrolling</h1>
+
+<p>Release 3.0 redesigned every screen of EduMate. Nothing about the <em>rules</em> changed: the backend, the database,
+every check and every test are the same. What changed is how the product <strong>looks, moves and feels</strong>.
+This chapter explains that layer from zero: what a design system is, how colours are chosen, how animations and smooth
+scrolling work, how the pieces stay fast, accessible and secure, and where each thing lives in the code.</p>
+
+<div class="callout kid"><strong>Like redecorating a school</strong>
+The classrooms, timetables and rules stay exactly as they were. The school gets one paint chart that every room must
+use (the design tokens), doors that open smoothly instead of banging (animations), signposts in every corridor
+(the menu, breadcrumb and command palette), ramps next to every staircase (accessibility), and a rule that nothing
+may be bought from an unapproved shop (the security policy).</div>
+
+<h2>What changed, screen by screen</h2>
+<table>
+<thead><tr><th>Where</th><th>Before</th><th>After</th></tr></thead>
+<tbody>
+<tr><td>First visit</td><td>The login page</td><td>A public <strong>welcome page</strong> (<code>/welcome</code>) with scroll effects, then a split-screen login with floating preview cards</td></tr>
+<tr><td>Frame</td><td>A dark menu and a white top bar</td><td>A light, <strong>collapsible sidebar</strong> with section headings and icons, a highlight pill that <strong>slides</strong> to the active page, a frosted-glass top bar with a breadcrumb, a search button (<strong>Ctrl K</strong>), the theme switch and an account menu</td></tr>
+<tr><td>Moving between pages</td><td>Instant swap</td><td>The old page fades out, the new one <strong>rises in</strong>; a thin progress bar at the top shows slow requests; a line under the top bar shows how far down the page you are</td></tr>
+<tr><td>Loading</td><td>"Loading…" text</td><td><strong>Skeleton screens</strong>: grey shimmering shapes of the content that is coming</td></tr>
+<tr><td>Dashboard</td><td>Plain cards</td><td>A welcome banner on a drifting "aurora", tiles whose numbers <strong>count up</strong> and that tilt towards the mouse, and shortcuts to every page</td></tr>
+<tr><td>Attendance, fees</td><td>Tables</td><td><strong>Progress rings</strong> that draw themselves, a summary strip, a timeline of payments</td></tr>
+<tr><td>Results</td><td>A table per semester</td><td>An <strong>SGPA/CGPA trend chart</strong> with a keyboard-operable read-out, coloured grade chips, the current CGPA as the page's hero number</td></tr>
+<tr><td>Hall ticket</td><td>A table</td><td>A real-looking <strong>admit card</strong> with a tear-off stub and a stamp that thumps down; printable</td></tr>
+<tr><td>Payment</td><td>A form</td><td>A checkout card; after paying, a <strong>self-drawing check mark and confetti</strong></td></tr>
+<tr><td>Taking attendance</td><td>Checkboxes</td><td>Large <strong>tappable student tiles</strong> and a save bar that stays at the bottom of the screen</td></tr>
+<tr><td>Workflows</td><td>Status words</td><td><strong>Step trackers</strong> (results approval, admission journey, application progress)</td></tr>
+<tr><td>Theme</td><td>Followed the computer</td><td>Light, dark or system, remembered, with a <strong>circular reveal</strong> animation when switching</td></tr>
+</tbody></table>
+
+<h2>Part 1: the design system</h2>
+
+<h3>Design tokens: one paint chart for everything</h3>
+<p>A <strong>design token</strong> is a named value that every screen must use instead of a raw number: not
+<code>#3b5bea</code> but <code>var(--color-primary)</code>; not <code>16px</code> but <code>var(--space-4)</code>.
+All tokens live in <a href="#f-frontend-src-styles-theme-css"><code>theme.css</code></a>. Because every button, card,
+badge and chart refers to the tokens, re-branding EduMate or tuning the dark mode means editing <strong>one</strong>
+file. The <a href="#11-cookbook">cookbook</a> lists every token.</p>
+
+<h3>Colours that know about light and dark</h3>
+<pre class="block">--color-primary: light-dark(oklch(0.52 0.2 264), oklch(0.74 0.14 262));</pre>
+<ul>
+<li><strong><code>light-dark(a, b)</code></strong> is a CSS function: the browser uses <code>a</code> in light mode and
+<code>b</code> in dark mode. Both versions sit on one line, so they can never be forgotten or drift apart.</li>
+<li><strong><code>oklch(L C H)</code></strong> is a modern way to write a colour: Lightness (0–1), Chroma or colourfulness
+(0–0.37), Hue (an angle: 25 red, 155 green, 264 blue). It is <em>perceptual</em>: two colours with the same L really look
+equally light, whatever their hue. With hex codes or HSL that is not true (HSL's "50 % yellow" is far brighter than its
+"50 % blue"), so tints and text contrast become guesswork.</li>
+<li><strong>Soft backgrounds</strong> are mixed, not hand-picked:
+<code>--color-good-soft: color-mix(in oklab, var(--color-good) 12%, transparent)</code>. The mix is done in the
+<em>OKLab</em> space; mixing in OKLCH was tried first and gave greyish colours a pink tint (the hue of white is
+undefined, and OKLCH interpolates hue), a real bug found and fixed during the redesign.</li>
+<li><strong>Which theme?</strong> <code>color-scheme: light dark</code> on the page lets the browser choose from the
+computer's setting. The theme switch overrides it by setting <code>data-theme="light"</code> or <code>"dark"</code> on
+<code>&lt;html&gt;</code>, which <code>theme.css</code> turns into <code>color-scheme: light</code> or <code>dark</code>.</li>
+</ul>
+
+<h3>Typography</h3>
+<table>
+<thead><tr><th>Font</th><th>Used for</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td><strong>Geist</strong> (variable)</td><td>all text</td><td>clean, very legible at small sizes, with clear digits for marks and money; one variable file holds every weight</td></tr>
+<tr><td><strong>Instrument Serif</strong> (italic)</td><td>one or two accent words in big headlines ("Good evening, <em>Priya</em>")</td><td>an elegant contrast that makes headings memorable</td></tr>
+<tr><td><strong>Geist Mono</strong></td><td>USNs, order numbers, codes</td><td>every character the same width, so codes line up and 0/O and 1/l are distinct</td></tr>
+</tbody></table>
+<p>The font files are installed from npm (the <strong>Fontsource</strong> packages) and bundled with the app by
+<a href="#f-frontend-src-main-tsx"><code>main.tsx</code></a>. No request goes to Google Fonts. That is faster, keeps
+visitors' addresses private, and is required by the Content-Security-Policy (Part 5).</p>
+
+<h3>Depth, corners and texture</h3>
+<ul>
+<li><strong>Shadows are layered</strong>: a tight 1 px shadow plus a wide, soft one (<code>--shadow-card</code>). Real
+objects cast both, so layered shadows look natural where a single shadow looks like a sticker.</li>
+<li><strong>Glass</strong>: the top bar and the command palette are semi-transparent with
+<code>backdrop-filter: blur(18px) saturate(170%)</code>, so the page scrolling beneath shows through, softened.</li>
+<li><strong>Aurora</strong>: three large, blurred circles of brand colour that drift on slow, different loops
+(18–26 s) behind the dashboard banner, the login page and the welcome page. Pure CSS, no JavaScript.</li>
+<li><strong>Noise</strong>: a nearly invisible film-grain texture (an SVG <code>feTurbulence</code> noise pattern at 5 % opacity) over big gradients, which stops
+them from looking flat and prevents visible colour bands.</li>
+</ul>
+
+<h3>The building blocks</h3>
+<p>Every page is assembled from the same pieces, so the whole product looks and behaves consistently:</p>
+<table>
+<thead><tr><th>Piece</th><th>File</th><th>What it gives</th></tr></thead>
+<tbody>
+<tr><td><code>PageHeader</code>, <code>Loading</code>, <code>ErrorBanner</code>, <code>Alert</code>, <code>EmptyState</code>, <code>Badge</code>, <code>Field</code>, <code>PercentBar</code>, <code>IconTile</code>, <code>Avatar</code>, <code>Segmented</code>, <code>Steps</code></td><td><a href="#f-frontend-src-components-ui-tsx"><code>components/ui.tsx</code></a></td><td>titles with an automatic eyebrow, skeletons, alerts with icons, avatars coloured from the name, a sliding segmented switch, step trackers</td></tr>
+<tr><td><code>StatCard</code></td><td><a href="#f-frontend-src-components-StatCard-tsx"><code>components/StatCard.tsx</code></a></td><td>a tile with an icon, a counting number, a hint, a tone, and a light that follows the mouse</td></tr>
+<tr><td><code>Ring</code>, <code>TrendChart</code></td><td><a href="#f-frontend-src-components-charts-tsx"><code>components/charts.tsx</code></a></td><td>the self-drawing progress ring and the SGPA/CGPA line chart</td></tr>
+<tr><td><code>TimetableGrid</code></td><td><a href="#f-frontend-src-components-TimetableGrid-tsx"><code>components/TimetableGrid.tsx</code></a></td><td>the week grid with a colour per course and today highlighted</td></tr>
+<tr><td>Icons</td><td><code>lucide-react</code></td><td>one consistent family of line icons; each is imported by name, so only the icons used are shipped</td></tr>
+</tbody></table>
+
+<h3>Colour from a name: <code>hueFor</code></h3>
+<p>Avatars, course colours in the timetable, and book covers all get a colour <strong>worked out from a text</strong>
+(a name, a course code, a title) by <a href="#f-frontend-src-utils-visuals-ts"><code>hueFor</code></a> in
+<code>utils/visuals.ts</code>. The text is turned into a number (a <em>hash</em>), and that number picks a hue on the
+colour wheel. The same text always gives the same colour, on every page and for every user, and nobody has to assign
+colours by hand. The hash is spread with the <em>golden ratio</em> (0.618…) so that similar texts such as
+<code>CS301</code> and <code>CS302</code> land far apart on the wheel instead of getting nearly the same colour (another
+bug found by looking at the timetable and fixed, with a test).</p>
+
+<h2>Part 2: motion</h2>
+
+<div class="callout kid"><strong>Why animate at all?</strong>
+When a drawer slides out, you see <em>where</em> it came from, so you know where to put it back. Good animation
+explains changes: what appeared, what went away, what is connected to what. Bad animation just makes you wait. EduMate's
+animations are short (0.15–0.7 s), start fast and end gently, and can all be switched off.</div>
+
+<h3>The motion library in one example</h3>
+<p><strong>motion</strong> (formerly Framer Motion) lets an element describe its animation instead of programming it
+step by step:</p>
+<pre class="block">&lt;motion.div
+  initial={{ opacity: 0, y: 12 }}        ← start: invisible, 12 px lower
+  animate={{ opacity: 1, y: 0 }}         ← end: visible, in place
+  exit={{ opacity: 0 }}                  ← when removed: fade out (inside AnimatePresence)
+  transition={{ duration: 0.55, ease: EASE_OUT }}
+/&gt;</pre>
+<p>motion works out every frame in between and animates only <code>transform</code> and <code>opacity</code>, the two
+properties the browser can animate on the graphics card without recalculating the layout, which keeps it smooth.</p>
+
+<h3>One vocabulary of movement: <code>presets.ts</code></h3>
+<p>All animations pick from a few recipes in <a href="#f-frontend-src-motion-presets-ts"><code>motion/presets.ts</code></a>,
+so the whole product moves with one personality:</p>
+<table>
+<thead><tr><th>Preset</th><th>What it is</th><th>Used by</th></tr></thead>
+<tbody>
+<tr><td><code>EASE_OUT</code></td><td>a curve that starts fast and settles gently</td><td>almost every entrance</td></tr>
+<tr><td><code>SPRING</code></td><td>a physical spring (stiffness 420, damping 34)</td><td>the menu pill, the segmented switch, step dots, dialogs</td></tr>
+<tr><td><code>fadeUp</code></td><td>rise 18 px and fade in</td><td>list items (<code>StaggerItem</code>)</td></tr>
+<tr><td><code>staggerChildren(gap, delay)</code></td><td>show children one after another</td><td>every card grid and list</td></tr>
+<tr><td><code>pageVariants</code></td><td>a page arrives with a rise, fade and un-blur; leaves in 0.14 s</td><td>page transitions</td></tr>
+</tbody></table>
+<p>The same curves exist for CSS in <code>theme.css</code> (<code>--ease-out</code>, and <code>--ease-spring</code>,
+a spring written with the new CSS <code>linear()</code> function), so CSS hovers and JavaScript animations feel alike.</p>
+
+<h3>The techniques, and where to see them</h3>
+<table>
+<thead><tr><th>Technique</th><th>What you see</th><th>How</th></tr></thead>
+<tbody>
+<tr><td><strong>Page transitions</strong></td><td>the old page fades out, the new one rises in</td><td><a href="#f-frontend-src-motion-PageTransition-tsx"><code>AnimatedOutlet</code></a>: <code>AnimatePresence mode="wait"</code> keeps the old page until its exit finishes. Because the router already points at the new page by then, each page is <em>frozen</em> when it first appears (<code>Frozen</code>), so the leaving page keeps its own content.</td></tr>
+<tr><td><strong>Shared layout animation</strong></td><td>the highlight in the menu <em>slides</em> to the new page; the segmented switch's background slides</td><td>the highlight has <code>layoutId="nav-pill"</code>; when it disappears from one link and appears in another, motion animates between the two positions</td></tr>
+<tr><td><strong>Stagger</strong></td><td>cards appear one after another</td><td><code>Stagger</code> / <code>StaggerItem</code> in <a href="#f-frontend-src-motion-Reveal-tsx"><code>motion/Reveal.tsx</code></a>; with <code>inView</code>, only when scrolled into view</td></tr>
+<tr><td><strong>Count-up numbers</strong></td><td>"92.40%" counts up from 0</td><td><a href="#f-frontend-src-motion-CountUp-tsx"><code>CountUp</code></a> splits the text into prefix, number and suffix (<code>splitNumber</code>), animates the number keeping its decimals, and gives screen readers the final value at once</td></tr>
+<tr><td><strong>Self-drawing lines</strong></td><td>rings fill, chart lines are drawn like a pen, the payment tick draws itself</td><td>SVG strokes animated with <code>pathLength</code> (0 = nothing drawn, 1 = all) or <code>stroke-dashoffset</code></td></tr>
+<tr><td><strong>Exit animations</strong></td><td>error boxes, toasts, the progress area of an upload fold away</td><td><code>AnimatePresence</code> keeps a removed element until its <code>exit</code> animation ends</td></tr>
+<tr><td><strong>Parallax</strong></td><td>preview cards on the login and welcome pages float with the mouse at different depths</td><td><a href="#f-frontend-src-motion-Parallax-tsx"><code>usePointer</code> / <code>Float</code></a>: the mouse position, smoothed by springs, moves each card by its own <code>depth</code> (negative = against the mouse)</td></tr>
+<tr><td><strong>Pointer light</strong></td><td>a soft glow follows the mouse over tiles</td><td><code>followPointer</code> writes the mouse position into CSS variables; a radial gradient in CSS uses them</td></tr>
+<tr><td><strong>Micro-interactions</strong></td><td>buttons lift on hover and press in on click, arrows slide, the attendance tick flips to a cross</td><td>CSS transitions with the tokens; <code>AnimatePresence mode="wait"</code> for icon swaps</td></tr>
+<tr><td><strong>Theme reveal</strong></td><td>switching theme spreads the new colours as a growing circle from the button</td><td>the <strong>View Transitions API</strong>: the browser takes a picture of the old page, applies the change, and animates a <code>clip-path: circle()</code> on the new one (<a href="#f-frontend-src-theme-ThemeContext-tsx"><code>ThemeContext.tsx</code></a>)</td></tr>
+</tbody></table>
+
+<h2>Part 3: scrolling</h2>
+
+<h3>Smooth scrolling with Lenis</h3>
+<p>A mouse wheel normally moves the page in jumps of about 100 pixels. <strong>Lenis</strong>
+(<a href="#f-frontend-src-motion-SmoothScroll-tsx"><code>motion/SmoothScroll.tsx</code></a>) catches each wheel
+movement and glides the page there over a few frames. Each frame it moves a fixed share of the remaining distance
+(<code>lerp: 0.1</code> = 10 %), which is what makes the movement slow down softly at the end.</p>
+<p>Crucially, Lenis still uses the browser's <strong>real</strong> scrolling underneath. Older "smooth scroll" libraries
+moved the whole page with a transform instead, which breaks <code>position: sticky</code>, Ctrl+F, anchors and screen
+readers. With Lenis all of those keep working. It switches itself off for "reduce motion" and leaves touch screens
+alone (their native scrolling is already smooth). While a dialog or the phone menu is open, the page behind is frozen
+with <code>useScrollLock</code>, which calls Lenis's <code>stop()</code> and <code>start()</code>.</p>
+
+<h3>The scroll effects</h3>
+<table>
+<thead><tr><th>Effect</th><th>Where</th><th>How it works</th></tr></thead>
+<tbody>
+<tr><td><strong>Scroll progress line</strong></td><td>under the top bar, on every page</td><td><code>useScroll()</code> gives <code>scrollYProgress</code> (0 at the top, 1 at the bottom); a spring smooths it; it becomes the line's <code>scaleX</code> (<a href="#f-frontend-src-components-ScrollExtras-tsx"><code>ScrollExtras.tsx</code></a>)</td></tr>
+<tr><td><strong>Frosting top bar</strong></td><td>top bar, welcome page's navigation</td><td><code>useScrolled()</code> becomes true after a few pixels (24 on the welcome page); a <code>data-scrolled</code> attribute switches the glass style on</td></tr>
+<tr><td><strong>Scroll-reveal cards</strong></td><td>every card and tile below the first screen</td><td>pure CSS: <code>animation-timeline: view()</code> ties a rise-and-fade animation to the card's position in the window instead of to time. No JavaScript at all (see below)</td></tr>
+<tr><td><strong>3-D tilt that straightens</strong></td><td>the product preview on the welcome page</td><td><code>useScroll</code> with a <code>target</code> and <code>offset</code> gives the preview's progress through the window; <code>useTransform</code> maps it to <code>rotateX</code> 26° → 0° and scale 0.9 → 1</td></tr>
+<tr><td><strong>Pinned (sticky) story</strong></td><td>"How it works" on the welcome page</td><td>the picture is <code>position: sticky</code>; each step asks <code>useInView</code> with a margin of −45 % top and bottom whether it crosses the middle 10 % of the window, and becomes the active step</td></tr>
+<tr><td><strong>Horizontal scroll</strong></td><td>the roles gallery on the welcome page</td><td>a 320vh-tall section with a sticky 100vh window; the row's <code>x</code> = −progress × (row width − window width), so scrolling down moves the cards sideways</td></tr>
+<tr><td><strong>Marquee</strong></td><td>the two gliding rows of module names</td><td>CSS only: the list is doubled and slid left by exactly 50 %, then restarts, so the loop is seamless; hovering pauses it</td></tr>
+<tr><td><strong>Back to top</strong></td><td>bottom right, after scrolling 700 px</td><td>a button that appears with a spring and glides the page to the top with Lenis</td></tr>
+</tbody></table>
+
+<h3>Scroll-driven animations in CSS</h3>
+<pre class="block">@supports (animation-timeline: view()) {                  ← only in browsers that understand it
+  @media screen and (prefers-reduced-motion: no-preference) {   ← not for "reduce motion", not when printing
+    .content .card, .content .stat, .content .reveal {
+      animation: scroll-reveal linear both;
+      animation-timeline: view();                          ← progress = where the card is in the window
+      animation-range: entry 0% entry 55%;                 ← from "just entering" to "55 % entered"
+    }
+  }
+}</pre>
+<p>Normally an animation runs over <em>time</em>. With <code>animation-timeline: view()</code> it runs over the element's
+<em>journey through the window</em>: scroll a little and the card is half-risen; scroll back and it sinks again. It runs
+on the browser's compositor thread, so it stays smooth even while JavaScript is busy. Browsers that do not know the
+feature skip the whole block (<code>@supports</code>) and simply show the cards, a safe fallback called
+<em>progressive enhancement</em>.</p>
+
+<h3>Motion values: why scroll effects do not slow React down</h3>
+<p>Scroll positions change up to 120 times a second. If each change were React state, React would redraw the page
+120 times a second. motion's <code>useScroll</code>, <code>useSpring</code> and <code>useTransform</code> return
+<strong>motion values</strong> instead: containers that motion writes straight into the element's style, <em>without</em>
+React redrawing anything. React only hears about a change when a component explicitly asks
+(<code>useMotionValueEvent</code>, used by <code>useScrolled</code> to flip one true/false value).</p>
+
+<h2>Part 4: the application shell</h2>
+<table>
+<thead><tr><th>Part</th><th>File</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Sidebar</td><td><a href="#f-frontend-src-components-Sidebar-tsx"><code>Sidebar.tsx</code></a></td><td>links grouped under section headings, each with an icon; collapses to icons only (remembered with <code>useStoredFlag</code>), with tooltips in that state; becomes a slide-in drawer on phones</td></tr>
+<tr><td>Top bar</td><td><a href="#f-frontend-src-components-Topbar-tsx"><code>Topbar.tsx</code></a></td><td>breadcrumb (section › page), the search button, the theme switch, and the account menu (Radix drop-down) with role, campus, theme choices and log-out</td></tr>
+<tr><td>Command palette</td><td><a href="#f-frontend-src-components-CommandPalette-tsx"><code>CommandPalette.tsx</code></a></td><td><strong>Ctrl K</strong> (⌘K on a Mac): type a few letters to jump to any page of your role, switch theme, or log out; arrow keys and Enter</td></tr>
+<tr><td>Top loader</td><td><a href="#f-frontend-src-components-TopLoader-tsx"><code>TopLoader.tsx</code></a></td><td><code>http.ts</code> counts requests on their way; if any takes longer than 150 ms, a thin gradient line creeps across the top, then finishes when the answer arrives</td></tr>
+<tr><td>Layout</td><td><a href="#f-frontend-src-components-Layout-tsx"><code>Layout.tsx</code></a></td><td>puts it all together, with a "Skip to content" link as the first thing keyboard users reach</td></tr>
+<tr><td>Navigation data</td><td><a href="#f-frontend-src-navigation-ts"><code>navigation.ts</code></a></td><td>one list per role feeds the sidebar, the palette, the breadcrumb, the page eyebrows and the dashboard shortcuts</td></tr>
+</tbody></table>
+
+<h2>Part 5: fast, accessible and secure</h2>
+
+<h3>Speed</h3>
+<ul>
+<li><strong>Code splitting.</strong> Each of the 26 pages is its own file, loaded the first time it is opened
+(<code>lazyPage</code> in <a href="#f-frontend-src-App-tsx"><code>App.tsx</code></a>, React's <code>lazy</code> and
+<code>Suspense</code>). The welcome page's heavy scroll effects are never downloaded by a student going straight to
+their results.</li>
+<li><strong>Only cheap properties are animated</strong>: <code>transform</code> and <code>opacity</code> (and
+<code>filter</code> briefly on page entry, removed afterwards with <code>transitionEnd</code>, because a leftover filter
+would break <code>position: fixed</code> inside the page).</li>
+<li><strong>Skeletons instead of spinners</strong>, and the top loader waits 150 ms before appearing, so fast answers
+cause no flicker.</li>
+<li><strong>No layout jumps</strong>: skeletons have the shape of the real content; table columns and counting numbers use
+<em>tabular</em> digits (every digit equally wide), so columns line up and a number does not wobble while it counts.</li>
+</ul>
+
+<h3>Accessibility</h3>
+<ul>
+<li><strong>Reduced motion everywhere.</strong> <code>&lt;MotionConfig reducedMotion="user"&gt;</code> in
+<code>App.tsx</code> turns every motion movement into a simple fade for people who ask their computer for less motion;
+CSS animations are wrapped in <code>prefers-reduced-motion</code> queries; Lenis, the confetti and the theme reveal
+switch themselves off; <code>CountUp</code> shows the final number at once.</li>
+<li><strong>Keyboard.</strong> Everything works without a mouse: a skip link, visible focus rings, arrow keys in menus
+and the palette, Escape closes dialogs, the trend chart's read-out moves with ← and →, attendance tiles are real
+buttons.</li>
+<li><strong>Screen readers.</strong> Radix gives dialogs and menus the right roles and moves focus into them;
+decorative pictures are hidden (<code>aria-hidden</code>); charts have a text description and every number also
+appears in a table; toasts and the attendance count are announced (<code>aria-live</code>).</li>
+<li><strong>Never colour alone.</strong> Every status has an icon or a word as well (a tick, a triangle, "Overdue").
+The chart colours were checked with a colour-blindness validator for both themes.</li>
+<li><strong>Print.</strong> A <code>@media print</code> block hides the menus, toasts and buttons, so the hall ticket
+prints cleanly.</li>
+</ul>
+
+<h3>Security: living with a strict Content-Security-Policy</h3>
+<p>nginx sends every page with this policy (<a href="#f-frontend-nginx-conf"><code>nginx.conf</code></a>):</p>
+<pre class="block">default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline';
+frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'</pre>
+<p>In words: scripts, fonts, workers and connections may only come from EduMate's own address. Even if an attacker
+managed to inject a <code>&lt;script&gt;</code> tag, the browser would refuse to run it. The redesign had to respect
+this, and three places show how:</p>
+<table>
+<thead><tr><th>Need</th><th>The usual way (blocked)</th><th>What EduMate does</th></tr></thead>
+<tbody>
+<tr><td>Set the dark theme before the page is drawn (no white flash)</td><td>an inline <code>&lt;script&gt;</code> in <code>index.html</code></td><td>a tiny external file, <a href="#f-frontend-public-theme-init-js"><code>public/theme-init.js</code></a>, loaded from our own address</td></tr>
+<tr><td>Nice fonts</td><td>a <code>&lt;link&gt;</code> to Google Fonts</td><td>fonts bundled with Fontsource</td></tr>
+<tr><td>Confetti</td><td>the library's background worker, created from a <code>blob:</code> address</td><td><code>useWorker: false</code>: drawn on our own canvas on the main thread</td></tr>
+</tbody></table>
+<p>The production build was loaded in a real browser with this policy while testing the redesign: no violation was
+reported, the fonts loaded, the theme persisted across reloads, and the payment confetti appeared.</p>
+
+<h2>Part 6: how it was verified</h2>
+<ul>
+<li><code>npm run build</code>: TypeScript checks every file, then Vite builds the production bundle.</li>
+<li><code>npm test</code>: 33 Vitest tests, including the new <code>visuals.test.ts</code> (colours from names, grade
+colours, time of day, number splitting for <code>CountUp</code>, the current period) and <code>navigation.test.ts</code>
+(every role's menu has icons, sections are contiguous, the longest matching address wins).</li>
+<li>Every screen of every role was photographed with a scripted browser (Playwright) in light mode, dark mode and at
+phone width, and compared by eye.</li>
+<li>A scripted interaction test clicked through the new behaviour: signed-out visitors land on <code>/welcome</code>, deep
+links go to login and back, a wrong password shows the error, Ctrl K navigates, the theme switch persists, the sidebar
+collapses, the account menu opens, Escape closes dialogs, and the phone drawer opens and closes.</li>
+</ul>
+
+<h2>Where to find each thing</h2>
+<table>
+<thead><tr><th>Folder / file</th><th>Contents</th></tr></thead>
+<tbody>
+<tr><td><code>frontend/src/styles/theme.css</code></td><td>the tokens: colours, fonts, sizes, shadows, curves</td></tr>
+<tr><td><code>frontend/src/styles/app.css</code></td><td>every component's style, the scroll-reveal, reduced-motion and print rules</td></tr>
+<tr><td><code>frontend/src/styles/landing.css</code></td><td>the welcome and login pages</td></tr>
+<tr><td><code>frontend/src/theme/ThemeContext.tsx</code>, <code>public/theme-init.js</code></td><td>light / dark / system, remembered, with the circular reveal</td></tr>
+<tr><td><code>frontend/src/motion/</code></td><td>presets, smooth scrolling, page transitions, reveal/stagger, count-up, parallax</td></tr>
+<tr><td><code>frontend/src/components/</code></td><td>the shell (Layout, Sidebar, Topbar, CommandPalette, TopLoader, ScrollExtras), toasts, dialogs, and the building blocks</td></tr>
+<tr><td><code>frontend/src/utils/visuals.ts</code></td><td>small pure functions that decide colours and labels (tested)</td></tr>
+<tr><td><code>frontend/src/pages/LandingPage.tsx</code></td><td>the scroll showcase</td></tr>
+</tbody></table>

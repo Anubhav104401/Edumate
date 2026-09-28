@@ -1,69 +1,103 @@
 === FILE frontend/src/pages/admissions/ApplicationsPage.tsx
 >>> SUMMARY
-**The admissions officer's list of applications**, with a **status filter** and a **search box** (name or application number). Each application number links to its detail page.
+**The admissions officer's list of applications**, with a **status filter** and a **search box** (name or application number). Data: `GET /api/admissions/applications?status=&q=`. Each row shows the applicant's avatar and name, the application number (a link), the programme, the category as a chip, the entrance and qualifying scores, a **status badge coloured by meaning** (amber while waiting for a decision, green for an offer or enrolment, red for rejected, withdrawn or reversed), and when it was submitted. An arrow at the end of the row opens the detail page.
 
 **Why does the search wait for the button?** The filter reloads at once when changed, but the search text only takes effect when "Search" (or Enter) is pressed. Otherwise every key press would send a request to the server: typing "priya" would send five.
 
 **DEF-036 (reflected XSS)** is prevented here as everywhere else: React writes names as **plain text**, never as HTML. An applicant who names themselves `<script>alert(1)</script>` just shows up with that odd-looking name, and nothing runs.
->>> 14
+>>> 16
 The list of statuses for the filter, taken from the keys of `t.admissions.statuses` in `messages.ts`, so the filter and the labels can never disagree.
->>> 17-19
-The page's memory: the chosen status (`''` = any), the text being typed, and the search text actually in use.
->>> 20
-Loads the list, again whenever the status or the search text changes.
->>> 22-24
-Pressing Search: stop the page reload, and use the typed text (trimmed) as the search. Changing `query` triggers the reload.
->>> 27-30
-The drawing: the title, then a form-card holding the filters.
->>> 31-32
-The status drop-down …
->>> 34-36
-… with one option per status.
->>> 41-42
-The search box. `placeholder` is the grey hint shown while it is empty ("Name or application number").
->>> 44
-The Search button (a submit button, so Enter also works).
->>> 49-51
-Loading, error, and "Nothing to show yet." for an empty result.
->>> 52-56
-The table of applications and its header row.
->>> 67-70
-One row per application. The number links to its detail page, e.g. `/admissions/7`.
->>> 80
-The status badge.
+>>> 24-27
+`search`: runs when the form is submitted (button or Enter). `preventDefault()` stops the page from reloading; then the typed text (without spaces around it) becomes the search in use, which makes `useLoad` fetch again.
+>>> 29-31
+The drawing: title and subtitle.
+>>> 32
+The toolbar is a real `<form>`, so pressing Enter in the search box submits it.
+>>> 33-34
+The status drop-down. Changing it reloads the list at once. `as AdmissionStatus | ''` tells TypeScript the chosen text is one of the statuses, or empty for "any".
+>>> 36-38
+One option per status, with its readable label ("Under review").
+>>> 43-46
+The search box, with a magnifying-glass icon inside it.
+>>> 49-50
+The "Search" button.
+>>> 54-56
+Loading, error, and an empty state with an inbox icon.
+>>> 57-61
+The table and its header row: name, programme, category, entrance, qualifying %, status, submitted…
+>>> 69
+…and an empty header over the arrow column.
+>>> 72-74
+One row per application.
+>>> 75-78
+The first cell: the avatar (its colour comes from the name), then…
+>>> 82
+…under the name, the application number as a link to the detail page.
+>>> 89
+The category ("OPEN", "OBC"…) as a chip.
+>>> 94
+The status badge. `admissionTone` (in `utils/visuals.ts`) picks its colour from the status's meaning.
+>>> 98-102
+An arrow link to the detail page at the end of the row. It has no visible text, so its `aria-label` gives screen readers one: "Application APP-2026-0007".
+>>> 104
+(The arrow icon.)
 
 === FILE frontend/src/pages/admissions/MeritListPage.tsx
 >>> SUMMARY
-**The merit list and seat allocation** for one programme (FR-05). The officer picks a programme and presses "Generate merit list". The page shows:
-- a **seat matrix** card per category: OPEN, OBC, SC and ST, each with its seats and how many are filled (e.g. "Seat matrix: OPEN", 11, "11 of 11 filled");
-- the **ranked list**: rank, application, name, category, entrance score, qualifying %, **merit score** (0.6 × entrance + 0.4 × qualifying), and the **seat** (OPEN, OBC…, or "Wait-list #3").
+**The merit list and seat allocation** for one programme (FR-05). Data: `GET /api/admissions/merit-list?programId=`. The officer picks a programme and presses "Generate merit list". The page shows:
+- a **seat matrix**: one tile per category (OPEN, OBC, SC, ST), each with the number of seats, "11 of 11 filled" and a bar (amber while seats remain, full when filled; the tile turns green when the category is full);
+- the **ranked list**: rank (the top three wear a **gold, silver and bronze medal**), application, name, category, entrance score, qualifying %, **merit score** (0.6 × entrance + 0.4 × qualifying), and the **seat** (a green OPEN, OBC… or an amber "Wait-list #3").
 
 All the work (scoring, the deterministic tie-breaks, the two-pass seat allocation) happens in the backend's `MeritListGenerator`; this page only displays it. The list is generated fresh each time, from the applications as they are now.
->>> 18-21
+>>> 20
+The hues of the three medals on the colour wheel: 85 (gold), 250 (a cool silver-blue) and 45 (bronze). `app.css` turns the hue into the medal's gradient.
+>>> 27-30
 When the programmes arrive, pre-select M.Tech CSE (the programme with the most demo applications), or else the first one.
->>> 23
+>>> 32
 Runs again if the programmes or the choice change.
->>> 27-29
-The drawing: title and subtitle.
->>> 30-36
-When the programmes are loaded: a drop-down, each option showing the programme and its seats, e.g. "M.Tech Computer Science and Engineering (18)".
->>> 41
-"Generate merit list": remembers which programme was requested and (re)loads the list.
->>> 46-48
-Loading and error; then, when the list is there:
->>> 49-54
-One card per seat category. `Object.entries` turns the matrix `{ "OPEN": 11, "OBC": 4, … }` into pairs, each giving the category name …
+>>> 36-38
+The drawing: title and subtitle (the merit formula and the tie-break order).
+>>> 39-42
+The toolbar: the programme drop-down…
+>>> 43-45
+…with the number of seats after each name: "M.Tech Computer Science (30)".
+>>> 50-56
+"Generate merit list": remember which programme was asked for, and load (or reload) the list for it. Keeping `requested` separate from `programId` means the list does not change just because the drop-down changed; it changes when the button is pressed.
+>>> 58
+(A sparkle icon on the button.)
 >>> 62-63
-If nobody is ranked yet: "No submitted applications with scores for this programme." …
->>> 64-68
-… otherwise the ranked table and its header row.
->>> 79-81
-One row per ranked applicant.
->>> 83
-The application number, linking to its details.
->>> 90
-The merit score in bold, always with 2 decimals.
->>> 93-94
-The seat: an amber "Wait-list #3" for wait-listed applicants …
->>> 96
-… otherwise a green badge naming the seat category they got.
+Loading and error.
+>>> 64-66
+Once generated: the seat matrix, one tile per category, appearing one after another.
+>>> 67
+`Object.entries` turns `{ OPEN: 11, OBC: 8 }` into pairs `[['OPEN', 11], ['OBC', 8]]`, so each category and its seats can be drawn.
+>>> 68
+How many of that category's seats are filled (0 if none).
+>>> 69-75
+A `StatCard` with an armchair icon: "Seat matrix: OPEN", the number of seats, green when every seat is filled.
+>>> 76-77
+Its hint: "11 of 11 filled"…
+>>> 79
+…with a bar showing the share filled (amber while seats remain).
+>>> 88-89
+No ranked applications: "No submitted applications with scores for this programme." with a medal icon.
+>>> 90-94
+Otherwise the ranked table and its header row.
+>>> 105-107
+One row per applicant, in rank order.
+>>> 108-111
+Ranks 1–3 as a round medal coloured gold, silver or bronze (`--hue` from `MEDAL_HUES`; `e.rank - 1` because lists count from 0)…
+>>> 113-114
+…other ranks as a plain number.
+>>> 117
+The application number, linking to its detail page.
+>>> 120
+The name in bold…
+>>> 123
+…and the category as a chip.
+>>> 128
+The merit score in bold, since it decides the order.
+>>> 131-132
+The seat: an amber "Wait-list #3" when no seat is left…
+>>> 134
+…otherwise the allocated category in green.

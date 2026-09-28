@@ -72,8 +72,8 @@ GROUP_ORDER = [
 JAVA_PACKAGE_ORDER = ["", "config/", "common/", "campus/", "security/", "academic/", "attendance/", "exam/",
                       "fees/", "admissions/", "documents/", "consent/", "timetable/", "library/",
                       "notifications/", "dashboard/", "admin/"]
-FRONT_ORDER = ["main.tsx", "App.tsx", "config.ts", "navigation.ts", "i18n/", "styles/", "api/", "auth/",
-               "hooks/", "components/", "utils/", "pages/"]
+FRONT_ORDER = ["main.tsx", "App.tsx", "config.ts", "navigation", "i18n/", "styles/", "theme/", "api/", "auth/",
+               "hooks/", "motion/", "components/", "utils/", "pages/"]
 
 
 def group_of(path: str) -> str:
@@ -237,7 +237,7 @@ def load_notes() -> dict[str, FileNotes]:
 LEXERS = {
     ".java": "java", ".ts": "typescript", ".tsx": "tsx", ".css": "css", ".sql": "sql", ".yml": "yaml",
     ".yaml": "yaml", ".json": "json", ".xml": "xml", ".html": "html", ".svg": "xml", ".md": "markdown",
-    ".ps1": "powershell", ".conf": "nginx", ".cmd": "batch", ".properties": "properties",
+    ".ps1": "powershell", ".conf": "nginx", ".cmd": "batch", ".properties": "properties", ".js": "javascript",
 }
 
 
@@ -281,7 +281,7 @@ def highlight(path: str, text: str) -> list[str]:
 def comment_kind(path: str) -> str:
     suffix = Path(path).suffix
     name = Path(path).name
-    if suffix in (".java", ".ts", ".tsx", ".css"):
+    if suffix in (".java", ".ts", ".tsx", ".css", ".js"):
         return "c"
     if suffix in (".yml", ".yaml", ".ps1", ".conf") or name in ("Dockerfile", ".gitignore", ".gitattributes",
                                                                 ".env.example"):
@@ -351,7 +351,7 @@ def comment_text(line: str) -> str:
 def bracket_openers(path: str, text: str) -> dict[tuple[int, int], int]:
     """For every closing bracket, the line of its opening bracket. Strings and comments are skipped."""
     suffix = Path(path).suffix
-    if suffix not in (".java", ".ts", ".tsx", ".css", ".json"):
+    if suffix not in (".java", ".ts", ".tsx", ".js", ".css", ".json"):
         return {}
     pairs = {")": "(", "]": "[", "}": "{"}
     stack: list[tuple[str, int]] = []
@@ -396,7 +396,7 @@ def bracket_openers(path: str, text: str) -> dict[tuple[int, int], int]:
             line += text.count("\n", i, end)
             i = end
             continue
-        if ch in ("'", '"') or (ch == "`" and suffix in (".ts", ".tsx")):
+        if ch in ("'", '"') or (ch == "`" and suffix in (".ts", ".tsx", ".js")):
             if suffix == ".java" and ch == '"' and text.startswith('"""', i):
                 end = text.find('"""', i + 3)
                 end = n if end == -1 else end + 3
@@ -504,7 +504,7 @@ def auto_blocks(path: str, lines: list[str], text: str, index: dict[str, str]) -
             handled.add(k)
 
     lang_rules = {
-        ".java": V.java_line, ".ts": V.ts_line, ".tsx": V.ts_line, ".css": V.css_line, ".sql": V.sql_line,
+        ".java": V.java_line, ".ts": V.ts_line, ".tsx": V.ts_line, ".js": V.ts_line, ".css": V.css_line, ".sql": V.sql_line,
         ".yml": V.yaml_line, ".xml": V.xml_line,
     }
     if name == "Dockerfile":

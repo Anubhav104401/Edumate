@@ -139,10 +139,48 @@ which fails the build if any controller address is missing from the matrix.</dd>
 10 minutes, allows 5 attempts, and can be revoked; submission requires GRANTED consent.</dd>
 </dl>
 
+<h2>The interface (Release 3.0)</h2>
+<dl>
+<dt><strong>Q. What is a design system, and does EduMate have one?</strong></dt>
+<dd>A shared set of rules and parts every screen uses: tokens (colours, fonts, sizes, shadows, animation curves) in
+<code>theme.css</code>, and building blocks (<code>PageHeader</code>, <code>StatCard</code>, <code>Badge</code>,
+<code>Steps</code>…) in <code>components/</code>. Changing a token changes every screen, in both themes
+(<a href="#09b-design-and-motion">the chapter on the new look</a>).</dd>
+
+<dt><strong>Q. How does dark mode work, and why no white flash?</strong></dt>
+<dd>Each colour is written as <code>light-dark(light value, dark value)</code>; <code>color-scheme</code> decides which is
+used. The choice (light, dark or system) is saved in <code>localStorage</code>, and <code>public/theme-init.js</code>
+applies it before the page is drawn. It is an external file because the Content-Security-Policy forbids inline scripts.</dd>
+
+<dt><strong>Q. Which animation techniques are used?</strong></dt>
+<dd>The motion library for enter/exit animations, page transitions, staggered lists, a shared-layout animation for the
+sliding menu highlight, springs, count-up numbers, self-drawing SVG lines and scroll-linked values; CSS for hovers, the
+marquee and scroll-driven reveals (<code>animation-timeline: view()</code>); the View Transitions API for the theme
+switch; Lenis for smooth scrolling.</dd>
+
+<dt><strong>Q. Do the animations slow the app down?</strong></dt>
+<dd>No: only <code>transform</code> and <code>opacity</code> are animated (handled by the graphics card), scroll-linked
+values are motion values that bypass React re-renders, the scroll reveal is pure CSS on the compositor thread, and each
+page's code is downloaded only when it is opened.</dd>
+
+<dt><strong>Q. What about people who get dizzy from motion?</strong></dt>
+<dd>Every animation honours the operating system's "reduce motion" setting: <code>MotionConfig reducedMotion="user"</code>
+for motion, <code>prefers-reduced-motion</code> queries in CSS, and Lenis, confetti and the theme reveal switch off.</dd>
+
+<dt><strong>Q. Why Radix UI and not Material UI?</strong></dt>
+<dd>Radix is "headless": it provides correct behaviour (focus trapping, Escape, keyboard navigation, ARIA roles) with no
+styling, so EduMate keeps its own look. Material UI brings Google's visual language and a much larger bundle.</dd>
+
+<dt><strong>Q. Is the redesign accessible?</strong></dt>
+<dd>Yes: a skip link, visible focus rings, full keyboard operation (including the chart read-out and the command palette),
+labels and live regions for screen readers, status never shown by colour alone, a colour-blind-checked chart palette,
+and print styles.</dd>
+</dl>
+
 <h2>Quality assurance</h2>
 <dl>
 <dt><strong>Q. How do you know the fixes work?</strong></dt>
-<dd>64 backend tests (unit, integration through real HTTP, PostgreSQL compatibility) and 15 frontend tests, each mapped to a
+<dd>64 backend tests (unit, integration through real HTTP, PostgreSQL compatibility) and 33 frontend tests, each mapped to a
 test case or defect in the report (<a href="#12-testing">chapter 12</a>).</dd>
 
 <dt><strong>Q. Did you find anything wrong in the report itself?</strong></dt>

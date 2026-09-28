@@ -54,45 +54,67 @@ Login messages are in <a href="#f-backend-src-main-java-com-edumate-security-Log
 The general frontend messages (server unreachable, session ended, page crashed) are under <code>errors</code> in
 <code>messages.ts</code>.</p>
 
-<h2>Recipe 3: change a colour, font or size</h2>
-<p>Every colour and size is a <strong>CSS variable</strong> in
-<a href="#f-frontend-src-styles-theme-css"><code>frontend/src/styles/theme.css</code></a>:</p>
+<h2>Recipe 3: change a colour, font, size or animation speed</h2>
+<p>Every colour, font, size, corner, shadow and animation curve is a <strong>design token</strong>: a CSS variable in
+<a href="#f-frontend-src-styles-theme-css"><code>frontend/src/styles/theme.css</code></a>. Every component uses the
+tokens, never raw values, so changing one line changes the whole app, in both themes.</p>
+
+<p><strong>How a colour is written.</strong> Each colour holds its light-mode and its dark-mode value together:</p>
+<pre class="block">--color-primary: light-dark(oklch(0.52 0.2 264), oklch(0.74 0.14 262));
+                            └─ light mode ───┘  └─ dark mode ────┘</pre>
+<p><code>oklch(L C H)</code> describes a colour the way people see it: <strong>L</strong>ightness from 0 (black) to
+1 (white), <strong>C</strong>hroma (how colourful) from 0 (grey) to about 0.37, and <strong>H</strong>ue as an angle
+on the colour wheel: 25 red, 65 amber, 155 green, 264 blue, 298 violet, 354 pink. Unlike hex codes, changing only the
+hue keeps the lightness the same, so text stays readable.</p>
+
 <table>
-<thead><tr><th>Variable</th><th>Light value</th><th>Used for</th></tr></thead>
+<thead><tr><th>Token</th><th>Light / dark</th><th>Used for</th></tr></thead>
 <tbody>
-<tr><td><code>--color-primary</code></td><td><span style="background:#1f4e79;color:#fff;padding:0 6px">#1f4e79</span></td><td>buttons, links, the active menu item</td></tr>
-<tr><td><code>--color-primary-hover</code></td><td>#173c5e</td><td>a button under the mouse</td></tr>
-<tr><td><code>--color-primary-soft</code></td><td>#e3eef8</td><td>pale blue backgrounds</td></tr>
-<tr><td><code>--color-page</code></td><td>#f4f6f9</td><td>the grey page background</td></tr>
-<tr><td><code>--color-surface</code></td><td>#ffffff</td><td>cards, tables, dialogs</td></tr>
-<tr><td><code>--color-sidebar</code></td><td><span style="background:#10263d;color:#fff;padding:0 6px">#10263d</span></td><td>the left menu</td></tr>
-<tr><td><code>--color-text</code> / <code>--color-text-muted</code></td><td>#1b2430 / #5b6878</td><td>normal / grey text</td></tr>
-<tr><td><code>--color-good</code> / <code>-soft</code></td><td>#1e7a46 / #e3f4ea</td><td>green: success toasts, "Paid", good cards</td></tr>
-<tr><td><code>--color-warn</code> / <code>-soft</code></td><td>#9a6200 / #fdf1dc</td><td>amber: warnings, "Due", required badges</td></tr>
-<tr><td><code>--color-bad</code> / <code>-soft</code></td><td>#b42318 / #fde8e6</td><td>red: errors, "Overdue", F grades, clashes</td></tr>
-<tr><td><code>--font-body</code> / <code>--font-mono</code></td><td>Segoe UI… / Cascadia Mono…</td><td>normal text / codes like USNs and order numbers</td></tr>
-<tr><td><code>--text-xs</code> … <code>--text-2xl</code></td><td>12px … 30px</td><td>text sizes</td></tr>
-<tr><td><code>--space-1</code> … <code>--space-6</code></td><td>4px … 32px</td><td>gaps and padding</td></tr>
-<tr><td><code>--radius-sm/md/lg</code></td><td>6 / 10 / 14px</td><td>corner roundness</td></tr>
-<tr><td><code>--sidebar-width</code></td><td>248px</td><td>width of the left menu</td></tr>
+<tr><td><code>--color-primary</code></td><td><span style="background:oklch(0.52 0.2 264);color:#fff;padding:0 6px">oklch(0.52 0.2 264)</span> / <span style="background:oklch(0.74 0.14 262);color:#111;padding:0 6px">oklch(0.74 0.14 262)</span></td><td>buttons, links, focus rings, the active menu pill</td></tr>
+<tr><td><code>--color-accent</code>, <code>-accent-2</code>, <code>-accent-3</code></td><td><span style="background:oklch(0.55 0.23 298);color:#fff;padding:0 6px">violet</span> <span style="background:oklch(0.66 0.14 212);color:#fff;padding:0 6px">cyan</span> <span style="background:oklch(0.65 0.21 354);color:#fff;padding:0 6px">pink</span></td><td>the brand gradient, the aurora, accent icon tiles</td></tr>
+<tr><td><code>--gradient-brand</code>, <code>--gradient-text</code></td><td>blue → violet (→ pink)</td><td>the logo, the main button, gradient headings (<code>.text-gradient</code>)</td></tr>
+<tr><td><code>--color-page</code> / <code>--color-surface</code> / <code>--color-surface-muted</code></td><td>near-white / white / light grey; near-black / dark / darker</td><td>page background / cards and dialogs / table headers, chips</td></tr>
+<tr><td><code>--color-glass</code></td><td>white or dark at 72 % opacity</td><td>the frosted top bar and command palette (with <code>backdrop-filter: blur()</code>)</td></tr>
+<tr><td><code>--color-text</code> / <code>-muted</code> / <code>-faint</code></td><td>three strengths of ink</td><td>normal / secondary / hint text</td></tr>
+<tr><td><code>--color-good</code>, <code>--color-warn</code>, <code>--color-bad</code> (+ <code>-soft</code>)</td><td><span style="background:oklch(0.52 0.13 155);color:#fff;padding:0 6px">good</span> <span style="background:oklch(0.56 0.13 62);color:#fff;padding:0 6px">warn</span> <span style="background:oklch(0.53 0.2 25);color:#fff;padding:0 6px">bad</span></td><td>status: "Paid", "Due", "Overdue", alerts, badges, rings. The <code>-soft</code> versions are the same colour mixed 12–14 % into transparent, for backgrounds.</td></tr>
+<tr><td><code>--chart-1</code>, <code>--chart-2</code></td><td>blue #2a78d6 and orange #eb6834 (dark: #3987e5 / #d95926)</td><td>the SGPA and CGPA lines; a pair checked to stay distinguishable for colour-blind readers</td></tr>
+<tr><td><code>--font-body</code> / <code>--font-serif</code> / <code>--font-mono</code></td><td>Geist / Instrument Serif (italic) / Geist Mono</td><td>all text / the elegant accent words in headlines / USNs, codes, order numbers</td></tr>
+<tr><td><code>--text-xs</code> … <code>--text-3xl</code>, <code>--text-display</code></td><td>12 px … 44 px; 44–92 px (grows with the window)</td><td>text sizes</td></tr>
+<tr><td><code>--space-1</code> … <code>--space-8</code></td><td>4 px … 72 px</td><td>gaps and padding</td></tr>
+<tr><td><code>--radius-sm/md/lg/xl/full</code></td><td>8 / 12 / 18 / 26 px / a pill</td><td>corner roundness</td></tr>
+<tr><td><code>--shadow-xs/card/lg/glow</code></td><td>several soft layers</td><td>depth of cards, dialogs and the main button</td></tr>
+<tr><td><code>--ease-out</code>, <code>--ease-spring</code></td><td>fast start, gentle stop; a springy overshoot</td><td>the "feel" of every CSS transition</td></tr>
+<tr><td><code>--duration-fast/…/slow</code></td><td>150 / 260 / 600 ms</td><td>how long CSS transitions take</td></tr>
+<tr><td><code>--sidebar-width</code>, <code>--sidebar-collapsed</code>, <code>--topbar-height</code>, <code>--content-max</code></td><td>264 / 76 / 64 / 1320 px</td><td>the frame of every page</td></tr>
 </tbody></table>
-<p>Example: to make EduMate maroon, set <code>--color-primary: #7a1f2b;</code> and <code>--color-primary-hover: #5e1721;</code>.
-Every button, link and highlight follows. <strong>Dark mode</strong> has its own values in the
-<code>@media (prefers-color-scheme: dark)</code> block of the same file; change them too. Layout rules (how cards, tables,
-the menu and the upload box are arranged) are in <a href="#f-frontend-src-styles-app-css"><code>app.css</code></a>; they
-use the variables, so they rarely need editing.</p>
+<p><strong>Example: make EduMate maroon.</strong> Change the hue 264 to 15 in the two <code>--color-primary</code> lines:
+<code>light-dark(oklch(0.45 0.16 15), oklch(0.74 0.12 15))</code>, and the same for <code>--color-primary-hover</code>.
+Every button, link, focus ring, soft background and gradient follows, in both themes.</p>
+<p><strong>Animation speed.</strong> CSS transitions use <code>--duration*</code> and <code>--ease-*</code>. The
+JavaScript animations take their curves and springs from
+<a href="#f-frontend-src-motion-presets-ts"><code>motion/presets.ts</code></a> (<code>EASE_OUT</code>, <code>SPRING</code>,
+<code>fadeUp</code>, <code>pageVariants</code>); change a number there and every page follows. The smoothness of the
+page scrolling is <code>SMOOTH_SCROLL_LERP</code> in <code>config.ts</code> (0.1: lower = floatier, 1 = no smoothing).</p>
+<p><strong>Switching animations off</strong> needs no code: every animation respects the computer's "reduce motion"
+setting (Windows: <em>Settings → Accessibility → Visual effects → Animation effects</em>; macOS: <em>Accessibility → Display →
+Reduce motion</em>).</p>
+<p>Component styles (how cards, tables, the menu and the upload box look) are in
+<a href="#f-frontend-src-styles-app-css"><code>app.css</code></a>, the public welcome and login pages in
+<a href="#f-frontend-src-styles-landing-css"><code>landing.css</code></a>; they use the tokens, so they rarely need editing.</p>
 
 <h2>Recipe 4: change pop-up messages, confirmations and alert boxes</h2>
 <table>
 <thead><tr><th>What</th><th>Where the words are</th><th>Where the behaviour is</th></tr></thead>
 <tbody>
-<tr><td>Toast texts (green/red pop-ups)</td><td><code>messages.ts</code>, keys ending in <code>Toast</code> (e.g. <code>apply.savedToast</code>, <code>library.issuedToast</code>)</td><td><code>components/Toast.tsx</code></td></tr>
-<tr><td>How long toasts stay</td><td>–</td><td><code>TOAST_DURATION_MS</code> in <code>config.ts</code> (5000 = 5 s)</td></tr>
-<tr><td>"Are you sure?" questions</td><td><code>messages.ts</code>, keys starting with <code>confirm</code> (e.g. <code>resultsManage.confirmPublish</code>)</td><td><code>components/ConfirmDialog.tsx</code>; button labels <code>common.confirm</code>, <code>common.cancel</code></td></tr>
-<tr><td>Coloured information boxes</td><td>the page's keys in <code>messages.ts</code> (e.g. <code>apply.lockedNotice</code>)</td><td><code>Alert</code> in <code>components/ui.tsx</code>; colours from <code>--color-info/good/warn/bad</code></td></tr>
+<tr><td>Toast texts (the messages that slide in at the bottom right)</td><td><code>messages.ts</code>, keys ending in <code>Toast</code> (e.g. <code>apply.savedToast</code>, <code>library.issuedToast</code>)</td><td><code>components/Toast.tsx</code> (a small adapter over the Sonner library; pages call <code>toast.success(…)</code>, <code>toast.error(…)</code>, <code>toast.info(…)</code>)</td></tr>
+<tr><td>How long toasts stay</td><td>–</td><td><code>TOAST_DURATION_MS</code> in <code>config.ts</code> (5000 = 5 s; hovering pauses the countdown)</td></tr>
+<tr><td>"Are you sure?" questions</td><td><code>messages.ts</code>, keys starting with <code>confirm</code> (e.g. <code>resultsManage.confirmPublish</code>)</td><td><code>components/ConfirmDialog.tsx</code> (a Radix alert dialog). <code>confirm(question, buttonLabel, 'danger')</code> makes the button red, for actions that delete or cannot be undone</td></tr>
+<tr><td>Coloured information boxes</td><td>the page's keys in <code>messages.ts</code> (e.g. <code>apply.lockedNotice</code>)</td><td><code>Alert</code> in <code>components/ui.tsx</code>; colour and icon from its <code>tone</code></td></tr>
 <tr><td>Red error box with "Try again"</td><td>the message comes from the backend or <code>errors</code> in <code>messages.ts</code>; the button is <code>common.retry</code></td><td><code>ErrorBanner</code> in <code>components/ui.tsx</code></td></tr>
-<tr><td>Page-crash message</td><td><code>errors.pageCrashedTitle</code>, <code>errors.pageCrashedBody</code></td><td><code>components/ErrorBoundary.tsx</code></td></tr>
-<tr><td>Dashboard card words</td><td>in Java: <a href="#f-backend-src-main-java-com-edumate-dashboard-DashboardService-java"><code>DashboardService.java</code></a></td><td>colour by the card's tone</td></tr>
+<tr><td>Page-crash message</td><td><code>errors.pageCrashedTitle</code>, <code>errors.pageCrashedBody</code>, <code>errors.reload</code></td><td><code>components/ErrorBoundary.tsx</code></td></tr>
+<tr><td>Dashboard card words</td><td>in Java: <a href="#f-backend-src-main-java-com-edumate-dashboard-DashboardService-java"><code>DashboardService.java</code></a></td><td>colour by the card's tone; icon by its key in <code>CARD_ICONS</code> (<code>DashboardPage.tsx</code>)</td></tr>
+<tr><td>Command palette entries</td><td><code>palette</code> in <code>messages.ts</code>; pages come from <code>navigation.ts</code></td><td><code>components/CommandPalette.tsx</code></td></tr>
+<tr><td>Welcome page texts</td><td><code>landing</code> in <code>messages.ts</code></td><td><code>pages/LandingPage.tsx</code></td></tr>
 <tr><td>E-mail / SMS texts</td><td>in Java, at each <code>notifications.enqueue(…)</code> (e.g. <code>AdmissionService</code>, <code>ConsentRegistry</code>, <code>PaymentOrchestrator</code>)</td><td>the outbox</td></tr>
 </tbody></table>
 
@@ -120,11 +142,22 @@ use the variables, so they rarely need editing.</p>
 
 <h2>Recipe 6: add a new page with a menu link</h2>
 <ol>
-<li>Create <code>frontend/src/pages/…/MyNewPage.tsx</code> (copy a simple one such as <code>MyLibraryPage.tsx</code>).</li>
+<li>Create <code>frontend/src/pages/…/MyNewPage.tsx</code> (copy a simple one such as <code>MyLibraryPage.tsx</code>). Start it with
+<code>&lt;PageHeader title={…} /&gt;</code> and use <code>Loading</code>, <code>ErrorBanner</code>, <code>EmptyState</code> and
+cards from <code>components/ui.tsx</code>, so it looks and behaves like every other page. Wrap lists in
+<code>&lt;Stagger&gt;</code> / <code>&lt;StaggerItem&gt;</code> for the one-after-another entrance.</li>
 <li>Add its texts to <code>messages.ts</code>.</li>
-<li>Add a <code>&lt;Route path="my-new" element={only(['STUDENT'], &lt;MyNewPage /&gt;)} /&gt;</code> in <code>App.tsx</code>.</li>
-<li>Add <code>{ to: '/my-new', label: t.nav.myNew }</code> to the role's menu in <code>navigation.ts</code>.</li>
-<li>If it needs new data: a controller method, its service, a line in <code>RoleMatrix.java</code>, and an entry in <code>api/endpoints.ts</code>.</li>
+<li>In <code>App.tsx</code>, load it lazily, so its code is only downloaded when someone opens it:
+<code>const MyNewPage = lazyPage(() =&gt; import('./pages/student/MyNewPage'), 'MyNewPage');</code>
+and add <code>&lt;Route path="my-new" element={only(['STUDENT'], &lt;MyNewPage /&gt;)} /&gt;</code>.</li>
+<li>Add <code>{ to: '/my-new', label: t.nav.myNew, icon: Sparkles, section: s.studies }</code> to the role's menu in
+<code>navigation.ts</code> (any icon from <a href="https://lucide.dev/icons">lucide.dev/icons</a>). The same line
+automatically adds the page to the command palette, the breadcrumb, the eyebrow above its title and the dashboard's
+"Jump back in" list.</li>
+<li>If it needs new data: a controller method, its service, a line in <code>RoleMatrix.java</code>, a type in
+<code>api/types.ts</code> and an entry in <code>api/endpoints.ts</code>.</li>
+<li>Run <code>npm test</code>: <code>navigation.test.ts</code> checks that every menu item has an icon and that each
+section's links sit together.</li>
 </ol>
 
 <h2>Recipe 7: add a new document type</h2>

@@ -19,106 +19,104 @@
 
 **Why check in the browser if the server checks anyway?** Speed and kindness. A wrong 4 MB file is refused in a split second, before a slow upload over a weak connection. The browser checks are only a **convenience**. Someone could skip them (for example with `curl`), so the server repeats **every** check and is the one that really decides.
 
+**The look.** Each box is a card with a small icon tile (a green "file with a tick" once uploaded, otherwise a picture or a page icon depending on what it accepts), a dashed drop area with a cloud icon that lifts when a file hovers over it, and a progress bar that slides open while uploading and folds away afterwards (`AnimatePresence`).
+
 **Accessibility.** The drop area is also a **button**: it can be reached with the Tab key and activated with Enter or Space. People who cannot use a mouse can still upload.
->>> 22-28
+>>> 24-30
 The box's inputs ("props"):
 - `applicationId`: which application;
 - `type`: which document (e.g. `PHOTO`);
-- `document`: the uploaded document's details, if there is one;
+- `document`: the uploaded document's details, if there is one (`?` = may be missing);
 - `editable`: false once the application is submitted;
 - `onChanged`: called after an upload or removal, so the page can reload.
->>> 30
-The component. The `{ … }` pulls the five props out by name.
->>> 31
-`dragging`: true while a file is being dragged over the box (to highlight it).
->>> 32
-`progress`: `null` when idle, otherwise 0–100 while uploading.
->>> 33
+>>> 35
 A **ref** to the hidden `<input type="file">`, so a click on the box can open the file chooser.
->>> 34-35
-The toast and confirm-dialog helpers.
->>> 37
-The document's label in the chosen language, e.g. "Identity proof (Aadhaar card or passport)", from `messages.ts`.
->>> 38
-The file kinds this document accepts, e.g. `['JPEG', 'PNG']` for a photo.
 >>> 39
-Is this document required?
+The document's label in the chosen language, e.g. "Identity proof (Aadhaar card or passport)", from `messages.ts`.
+>>> 40
+The file kinds this document accepts, e.g. `['JPEG', 'PNG']` for a photo.
 >>> 41
-`handleFile`: what happens once a file is chosen or dropped.
+Is this document required?
 >>> 42
+Does it accept only pictures (no PDF)? Only used to choose the icon.
+>>> 44
+`handleFile`: what happens once a file is chosen or dropped.
+>>> 45
 No file (for example the chooser was cancelled): do nothing.
->>> 43-46
+>>> 46-50
 Checks the file in the browser. If there is a problem, show it as a red toast and stop: nothing is sent.
->>> 48
+>>> 51
 Shows the progress bar at 0%.
->>> 49-50
+>>> 52-53
 Uploads, passing `setProgress` so the bar grows as the bytes travel. `await` waits until the server has answered.
->>> 51-52
+>>> 54-55
 Success: green toast "… uploaded.", then ask the page to reload (the box will then show the stored file's details).
->>> 53-54
+>>> 56-57
 Failure (for example the server's "must be uploaded as JPEG or PNG"): show the server's message.
->>> 55-57
+>>> 58-60
 Always: hide the progress bar and clear the file input. Otherwise choosing the **same** file again would not count as a "change", and nothing would happen.
->>> 61
+>>> 64
 `onDrop`: a file was dropped on the box.
->>> 62
+>>> 65
 Without `preventDefault()`, the browser would do its default thing with a dropped file: leave EduMate and open the file itself.
->>> 63-65
+>>> 66-68
 Un-highlights the box and, if uploads are allowed and none is running, handles the first dropped file. `void` says "start this, I am not waiting for it here".
->>> 69-70
+>>> 72-73
 `view`: shows the stored document in a new tab.
->>> 71-72
+>>> 74-75
 Downloads its bytes **with the login token** (a normal link would not send the token and would get 401).
->>> 73
+>>> 76
 Makes a temporary local address (`blob:http://localhost:5173/3f2c…`) that points at those bytes inside the browser.
->>> 74
+>>> 77
 Opens it in a new tab. `noopener` stops the new tab from controlling this one.
->>> 75
+>>> 78
 After 60 seconds, releases the temporary address to free memory (the tab has loaded it by then).
->>> 76-77
+>>> 79-80
 Any error becomes a toast.
->>> 82
-`remove`: asks "Remove the uploaded …?" and stops unless the applicant confirms.
->>> 83-88
+>>> 84-85
+`remove`: asks "Remove the uploaded …?" in the confirm dialog, with a **red** "Remove" button (`'danger'`, because this deletes something), and stops unless the applicant confirms.
+>>> 86-91
 Deletes it on the server, shows "… removed.", and reloads; any error becomes a toast.
->>> 92-94
-The drawing starts: a card, with a top row holding the label and a badge.
->>> 96
-The badge: "Required" in amber, or "Optional" in blue.
->>> 99-101
-If a document is uploaded: a green "Uploaded" badge, its file name and its size (e.g. "1.2 MB").
->>> 102
-When it was uploaded.
+>>> 95-97
+The drawing starts: a card, with a top row holding an icon, the label and a badge.
+>>> 98
+The icon tile: a green file-with-a-tick when uploaded; otherwise a picture icon (photo) or a page icon (documents that may be PDFs).
 >>> 103-104
+If a document is uploaded: its details slide in gently.
+>>> 105-107
+The file name. `minWidth: 0` lets a very long name shrink and end in "…" (CSS `text-overflow` on `.doc-file-name`) instead of pushing the card wider; the full name shows on mouse-over (`title`).
+>>> 109-110
+Its size (e.g. "1.2 MB") and when it was uploaded.
+>>> 112-113
 The first 16 characters of the SHA-256 fingerprint, with all 64 shown on mouse-over (`title`).
->>> 107-110
-Otherwise: "Not uploaded".
->>> 113
-Only while the application can still be edited: the drop area.
->>> 114-115
-The drop area. Its CSS class becomes `dropzone dragging` while a file hovers over it, which highlights it (see `app.css`).
->>> 116-117
-It acts as a button for screen readers and can be reached with Tab.
 >>> 118
-Click → open the hidden file chooser.
->>> 119
-Enter or Space → the same, for keyboard users.
->>> 120-123
-A file is dragged over the box: `preventDefault()` allows dropping here, and the box is highlighted.
->>> 124-125
-The file left the box → un-highlight; dropped → `onDrop`.
+Otherwise: "Not uploaded".
+>>> 122
+Only while the application can still be edited: the drop area.
+>>> 123-124
+The drop area. Its CSS class becomes `dropzone dragging` while a file hovers over it, which highlights it and lifts the cloud icon (see `app.css`).
+>>> 125-126
+It acts as a button for screen readers and can be reached with Tab.
 >>> 127
-"Drag a file here, or click to choose one" (or "Replace file" if one is already uploaded).
+Click → open the hidden file chooser.
 >>> 128
-"Accepted: PDF, JPEG or PNG. Maximum 5 MB."
->>> 129-136
-While uploading: "Uploading… 35%" and a bar whose inner part is 35% wide.
->>> 137-142
+Enter or Space → the same, for keyboard users.
+>>> 129-132
+A file is dragged over the box: `preventDefault()` allows dropping here, and the box is highlighted.
+>>> 133-134
+The file left the box → un-highlight; dropped → `onDrop`.
+>>> 136
+The cloud-with-an-arrow icon.
+>>> 139-146
+While uploading, the progress area **unfolds** (its height animates from 0 to its natural size) and, when the upload ends, folds away again. `AnimatePresence` is what lets motion play that closing animation: normally React removes an element instantly, but inside `AnimatePresence` the element is kept on screen until its `exit` animation has finished.
+>>> 148-149
+"Uploading… 35%" (the line above) and a bar whose inner part is 35% wide.
+>>> 154-159
 The hidden file chooser. `accept=".pdf,.jpg,.jpeg,.png"` makes the chooser show only those files at first. That is merely a filter, and the checks above still run. When a file is picked, `handleFile` gets the first one (`files?.[0]`).
->>> 147-149
-If uploaded: a row with a "View" button …
->>> 152-153
-… and, while editable, a "Remove" button.
+>>> 164-167
+If uploaded: a row with a "View" button (with an eye icon) …
+>>> 169-171
+… and, while editable, a "Remove" button (with a bin icon).
 
 === FILE frontend/src/utils/fileChecks.ts
 >>> SUMMARY

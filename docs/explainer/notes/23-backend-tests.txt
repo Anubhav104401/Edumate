@@ -57,6 +57,8 @@ After all tests of this class, stops the server.
 The test. `@DisplayName` is the sentence shown in the test report.
 >>> 54
 Logs in as the demo student.
+>>> 55-57
+"My attendance" runs the grouped count query (`AttendanceRecordRepository`) on PostgreSQL; the third course (Operating Systems) must show exactly 75.00 %, the demo's boundary case.
 >>> 58-59
 The hall ticket loads.
 >>> 60-62
@@ -65,6 +67,10 @@ The hall ticket loads.
 The fee account shows ₹62,500 outstanding.
 >>> 66-71
 The admissions officer's list works, both without filters and with `status=SUBMITTED` and search text "app" (the query with optional filters, the kind most likely to behave differently on the two databases).
+>>> 73-76
+Logs in as the teacher Meera Nair and reads her first course's id.
+>>> 77-78
+Her course's shortfall list: the per-student grouped count query, checked on PostgreSQL too.
 >>> 80-82
 The library search for "code" finds "Clean Code" first.
 >>> 84-88

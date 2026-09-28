@@ -30,7 +30,7 @@ a notice board (the screens) and a rule book (the RoleMatrix and the settings).<
 <ol>
 <li><strong>The chapters</strong> (this part) tell the story: computers from zero, the technologies, how the pieces talk to
 each other, how a request travels, security, the document upload system, the algorithms, why each choice was made,
-how to change things, how it is tested, how to run it, and questions an examiner may ask.</li>
+how the interface looks and moves, how to change things, how it is tested, how to run it, and questions an examiner may ask.</li>
 <li><strong>Every file, every line</strong> (the last part) goes through every file of the project.
 Open a file by clicking its name. Each row shows the line number, the line, and what it means. White explanations
 were written by hand; grey ones were produced automatically for repetitive lines (imports, closing brackets, comments,
@@ -47,6 +47,8 @@ settings).</li>
 <tr><td>change a text, colour, message or limit</td><td><a href="#11-cookbook">Cookbook: changing things</a></td></tr>
 <tr><td>understand how the browser talks to the server</td><td><a href="#04-architecture-and-ports">Architecture and ports</a>, then <a href="#05-life-of-a-request">The life of one request</a></td></tr>
 <tr><td>understand file uploads in detail</td><td><a href="#08-document-upload">The document upload system</a></td></tr>
+<tr><td>understand the look, the animations and the scrolling</td><td><a href="#09b-design-and-motion">The new look</a>, then the files in <code>frontend/src/motion/</code> and <code>frontend/src/styles/</code></td></tr>
+<tr><td>learn Spring Boot itself</td><td>the companion guide <code>docs/Spring-Boot-Zero-to-Pioneer.html</code></td></tr>
 <tr><td>prepare for a viva</td><td><a href="#10-decisions">Decisions and alternatives</a>, <a href="#14-viva">Viva questions</a>, <a href="#15-report-notes">Report discrepancies</a></td></tr>
 </tbody></table>
 
@@ -58,7 +60,15 @@ settings).</li>
 <li>Blue links such as <a href="#f-frontend-src-i18n-messages-ts">messages.ts</a> jump to that file; links ending in a line number jump to that exact line.</li>
 </ul>
 
-<div class="callout warn"><strong>One area without hand-written line notes</strong>
-The files of the <code>attendance</code> package (and the three attendance screens and their tests) appear in the
-file section with automatic notes only; their hand-written line-by-line notes are not included in this edition.
-Everything else has hand-written notes.</div>
+<h2>What is new in this edition</h2>
+<ul>
+<li><strong>Release 3.0, the new interface.</strong> Every screen was redesigned: a design system with light and dark
+themes, animations, smooth scrolling, a command palette, a public welcome page and more. The new chapter
+<a href="#09b-design-and-motion">The new look: design system, motion and scrolling</a> explains it from zero, and every
+new or changed frontend file has fresh line-by-line notes.</li>
+<li><strong>The attendance package is now fully explained</strong> (its services, queries, the decision table and its
+tests), so every file of the project has a summary and hand-written notes where they matter.</li>
+<li><strong>A companion guide for the backend framework:</strong> <code>docs/Spring-Boot-Zero-to-Pioneer.html</code>
+teaches Spring Boot from the first line of Java you already know up to the internals, using EduMate's own backend as the
+running example.</li>
+</ul>

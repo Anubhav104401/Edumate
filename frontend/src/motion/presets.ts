@@ -14,19 +14,10 @@ export const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 /** A lively spring for small things that move: pills, toggles, icons. */
 export const SPRING: Transition = { type: 'spring', stiffness: 420, damping: 34, mass: 0.8 };
 
-/** A softer spring for bigger things: panels and drawers. */
-export const SOFT_SPRING: Transition = { type: 'spring', stiffness: 220, damping: 30 };
-
 /** Rise a little and fade in. */
 export const fadeUp: Variants = {
   hidden: { opacity: 0, y: 18 },
   show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE_OUT } },
-};
-
-/** Grow from slightly smaller and fade in. */
-export const popIn: Variants = {
-  hidden: { opacity: 0, scale: 0.94 },
-  show: { opacity: 1, scale: 1, transition: SPRING },
 };
 
 /** A parent that shows its children one after another, `gap` seconds apart. */

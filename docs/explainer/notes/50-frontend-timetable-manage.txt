@@ -5,76 +5,116 @@
 <pre class="block">Generate new draft ──► (optionally) Move lectures ──► see clashes ──► Publish draft</pre>
 
 1. Choose programme, semester and section, and press **Generate new draft**. The backend's solver (backtracking with "most constrained first") fills the week without clashes, working around lectures the same teachers already give in other sections.
-2. The **Draft / Published** switch shows either version. Students keep seeing the published one until the draft is published.
-3. Each draft lecture has a **Move** button, which opens a small dialog (day, period, room).
+2. A **Draft / Published** switch (a `Segmented` control whose highlight slides between the two) shows either version, with the number of lectures in each. Students keep seeing the published one until the draft is published.
+3. Each draft lecture has a **Move** button, which opens a dialog (day, period, room). The dialog is a **Radix UI Dialog**: it traps the keyboard focus inside itself, closes on Escape or a click outside, and tells screen readers it is a dialog; motion makes it spring in and out, and the page behind it stops scrolling while it is open.
 4. Moving a lecture onto a slot where its teacher, section or room is already busy **does not fail**. Instead the grid outlines the clashing lectures in red, and a red box lists each clash ("Teacher double-booked: Monday P2").
 5. **Publish draft** is refused by the backend while any clash exists: "1 clash(es) must be fixed before this timetable can be published." This is TC-011's expected result.
-6. At the bottom, the **workload** table shows each teacher's lectures per week and what they teach.
->>> 30-32
+6. At the bottom, the **workload** table shows each teacher's hours per week (with a bar measured against 20 hours) and the course codes they teach.
+>>> 24
+The weekly hours that count as a "full" bar in the workload table.
+>>> 38-40
 Once the programmes arrive, choose the first automatically.
->>> 34
+>>> 42-46
 Loads the section's timetable (draft, published and clashes), again whenever programme, semester or section changes, and only once a programme is chosen.
->>> 35
+>>> 47
 The set of lecture ids involved in any clash. `flatMap` joins every clash's list of ids into one list, and a `Set` gives quick "is this one in it?" checks for the grid.
->>> 38-44
+>>> 49-56
 `generate`: needs a programme; busy; asks the backend for a new draft; shows it; switches to the draft view; and shows "Draft generated with 16 lectures and no clashes."
->>> 45-48
-A refusal becomes a toast (for example "No clash-free timetable exists with the teachers' current commitments."). Always stop being busy.
->>> 53-59
-`publish`: asks for confirmation; publishes; switches to the published view; shows "Timetable published. Students and teachers can now see it."; and reloads the workload (hours have changed).
->>> 60-63
-A refusal (the clash rule) becomes a toast. Always stop being busy.
->>> 68-73
-`saveMove(day, period, room)`: sends the move; shows "Lecture moved. Check the clash list before publishing."; closes the dialog; and reloads (the clash list may have changed).
+>>> 57-61
+Any error becomes a toast; always stop being busy.
+>>> 64-65
+`publish`: asks "Publish this draft? It will replace the currently published timetable of this section." and stops unless confirmed.
+>>> 66-71
+Busy; publish; show the result (now the published version); switch to the published view; say "Timetable published. Students and teachers can now see it."; and reload the workload table (published hours changed).
+>>> 72-73
+A refusal, such as "1 clash(es) must be fixed before this timetable can be published.", becomes a toast.
 >>> 74-75
-Any error becomes a toast.
->>> 79
-The lectures to draw: the draft or the published ones, depending on the switch (an empty list if not loaded yet).
->>> 81-83
+Always stop being busy.
+>>> 79-85
+`saveMove(day, period, room)`: moves the lecture being edited; says "Lecture moved. Check the clash list before publishing."; closes the dialog; and reloads the timetable (the clash list may have changed).
+>>> 86-87
+Any error becomes a toast (the dialog stays open, so the admin can try another slot).
+>>> 91
+The lectures to show: the draft or the published version.
+>>> 93-95
 The drawing: title and subtitle.
->>> 84-90
-The toolbar, with a programme drop-down …
->>> 95-96
-… the semester …
->>> 98-99
-… the section (typed in capitals) …
->>> 101-102
-… "Generate new draft" ("Generating…" while busy) …
->>> 104
-… and "Publish draft", disabled while busy or when there is no draft.
->>> 110-114
-Loading and error; then, when the view is loaded, the Draft / Published switch …
->>> 116-117
-… "Draft (16)": highlighted when chosen …
->>> 119-120
-… "Published (16)".
->>> 124-125
-In the draft view, if there is a draft: a green "No clashes. This draft can be published." if there are none …
->>> 127-132
-… otherwise a red box listing each clash with its kind, day and period.
->>> 139
-In the draft view without a draft: "There is no draft. Generate one to start planning."
->>> 141-146
-The grid in a card. In the draft view it is given the clash ids (red outlines) and a "Move" button under each lecture, which opens the move dialog for that lecture.
->>> 149
-No buttons in the published view (published lectures cannot be moved).
->>> 155
-While a lecture is being moved, the dialog is shown.
->>> 157
-The workload card.
->>> 159-162
-The workload table and its header row.
->>> 168-170
-One row per teacher: name, hours per week, and what they teach, e.g. "23CS501 (A), 23CS501 (B)", or "—".
->>> 189-193
-`MoveDialog`: a dimmed background (clicking it cancels), the dialog box (clicks inside do not reach the background), and the title "Move lecture: 23CS503".
->>> 195-200
-A grid with the day drop-down (Monday–Friday) …
->>> 205-209
-… the period drop-down, e.g. "P2 (10:00)" …
->>> 214-215
-… and the room box (at most 20 characters, the backend's limit).
->>> 218-219
-Cancel …
->>> 222
-… and Save, which passes the chosen day, period and room to `saveMove`.
+>>> 96-99
+The toolbar: the programme drop-down…
+>>> 100-102
+…with one option per programme…
+>>> 107-114
+…the semester (1–10)…
+>>> 117-118
+…the section (turned into capitals as it is typed)…
+>>> 120-121
+…"Generate new draft" (with a sparkle; "Generating…" while busy)…
+>>> 123-124
+…and "Publish draft", disabled while busy or when there is no draft.
+>>> 129-130
+The timetable's loading and error.
+>>> 131-133
+When it is loaded: a row with "Showing:"…
+>>> 135-138
+…and the Draft / Published switch. Its `id` names the sliding highlight, so it must be unique on the page.
+>>> 139-141
+The two options, each with its number of lectures: "Draft (16)", "Published (16)".
+>>> 146-148
+While viewing a non-empty draft: a green "No clashes. This draft can be published."…
+>>> 150-151
+…or a red "Clashes" box…
+>>> 152-155
+…listing each clash, e.g. "Teacher double-booked: Monday P2".
+>>> 161
+Viewing the draft but there is none: "There is no draft. Generate one to start planning."
+>>> 163-166
+The grid in a card. Clashes are only outlined in the draft (the published version never has any).
+>>> 167-171
+In the draft, each lecture gets a small "Move" button (with a two-way arrow) that opens the dialog for it…
+>>> 174
+…and in the published version, no buttons.
+>>> 181
+The move dialog. It is always in the page, but only visible while `moving` holds a lecture.
+>>> 183-185
+The workload card, with a people icon in its title.
+>>> 187-190
+Once loaded: the table and its header: name, hours per week, teaching.
+>>> 196-199
+One row per teacher, starting with the name in bold.
+>>> 202
+The hours cell…
+>>> 204
+…the number, and a bar measured against 20 hours.
+>>> 206-212
+The course codes they teach, as chips ("—" if none).
+>>> 228-236
+`MoveDialog`'s inputs: the lecture being moved (or `null` when the dialog is closed), and what to do on Cancel and on Save.
+>>> 237
+While the dialog is open, stop the smooth-scrolling page behind it (`useScrollLock` in `motion/SmoothScroll.tsx` calls Lenis's `stop()` and `start()`). Otherwise the mouse wheel over the dialog would scroll the page underneath.
+>>> 238-239
+The Radix dialog, open while there is a lecture. `onOpenChange` is called by Radix when the dialog wants to close (Escape, a click outside); then Cancel runs.
+>>> 240-242
+`AnimatePresence` lets the dialog play its closing animation before it is removed. Radix normally removes a closed dialog at once; `forceMount` tells it to leave that to motion.
+>>> 243-244
+The dark, blurred backdrop, fading in and out. `asChild` means "do not add your own element: give your behaviour to my child", so Radix's overlay **is** the `motion.div`.
+>>> 246-247
+The box that centres the dialog, and the dialog content itself (again Radix's behaviour on motion's element). `aria-describedby={undefined}` tells Radix this dialog has a title but no separate description.
+>>> 248-253
+The dialog springs in (from 95 % size, a little lower) and leaves quickly (0.15 s), shrinking slightly.
+>>> 255
+The form inside it. `key={entry.id}` makes React build a fresh form for each lecture, so its fields start from that lecture's own day, period and room.
+>>> 266-274
+`MoveForm`'s inputs: the lecture and the two actions.
+>>> 279-282
+The dialog title, e.g. "Move lecture: 23CS505". A `Dialog.Title` is announced by screen readers when the dialog opens.
+>>> 284-287
+The fields in a grid: the day…
+>>> 288-289
+…Monday to Friday…
+>>> 294-298
+…the period, e.g. "P2 (10:00)"…
+>>> 303-304
+…and the room (up to 20 characters).
+>>> 307-308
+The buttons: Cancel…
+>>> 311
+…and Save, which passes the three chosen values back.

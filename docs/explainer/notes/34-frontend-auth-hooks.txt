@@ -51,23 +51,6 @@ Returns the login state.
 >>> 85
 Returns the user, now guaranteed not to be `null`, which saves every page from checking.
 
-=== FILE frontend/src/auth/RequireAuth.tsx
->>> SUMMARY
-A **gate** in front of pages:
-- not logged in → go to the login page, remembering where the person wanted to go, so the login page can send them back afterwards;
-- logged in with the wrong role → show "You do not have access to this page.";
-- otherwise → show the page.
-
-The backend enforces the same rules again. This gate only saves people from opening pages whose data they could not load anyway.
->>> 19-20
-The start-up check is still running: show "Loading…".
->>> 22-23
-Nobody is logged in: go to `/login`. `replace` means the Back button will not return to the forbidden page, and `state={{ from: … }}` remembers the address they wanted.
->>> 25-26
-Roles were given and the user's role is not among them: show the red "no access" message. The text is `t.errors.forbiddenPage` in `messages.ts`.
->>> 28
-All checks passed: show the page. `<>…</>` is an invisible wrapper (a *fragment*).
-
 === FILE frontend/src/hooks/useLoad.ts
 >>> SUMMARY
 **The standard way a page fetches data.** Almost every page starts like this:

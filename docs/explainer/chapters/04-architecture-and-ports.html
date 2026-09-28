@@ -48,7 +48,7 @@ unless that server sends special <strong>CORS</strong> headers allowing it.</p>
 served the page forwards the call to the backend:</p>
 <pre class="block">development:  browser → http://localhost:5173/api/fees/me → Vite forwards → http://localhost:8080/api/fees/me
 Docker:       browser → http://localhost:3000/api/fees/me → nginx forwards → http://backend:8080/api/fees/me</pre>
-<p>That is why <a href="#f-frontend-src-config-ts-L6"><code>API_BASE</code> is an empty string</a>: the same frontend code
+<p>That is why <a href="#f-frontend-src-config-ts-L7"><code>API_BASE</code> is an empty string</a>: the same frontend code
 works in both set-ups, and no CORS configuration exists that could be set too loosely.</p>
 <p><em>Alternative:</em> serve the frontend and backend from different origins and configure CORS on the backend.
 That is common when they are hosted separately (for example the frontend on a CDN). It works, but one careless
@@ -106,11 +106,25 @@ credit the ledger exactly once" would need distributed transactions. For one uni
 simpler and safer choice.</p>
 
 <h2>Inside the frontend</h2>
-<pre class="block">main.tsx ──► App.tsx (routes) ──► Layout (menu + top bar) ──► the page for the address
-                                                                   │ uses
-                                    components/ (Toast, ConfirmDialog, ui, DocumentUpload, TimetableGrid)
-                                    hooks/useLoad ──► api/endpoints.ts ──► api/http.ts ──► fetch('/api/…')
-                                    i18n/messages.ts (every text)      styles/theme.css (every colour)</pre>
+<pre class="block">index.html ──► theme-init.js (picks light/dark before anything is drawn: no flash)
+main.tsx   ──► fonts + styles (theme.css tokens, app.css, landing.css)
+           ──► App.tsx
+                 BrowserRouter ─ ThemeProvider ─ MotionConfig ─ SmoothScroll (Lenis) ─ Toasts ─ Confirm ─ Auth
+                   │
+                   ├─ /welcome, /login           public pages (LandingPage, LoginPage)
+                   └─ everything else ──► RequireAuth ──► Layout
+                                                            ├─ Sidebar (menu from navigation.ts, collapsible)
+                                                            ├─ Topbar (breadcrumb, Ctrl K, theme, account menu)
+                                                            ├─ CommandPalette, ScrollProgress, BackToTop
+                                                            └─ AnimatedOutlet ──► the page (loaded on demand)
+                                                                                     │ uses
+               components/ui.tsx, StatCard, charts, TimetableGrid, DocumentUpload     │
+               motion/ (presets, Reveal/Stagger, CountUp, Parallax, PageTransition)   │
+               hooks/useLoad ──► api/endpoints.ts ──► api/http.ts ──► fetch('/api/…')
+               i18n/messages.ts (every text)      styles/theme.css (every colour, size, curve)</pre>
+<p>Every page is its own JavaScript file, downloaded the first time someone opens it (<em>code splitting</em>), so the
+first visit only loads the shell and the page in front of the person. See
+<a href="#09b-design-and-motion">the chapter on the new look</a> for what each layer does.</p>
 
 <h2>Many campuses in one system (multi-tenancy)</h2>
 <p>The report asks for the <em>Flexibility</em> objective: new campuses without code changes. Each campus is a

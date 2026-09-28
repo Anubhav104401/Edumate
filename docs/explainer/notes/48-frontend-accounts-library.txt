@@ -1,89 +1,113 @@
 === FILE frontend/src/pages/accounts/PaymentsPage.tsx
 >>> SUMMARY
 **The accounts office page**:
-1. **Look up** any student's fee account by USN: their outstanding amount and full ledger (every debit and credit with its reference).
-2. **Recent payments** through the gateway: time, order number, amount, status, the bank's transaction reference, and the receipt number.
+1. **Look up** any student's fee account by USN: a header with the student's avatar, name and USN and the **outstanding amount**, then the full ledger (every debit and credit, with a coloured type badge and its reference).
+2. **Recent payments** through the gateway: time, order number, amount, status badge, the bank's transaction reference, and the receipt number.
 
 This is where the effect of the DEF-014 fix is visible to staff. Even when the gateway delivered a success callback twice, there is **one** SUCCESS payment and **one** ledger credit, with the bank reference stored once (it is UNIQUE in the database).
->>> 14
+>>> 15
 Badge colours: succeeded green, started blue, failed red.
->>> 23-24
+>>> 24-25
 `lookup`: stops the page reload; does nothing if the box is empty.
->>> 25-29
-Loads that student's account (for example 404 "Student 23BTRCS999 was not found." becomes a toast, and any earlier result is cleared).
->>> 33-35
-The drawing: the page title.
->>> 36-39
-A small form with the USN box …
->>> 41
-… and the "Show account" button.
->>> 46-49
-When an account was found: its card, headed by the student's name and USN …
->>> 51-52
-… the amount outstanding …
->>> 54-56
-… and the ledger table with its header row.
->>> 64-66
-One row per ledger line.
+>>> 26-27
+Loads that student's account (`GET /api/fees/ledger?usn=…`) and shows it.
+>>> 28-30
+Not found (or not allowed): hide any account shown before, and show the message as a toast.
+>>> 34-36
+The drawing: the title "Payments and ledgers".
+>>> 38-39
+The look-up form (Enter or the button submits it), labelled "Student account"…
+>>> 40-42
+…with a search icon inside the USN box.
+>>> 45-46
+"Show account", with a wallet icon.
+>>> 50-54
+When an account is shown: a card whose header has the student's large avatar…
+>>> 55
+…their name and USN…
+>>> 60
+…and, on the right, a tile with the amount outstanding (never below 0).
+>>> 65-67
+The ledger table and its header: when, type, description, amount, reference.
+>>> 75-77
+One row per ledger line (they have no id of their own, so their position `i` is the key; the list never changes order while shown).
 >>> 79
-The recent-payments card.
->>> 81-86
-Loading, error, then the payments table and its header row.
->>> 95-97
+The type: "Credit" green (money in), "Debit" amber (a bill).
+>>> 92-94
+The recent-payments card, with a card icon in its title.
+>>> 96-98
+Loading (a skeleton inside the card), error, and an empty state.
+>>> 99-102
+The table and its header: when, order, amount, status, reference, receipt.
+>>> 111-113
 One row per payment.
->>> 101
-The status cell.
+>>> 116
+The amount, in bold.
+>>> 119
+The status badge.
 
 === FILE frontend/src/pages/library/LibraryDeskPage.tsx
 >>> SUMMARY
 **The librarian's desk**:
-1. **Issue a book**: type the student's USN, search the catalogue, and press "Issue" next to a book. The backend checks that a copy is available, the student's 3-book limit, and (with the book's version) that another librarian did not take the last copy at the same moment.
-2. **Books on loan**: every open loan, most overdue first, with the days late, the fine so far, and a "Return" button. Returning asks for confirmation and shows the fine to collect.
->>> 25-27
-Issuing needs a USN first; otherwise remind the librarian to enter one.
->>> 29-33
+1. **Issue a book**: type the student's USN, search the catalogue, and press "Issue" next to a book. Each book shows a small coloured cover (its colour from the title), its ISBN, and "2 / 3" copies on the shelf with a bar (amber when one copy is left, red when none). The backend checks that a copy is available, the student's 3-book limit, and (with the book's version) that another librarian did not take the last copy at the same moment.
+2. **Books on loan**: every open loan, most overdue first, with the student's avatar, the due date (a red "Overdue" badge when late), the days late, the fine so far, and a "Return" button. Returning asks for confirmation and shows the fine to collect.
+>>> 28-30
+Issuing needs a USN first; otherwise remind the librarian to enter one ("Student USN, e.g. 23BTRCS020").
+>>> 32-36
 Issues the book to that student; shows "“Clean Code” issued. Due back on 12 Oct 2026."; and reloads both lists (the available copies and the open loans have both changed).
->>> 34-35
+>>> 37-38
 A refusal becomes a toast, e.g. "All copies of this book are currently issued." or "Aarav Sharma already has 3 books. Return one first."
->>> 40
-`giveBack`: asks "Return “Introduction to Algorithms”? Fine to collect: ₹12.00." and stops unless confirmed.
->>> 41-45
-Returns it; shows "Book returned. Fine charged: ₹12.00."; and reloads both lists.
->>> 46-47
+>>> 43
+`giveBack`: asks "Return “Clean Code”? Fine to collect: Rs 12." and stops unless confirmed.
+>>> 44-48
+Closes the loan; shows "Book returned. Fine charged: Rs 12."; reloads both lists.
+>>> 49-50
 Any error becomes a toast.
->>> 51-53
-The catalogue search runs only when the Search button is pressed (not on every key press).
->>> 56-58
-The drawing: the title with the fine policy.
->>> 60
-The "Issue a book" card.
->>> 62-64
-One form holding the student's USN box …
->>> 66-67
-… the catalogue search box …
->>> 69
-… and the Search button.
->>> 73-79
-Loading, error, then the catalogue table and its header row.
->>> 83
-An empty header above the button column.
->>> 86-89
-One row per book: its title (bold) and ISBN.
->>> 94-95
-Copies on the shelf out of the total, e.g. "2 / 4".
->>> 97-98
-The Issue button, disabled when no copy is available.
->>> 110
+>>> 54-56
+`search`: the catalogue search only runs when the form is submitted (not on every key press).
+>>> 59-61
+The drawing: the title, with the fine policy as subtitle.
+>>> 63-65
+The "Issue a book" card, with a book icon in its title.
+>>> 67-71
+The form: the student's USN box (with an ID-card icon)…
+>>> 74-77
+…the catalogue search box (with a magnifying glass)…
+>>> 80-81
+…and the Search button.
+>>> 84-86
+The catalogue's loading, error and empty state.
+>>> 87-90
+The catalogue table and its header: title, author, available…
+>>> 94
+…and an empty header over the button column.
+>>> 97-99
+One row per book.
+>>> 100-101
+The title cell:
+>>> 102-107
+a small book cover coloured from the title, with its first letter (decoration only)…
+>>> 109
+…the title in bold, and the ISBN under it.
+>>> 116-118
+The availability cell: "2 / 3"…
+>>> 120-123
+…and a bar of the copies on the shelf: red when none is left, amber when only one is.
+>>> 126-128
+"Issue", disabled when no copy is available.
+>>> 138-140
 The "Books on loan" card.
->>> 112-116
-Error, then the loans table and its header row.
->>> 122
-An empty header above the button column.
->>> 125-127
-One row per open loan.
->>> 129-130
-The student's USN and name.
->>> 132-133
-The due date, with a red "Overdue" badge if it has passed.
->>> 137-138
-The Return button.
+>>> 142-143
+Error and empty state.
+>>> 144-147
+The loans table and its header: title, student, due, days late, fine…
+>>> 153
+…and an empty header over the button column.
+>>> 156-159
+One row per open loan: the title…
+>>> 162-166
+…the student with an avatar, name and USN…
+>>> 171-172
+…the due date, with a red "Overdue" badge when late…
+>>> 176-178
+…and the "Return" button.

@@ -100,12 +100,8 @@ Exactly those four fields have errors.
 >>> 33-36
 The day before the 17th birthday → 16; the birthday itself → 17.
 
-=== FILE frontend/src/i18n/messages.ts
->>> 21
-`export const t = {`: the start of the one big object holding every text on screen. Pages write `t.fees.title` instead of the text itself, so changing a text here changes it everywhere it is used.
->>> 581
-`} as const;`: the end of the object. `as const` makes every text fixed (read-only) and lets TypeScript know each exact key, so a typo such as `t.fees.titel` is a build error rather than an empty spot on screen.
-
-=== FILE frontend/src/styles/app.css
->>> 470
-`@keyframes spin`: an animation named "spin" that ends at a full turn (360°). `.spinner` above plays it every 0.8 seconds, forever (`infinite`), which gives the loading circle.
+=== FILE frontend/src/utils/format.ts
+>>> 62
+A reusable date formatter for the dashboard's greeting line: the weekday, the day and the month in full ("Monday, 28 September"). Creating a formatter is slow-ish, so it is made once and reused.
+>>> 66
+Formats the given moment with it.

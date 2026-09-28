@@ -1,66 +1,3 @@
-=== FILE frontend/src/pages/faculty/MarksEntryPage.tsx
->>> SUMMARY
-**Internal-assessment marks entry** for a teacher's course (FR-17), and the place where **TC-012** (amending 18 to 22 with an audit trail) is demonstrated.
-
-The teacher chooses a course and an exam session. The sheet lists every student with the internal mark (editable, 0–40), the external mark (read-only; "revalued" is shown if a revaluation replaced it, RR-08), the total, the grade, who changed the mark last and when, and a "change" column.
-
-**Changing a mark:**
-1. Type the new value. A **reason** box and a Save button appear on that row only.
-2. Type a reason (required; the audit log records it).
-3. Save sends `PUT /api/exams/marks/<id>` with `{"internalMarks": 22, "version": 3, "reason": "IA-2 re-evaluated"}`.
-4. The backend checks the **version**. If someone else saved this mark since the sheet was loaded, the answer is 409, and the teacher is asked to reload rather than silently overwriting (optimistic locking).
-5. The audit log stores the old and new value (DR-04 / DEF-022).
-
-**Locked sheets.** Once a result set is approved or published, marks can no longer change (the backend answers RESULTS_LOCKED). The page then shows an amber notice and disables the inputs.
-
-**Why one Save per row, not one for the whole sheet?** Each change needs its own reason and its own version check, and one student's problem (for example a conflict) must not block saving the others.
->>> 16-19
-Loads the teacher's courses and the exam sessions, and remembers which of each is chosen (none at first).
->>> 21-23
-Once the courses have arrived, choose the first one automatically.
->>> 24-26
-The same for exam sessions.
->>> 28-31
-Loads the marks sheet for the chosen course and session. It reloads whenever either changes (`[courseId, sessionId]`), and it is enabled only once both are chosen. The `!` tells TypeScript they are not null at that point.
->>> 34-37
-`replaceLine`: after a row is saved, the backend returns that row's new version. This replaces just that one line in the sheet (copying the sheet with `...` and `map`), without reloading everything.
->>> 40-43
-The drawing: title, subtitle, and any error loading the lists.
->>> 44-50
-The toolbar: a drop-down of the teacher's courses ("23CS505 Software Quality Assurance")…
->>> 55-59
-… and a drop-down of exam sessions.
->>> 66-67
-Loading and error for the sheet.
->>> 68-70
-The sheet in a card, with an amber "locked" notice if results are already approved.
->>> 71-73
-The table and its header row.
->>> 84-86
-One `MarkRow` per student.
->>> 101
-`changed`: does the box differ from the stored mark? Only then do the reason box and Save button appear.
->>> 104-107
-On Save: the value must be a number from 0 to 40; otherwise "Enter a number from 0 to 40."
->>> 109-111
-A reason is required: "Give a reason for the change."
->>> 113-118
-Busy; sends the mark with the **version** it was loaded with and the reason; puts the returned row into the sheet; clears the reason; and shows "Marks of 23BTRCS003 updated."
->>> 119-122
-Any error (a version conflict, a lock) becomes a toast; always stop being busy.
->>> 126-127
-One table row: the USN (fixed-width font) …
->>> 130-140
-… the internal-mark input: a number box from 0 to 40 in steps of 0.5, disabled when locked, with a spoken label such as "Internal (40) 23BTRCS003" for screen readers.
->>> 143-145
-The external mark, with "revalued" underneath if a revaluation replaced it.
->>> 149-150
-Who last changed the mark, and when.
->>> 152-159
-Only when the value changed and the sheet is not locked: the reason box …
->>> 161
-… and the Save button, disabled while saving.
-
 === FILE frontend/src/pages/exam/ResultsManagePage.tsx
 >>> SUMMARY
 **The examination superintendent's results workflow**, where the **Safety** objective (two-person approval) and **TC-015 / DEF-027** (publish exactly once) can be seen:
@@ -68,51 +5,175 @@ Only when the value changed and the sheet is not locked: the reason box …
 <pre class="block">Compute ──► Approve (person 1) ──► Approve (person 2, must be different) ──► Publish</pre>
 
 - **Compute** (top card): choose exam session, programme and semester. If marks are missing, the backend refuses with "1 mark entries are still empty…". Otherwise it shows a toast such as "Computed 60 results: 57 passed, average SGPA 7.68."
-- **Result sets** (table): each set's status, who approved it, and who published it and when. Only the **right** button is shown for each status: Approve for COMPUTED / AWAITING_SECOND_APPROVAL, Publish for APPROVED.
+- **Result sets**: one **card per set**, with the programme and semester, the session code, a status badge, and a **step tracker** (Computed → 1st approval → 2nd approval → Published) that makes it obvious at a glance how far along each set is. Under it: who approved it, who published it and when, and only the **right** button for its status: Approve for COMPUTED / AWAITING_SECOND_APPROVAL, Publish for APPROVED.
 - If the **same** person approves twice, the backend refuses: "You gave the first approval. A second, different exam superintendent must approve."
-- **Publish** asks "Are you sure?" first, because publishing is final.
-- "Consolidated marks" shows the cohort's marks sheet under the table.
+- **Publish** asks for confirmation first, because publishing is final.
+- "Consolidated marks" shows the cohort's marks sheet under the list.
 
 The page **only shows buttons**; every rule is enforced by the backend. Even if two superintendents click Publish at the same moment, only one succeeds (the atomic UPDATE).
->>> 18-24
-The badge colour for each status: amber while work remains, blue for approved, green for published.
->>> 38-40
-When the exam sessions arrive, choose the first automatically …
->>> 41-43
-… and the same for programmes.
->>> 46-54
-`run(action, success)`: a shared helper for Approve and Publish. It sets busy, runs the action, shows the success message, and reloads the table. Any refusal from the backend becomes a red toast (for example the same-approver message). It always ends by clearing busy.
->>> 59-68
-`compute`: needs a session and programme; sends them with the semester; shows the summary ("Computed 60 results: …"); and reloads the table. MARKS_INCOMPLETE and other refusals become red toasts.
->>> 73-74
-`publish`: asks "Publish these results? Students will see them immediately and they can no longer be changed." and publishes only if confirmed.
->>> 78-80
+>>> 21-27
+The colour of each status: amber while work remains, blue for approved, green for published.
+>>> 30-36
+Which step of the tracker each status is waiting on. A DRAFT set has not even been computed (step 0 is current); a COMPUTED set waits on the 1st approval (step 1)… and a PUBLISHED set is at 4, past the last step, so every step shows as done.
+>>> 38-43
+The four step names, from `messages.ts`.
+>>> 57-59
+When the exam sessions arrive, choose the first automatically…
+>>> 60-62
+…and the same for programmes.
+>>> 64-66
+`run(action, success)`: a shared helper for Approve and Publish. It sets busy and runs the action…
+>>> 67-69
+…shows the success message, and reloads the list.
+>>> 70-71
+Any refusal from the backend becomes a red toast (for example the same-approver message).
+>>> 72-73
+It always ends by clearing busy.
+>>> 77-78
+`compute`: needs a session and a programme.
+>>> 79-81
+Busy; send them with the semester.
+>>> 82-83
+Show the summary ("Computed 60 results: 57 passed, average SGPA 7.68.") and reload the list.
+>>> 84-85
+MARKS_INCOMPLETE and other refusals become red toasts.
+>>> 86-87
+Always: no longer busy.
+>>> 91-93
+`publish`: asks "Publish these results? Students will see them immediately and they can no longer be changed." with a "Publish" button, and publishes only if confirmed.
+>>> 97-99
 The drawing: title and subtitle.
->>> 82
-The "Compute results" card.
->>> 84-91
-Any error loading the lists; then the toolbar with the exam-session drop-down …
->>> 96-100
-… the programme drop-down …
->>> 105-106
-… the semester number (1–10) …
->>> 108-109
-… and the Compute button ("Computing…" while busy).
->>> 115
-The result-sets card.
->>> 117-123
-Loading, error, "Nothing to show yet.", then the table and its header row.
->>> 131-133
-One row per result set.
->>> 137
-The status cell: the badge, and "Approvals: examsup / examsup2" (a dash for an approval not given yet)…
->>> 140-142
-… and, once published, who published it and when.
->>> 146-150
-The actions cell. For COMPUTED or AWAITING_SECOND_APPROVAL, an Approve button, which calls the approve URL through `run`.
->>> 154-155
-For APPROVED, a Publish button, which asks for confirmation first.
->>> 159-160
+>>> 101-103
+The "Compute results" card, with a calculator icon in its title.
+>>> 105
+Any error loading the lists.
+>>> 106-107
+The toolbar, once both lists are loaded.
+>>> 108-112
+The exam-session drop-down…
+>>> 117-121
+…the programme drop-down…
+>>> 126-133
+…the semester number (1–10)…
+>>> 136-138
+…and the Compute button (a spinner and "Computing…" while busy).
+>>> 144
+The "Result sets" heading.
+>>> 147-149
+Loading, error, and an empty state with a workflow icon.
+>>> 150-153
+One card per result set, appearing one after another.
+>>> 154-157
+The card's header: a workflow icon tile coloured by the status…
+>>> 158-160
+…"B.Tech Computer Science · Semester 5"…
+>>> 165
+(with the session code as a chip, and the status badge on the right).
+>>> 167
+The step tracker (`Steps` in `components/ui.tsx`): done steps get a tick, the current one a ring.
+>>> 168-170
+The card's foot: "Approvals: examsup / examsup2" (a dash for an approval not given yet)…
+>>> 171-174
+…and, once published, " · examsup · 12 Jan 2027, 10:30 AM" (who published it and when). `{' · '}` is written as a JavaScript text so that its spaces are kept.
+>>> 178-184
+The actions. For COMPUTED or AWAITING_SECOND_APPROVAL, an Approve button, which calls the approve address through `run`.
+>>> 186
+(Its badge-with-a-tick icon and label.)
+>>> 189-191
+For APPROVED, a green Publish button (with a paper-plane icon), which asks for confirmation first.
+>>> 194-196
 For anything past DRAFT, a "Consolidated marks" button that shows the report below.
->>> 173
-If a report was chosen, the consolidated report for that result set appears under the table.
+>>> 207
+If a report was chosen, the consolidated report for that result set appears under the list.
+
+=== FILE frontend/src/pages/exam/ConsolidatedReportView.tsx
+>>> SUMMARY
+**The consolidated marks table** of one result set: one row per student, one column per course with the student's **coloured grade chip**, then SGPA, CGPA and PASS/FAIL, with a **"Download CSV"** button for spreadsheets.
+
+This is exactly the report of **TC-017 / DEF-031**: it contains **every** student's marks, so only examination superintendents and administrators may load it. When a student tries, the backend answers 403 and records the attempt in the audit log. This component is used by both the results workflow page and the reports page.
+
+**CSV safety.** The CSV comes from the backend, which puts a `'` in front of any cell starting with `=`, `+`, `-` or `@`. Spreadsheet programs would otherwise run such cells as formulas (*CSV formula injection*).
+>>> 19-21
+`downloadCsv`: saves the report as a file. It first fetches the CSV **with the login token**, as a `Blob` (a lump of bytes in the browser's memory). A plain link could not send the token.
+>>> 22
+A temporary local address for those bytes (`blob:http://…`).
+>>> 23-26
+The download trick: create an invisible link to that address, with the `download` attribute naming the file ("consolidated-marks-7.csv"), and click it from code. The browser then saves the file instead of opening it.
+>>> 27
+Release the temporary address (the download has already started).
+>>> 28-29
+Any error (such as 403 for someone who is not allowed) becomes a toast.
+>>> 33-35
+While loading, a skeleton; on error, the red box; with no data yet, nothing.
+>>> 37-39
+The card, with its header: "Consolidated marks: B.Tech Computer Science, semester 5"…
+>>> 41-42
+…and the "Download CSV" button with a download icon.
+>>> 45-47
+The table. Its header: USN, name…
+>>> 50
+…one column per course code (the list differs per programme and semester, so it comes from the data)…
+>>> 58-60
+One row per student: USN and name…
+>>> 63-64
+…then one cell per course, in the same order as the header (`nowrap` keeps each chip on one line)…
+>>> 65-67
+…holding the grade as a coloured chip…
+>>> 69-70
+…or "—" if the student has no grade for that course.
+>>> 74
+Then the SGPA in bold, the CGPA…
+>>> 78
+…and PASS (green) or FAIL (red).
+
+=== FILE frontend/src/pages/exam/ReportsPage.tsx
+>>> SUMMARY
+**Cohort-wide reports** for examination superintendents and administrators:
+1. the **shortfall report** for a programme, semester and section: for each course with anyone short, a block listing the students currently below the attendance threshold, each with an avatar, their percentage and a red bar;
+2. the **consolidated marks** of any result set, chosen from a drop-down (the same view as on the results workflow page).
+
+Both show many students' data at once, so the backend's RoleMatrix allows them only for these two roles.
+>>> 28-30
+Once the programmes arrive, choose the first automatically.
+>>> 32-38
+`runShortfall`: needs a programme; loads the report for the chosen programme, semester and section; shows any error as a toast.
+>>> 41
+Only the courses that actually have students below the minimum (the others would be empty blocks). `?? []`: an empty list before any report was run.
+>>> 43-45
+The drawing: the title.
+>>> 47
+The shortfall card.
+>>> 49-53
+Its toolbar: the programme drop-down…
+>>> 54-55
+(one option per programme)…
+>>> 60-67
+…the semester (1–10)…
+>>> 70-71
+…the section, turned into capitals as it is typed (so "a" becomes "A", as stored)…
+>>> 73-74
+…and "Run report" with a play icon.
+>>> 78
+A report was run and nobody is short: "No student is below the minimum." with a person-with-a-tick icon.
+>>> 79-82
+Otherwise, a two-column grid of blocks, one per course, appearing one after another.
+>>> 83-84
+The block's title: course code, name, and a red badge with the number of students short.
+>>> 86-89
+The list of students: each with an avatar…
+>>> 90
+…their name and USN…
+>>> 94
+…and on the right…
+>>> 96
+…their percentage over a red bar (`low` is always true here: everyone in this list is short).
+>>> 107-109
+The consolidated marks card, with a chart-file icon in its title.
+>>> 111-113
+Once the result sets are loaded: a drop-down of them.
+>>> 114
+Choosing one shows its report; choosing "Choose…" again (`Number('')` is 0 → `|| null`) hides it.
+>>> 116-119
+Each option reads "B.Tech Computer Science · Semester 5 · ES-2026-ODD · Published".
+>>> 127
+The chosen report, under the card.

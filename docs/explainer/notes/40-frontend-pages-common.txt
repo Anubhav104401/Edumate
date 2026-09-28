@@ -1,6 +1,87 @@
+=== FILE frontend/src/pages/DashboardPage.tsx
+>>> SUMMARY
+**The home page after login.** It has three parts, from top to bottom:
+
+1. **A welcome banner** ("hero"): today's date, a greeting that depends on the time of day ("Good evening, *Priya*"), and three chips: the role, the campus, and a reminder that Ctrl K opens the command palette. Behind the text, three blurred blobs of brand colour drift slowly (the "aurora", pure CSS in `app.css`), over a faint grid of lines.
+2. **"At a glance"**: the tiles the backend chose for this role (`GET /api/dashboard`, `DashboardService.java`), for example "Lowest attendance 68%" for a student or "Messages waiting to send 3" for an administrator. Each tile is a `StatCard`: its number **counts up**, it tilts a little towards the mouse, and clicking it opens the related page.
+3. **"Jump back in"**: a shortcut to every page this role can open, taken from the same menu list as the sidebar (`navigation.ts`).
+
+**Why the tiles come from the backend.** Only the server knows the numbers (how many applications wait for review, how many fines are open), and it already knows the user's role from the login token. So the page simply draws whatever tiles it receives; adding a tile for a role needs no change here, apart from choosing an icon in `CARD_ICONS`.
+>>> 55-82
+`CARD_ICONS`: the icon for each kind of tile. The backend names every tile with a short `key` (in `DashboardService.java`, e.g. `new Card("attendance", "Lowest attendance", …)`), and this table turns the key into a picture: a calendar with a tick for attendance, a wallet for fees, a trophy for results, an envelope for the outbox, and so on. `Record<string, LucideIcon>` means "an object whose keys are texts and whose values are icons".
+>>> 87
+The current date and time, used for the date line and the greeting.
+>>> 88
+The icon of the user's role (a graduation cap for students…), from `navigation.ts`.
+>>> 89
+The shortcuts: every menu item of the role except the dashboard itself (we are already on it).
+>>> 91-92
+The drawing starts. `<>` groups the parts without an extra box.
+>>> 93-98
+The welcome banner. It arrives with a slightly slower, grander animation than the rest: rising 18 px and growing from 98.5 % to full size over 0.7 s.
+>>> 99-103
+The aurora: three empty `<span>`s that `app.css` turns into large, blurred, coloured circles, each drifting on its own slow loop (18–26 seconds), so the colours never line up the same way twice. It is decoration, hidden from screen readers.
+>>> 104
+A faint grid of lines over the aurora, fading out towards the edges (a CSS mask), for texture.
+>>> 105-110
+The eyebrow: a sparkle icon and today's date written out in full ("Monday, 28 September 2026", by `formatLongDay` in `utils/format.ts`).
+>>> 112-113
+The greeting: `timeOfDay(hour)` (in `utils/visuals.ts`) returns `morning` before 12, `afternoon` before 17, else `evening`; `messages.ts` turns that into "Good morning" and so on. `{' '}` adds the space before the name (JSX drops a plain line break).
+>>> 117-120
+The chips row, first the role with its icon ("Student")…
+>>> 121-122
+…then the campus ("Campus JGC")…
+>>> 124-125
+…then the hint "Press Ctrl K to jump anywhere".
+>>> 131
+The "At a glance" heading.
+>>> 134
+While the tiles load: four placeholder tiles (`TileSkeletons` below) shaped like the real ones.
+>>> 135
+On failure: the red box with "Try again".
+>>> 136
+If the backend sent no tiles: a friendly empty state.
+>>> 137-138
+The tiles, in a responsive grid. `Stagger` makes them appear one after another, 0.08 s apart, starting 0.15 s after the banner.
+>>> 139-140
+One tile per card from the backend, keyed by its `key` so React can tell them apart.
+>>> 141-148
+The tile: label, value, hint and tone as the backend sent them, the icon from `CARD_ICONS` (a sparkle if the key is unknown, so a new backend tile never breaks the page), and the page it links to.
+>>> 154-156
+The shortcuts section, if the role has any, with its heading and a small grey hint.
+>>> 160
+The shortcut list. `inView` means the one-after-another entrance starts only when the list scrolls into view (it is lower on the page).
+>>> 161-163
+One link per menu item.
+>>> 164-166
+A small icon tile, the page's name, and an arrow that slides right when hovered (`app.css`).
+>>> 179-181
+`TileSkeletons`: four grey placeholder tiles. The whole grid is marked as busy, with a hidden "Loading…" for screen readers.
+>>> 182-183
+Four tiles, each hidden from screen readers (they are only shapes).
+>>> 184-187
+Inside each: a rounded square (the icon), a short line (the label), a tall line (the big number) and a line at the bottom (the hint), the same layout as a real `StatCard`, so nothing jumps when the real tiles replace them.
+
+=== FILE frontend/src/pages/NotFoundPage.tsx
+>>> SUMMARY
+Shown for any address that is not listed in `App.tsx`, for example `/nonsense`. A floating compass, a huge "404" painted with the brand gradient that comes into focus (from blurred and small to sharp), "Page not found", a short explanation and a button back to the dashboard.
+>>> 11-12
+The page box (`.nf` in `app.css` centres everything).
+>>> 13-14
+The compass icon in the same floating circle used by empty states.
+>>> 16-20
+The "404": it starts at 80 % size, transparent and blurred by 12 px, and over 0.8 s grows, appears and sharpens, like a camera finding focus. `text-gradient` fills the letters with the brand gradient.
+>>> 26-27
+The button back to the dashboard, with a left arrow.
+
 === FILE frontend/src/pages/LoginPage.tsx
 >>> SUMMARY
-**The sign-in screen** at `/login`. The person types a username and password and presses "Sign in". What happens next:
+**The sign-in screen** at `/login`. On a wide screen it is split in two:
+
+- **Left: a living picture of the product** (`Showcase`). The same drifting aurora as the dashboard, a headline ("Run the whole campus *without the paperwork.*"), and four glass "preview cards" (an attendance ring, a paid fee, an approved result, an SGPA) that **float with the mouse** at different depths, like layers of a 3-D scene (`Float` / `usePointer` in `motion/Parallax.tsx`). On a phone this half is hidden.
+- **Right: the form.** A username and a password box with icons, an **eye button** to show the password, a **Caps Lock warning**, and a "Sign in" button that shows a spinner while waiting. A small link goes back to the public landing page, and the light/dark switch sits in the corner.
+
+What happens when "Sign in" is pressed:
 
 1. The browser checks that both boxes are filled ("Enter both your username and your password.").
 2. `login()` sends `POST /api/auth/login` with `{"username":"student","password":"Edumate@2026"}`.
@@ -9,81 +90,352 @@
    - 423 "Too many failed attempts. Your account is locked until 10:45 AM." (15 minutes after the fifth failure)
 4. On success, the token is saved and the person is sent to the page they originally asked for, or to the dashboard.
 
-**The demo helper.** In development builds only, a list of demo accounts appears under the form. Clicking one fills in its username and the demo password. A production build (`npm run build`) removes the helper, because `SHOW_DEMO_ACCOUNTS` is false there.
+**The demo helper.** In development builds only, a grid of demo accounts appears under the form, with a search box ("admissions", "Student", "exam"…). **Click** a card to fill in its username and the demo password; **double-click** to sign in straight away. A production build (`npm run build`) removes the helper, because `SHOW_DEMO_ACCOUNTS` is false there.
 
-**Every text** on this page is in `messages.ts` under `login`: the title, labels, button, hint and account descriptions.
->>> 16-19
-The page's memory: what is typed in the two boxes, the current error message, and `busy` (true while waiting for the server, which disables the button so it cannot be pressed twice).
->>> 22
-Where to go after login: the address `RequireAuth` remembered (`state.from`), or `/` (the dashboard). `?.` and `??` handle the case where nothing was remembered.
->>> 24-25
-Already logged in (for example Back was pressed after login): go straight on.
->>> 28
-`handleSubmit`: runs when the form is submitted (the button is clicked or Enter is pressed).
->>> 29
-Without this, the browser would do an old-fashioned form submission and reload the whole page.
->>> 30-32
-A box is empty → show "Enter both your username and your password." and stop. Nothing is sent.
->>> 34-35
-Busy, and no old error.
->>> 36-38
-Tries to log in. On success, go to the remembered page. `replace` means the Back button will not return to the login page.
->>> 39-40
-On failure, show the server's message, e.g. "Invalid username or password."
->>> 41-43
-Always: no longer busy.
->>> 46-49
-The drawing: a centred card holding the brand …
+**Every text** on this page is in `messages.ts` under `login` (and `preview` for the floating cards).
 >>> 50
-… the logo …
->>> 53-55
-… the title, the subtitle, and the red error box if there is an error.
+Where to go after login: the address `RequireAuth` remembered (`state.from`), or `/` (the dashboard). `?.` and `??` handle the case where nothing was remembered.
+>>> 52-54
+Already logged in (for example Back was pressed after login): go straight on.
 >>> 56
-The form. `noValidate` switches off the browser's own pop-up bubbles; EduMate shows its own messages instead, in its own style and words.
->>> 57
+`signIn(name, secret)`: the actual sign-in, shared by the form and by the demo cards' double-click.
+>>> 57-59
+A box is empty → show "Enter both your username and your password." and stop. Nothing is sent. (`trim()` removes spaces, so a username of only spaces counts as empty.)
+>>> 61-62
+Busy (the button shows a spinner and cannot be pressed twice), and no old error.
+>>> 63-65
+Tries to log in. On success, go to the remembered page. `replace` means the Back button will not return to the login page.
+>>> 66-67
+On failure, show the server's message, e.g. "Invalid username or password."
+>>> 68-69
+Always: no longer busy.
+>>> 73-75
+`handleSubmit`: runs when the form is submitted (the button is clicked or Enter is pressed). `preventDefault()` stops the browser's old-fashioned form submission, which would reload the whole page; then `signIn` does the work. `void` = "start it, I am not waiting here".
+>>> 79
+`watchCaps`: on every key press in the password box, ask the browser whether Caps Lock is on (`getModifierState('CapsLock')`) and remember the answer. Caps Lock silently turns a correct password into a wrong one, so this saves people a locked account.
+>>> 81-83
+The drawing: the two-halves layout (`.auth` in `landing.css`), the showcase on the left…
+>>> 85-88
+…and the form panel on the right. At its top: a "← About EduMate" link back to the landing page…
+>>> 90
+…and the light/dark switch (the same one as in the top bar).
+>>> 93-97
+The form block rises into view over 0.7 s.
+>>> 99-100
+The logo: the graduation cap in a gradient square.
+>>> 105-112
+The error box **unfolds** when an error appears (its height animates from 0), so the form below slides down smoothly instead of jumping; when the error is cleared it folds away (`AnimatePresence` keeps it on screen until its `exit` animation ends).
+>>> 117
+The form. `noValidate` switches off the browser's own pop-up bubbles; EduMate shows its own messages instead, in its own style and words. The `aria-label` names it "Sign in" for screen readers.
+>>> 118
 The username field:
->>> 59-64
+>>> 120-121
+The box with a person icon inside on the left (`.input-icon` in `app.css` positions the icon and pads the text).
+>>> 122-127
 - `id="username"` connects it to its label, so clicking the label focuses the box and screen readers read the label;
 - `autoComplete="username"` lets password managers fill it in;
 - `value` and `onChange` make it a *controlled input*: React holds the text, and every key press updates it;
 - `autoFocus` puts the cursor here when the page opens.
->>> 67
+>>> 131
 The password field:
->>> 69-74
-`type="password"` shows dots instead of the letters; `autoComplete="current-password"` helps password managers.
->>> 77-78
-The submit button, disabled while busy, reading "Signing in…" meanwhile.
->>> 82-83
-Only in development: the demo-accounts box.
->>> 86-93
-One button per demo username. Clicking fills in both boxes.
->>> 96-98
-The username, then its description from `messages.ts` (`login.demoAccounts`), e.g. "applicant – Applicant Priya Nair (adult, M.Tech)".
+>>> 133-134
+A key icon inside the box.
+>>> 135-140
+- the `type` switches between `password` (dots) and `text` (readable) when the eye is pressed;
+- `autoComplete="current-password"` tells password managers this is an existing password (not a new one).
+>>> 141-142
+Check Caps Lock on every key press and release.
+>>> 143
+While Caps Lock is on, the warning's id is linked to the box, so a screen reader reads the warning together with the box.
+>>> 145-150
+The eye button inside the box. `type="button"` is important: a plain `<button>` inside a form would **submit** the form. Its label says what it will do ("Show password" / "Hide password"), and `aria-pressed` tells screen readers whether the password is shown.
+>>> 152
+An open eye, or a crossed-out eye when the password is visible.
+>>> 155-157
+The amber "Caps Lock is on" warning, only while it is on.
+>>> 161
+The "Sign in" button, full width, disabled while busy.
+>>> 162-164
+While busy: a spinning circle and "Signing in…".
+>>> 166-168
+Otherwise: "Sign in" and an arrow that slides right on hover.
+>>> 174-181
+Development builds only: the demo accounts. Picking one fills both boxes (the password is the same for all demo accounts) and clears any old error.
+>>> 182
+Double-clicking one signs in with it at once.
+>>> 192-193
+`Showcase`: the left half. `usePointer()` creates a pair of smoothed mouse coordinates that the floating cards follow.
+>>> 194-195
+The panel. Moving the mouse over it updates those coordinates; leaving it lets the cards glide back to rest. `noise` adds a very faint film-grain texture (`landing.css`) so the large gradient does not look flat.
+>>> 196-201
+The aurora (three drifting colour blobs) and the faint grid of lines, as on the dashboard. Decoration only.
+>>> 203-206
+The logo and name at the top, linking to the landing page.
+>>> 210-215
+The headline block rises in over 0.9 s, 0.1 s after the page opens.
+>>> 217-220
+A small pill with a shield icon ("EduMate for campuses"). `glow-pill` gives it a slowly rotating glowing border (an animated `conic-gradient`, `landing.css`).
+>>> 223-224
+The headline, its last words in the italic serif font filled with the brand gradient.
+>>> 229
+The floating preview cards, hidden from screen readers (they are pictures of the product, not real data).
+>>> 230-231
+Card 1: an attendance ring at 75 %. `depth={-30}` means it moves up to 30 px **against** the mouse, while positive depths move **with** it; mixing both directions is what creates the feeling of depth (parallax).
+>>> 234
+Its text: "Attendance" / "On track".
+>>> 239-241
+Card 2: "Fee paid" / "Receipt issued instantly" with a green tick, moving with the mouse (40 px, the "nearest" layer).
+>>> 246-248
+Card 3: "Results approved" / "Two different superintendents", with a shield.
+>>> 253-257
+Card 4: an SGPA of 8.63 in large gradient numbers.
+>>> 264-265
+At the bottom: "Protected by role-based access and account lockout."
+>>> 272-280
+`DemoAccounts`' inputs: the username currently in the box (to highlight its card), what to do on click, and what to do on double-click.
+>>> 282-283
+`shown`: the accounts matching the search. The search text is lower-cased and trimmed once.
+>>> 284-285
+An account matches if its username, its description ("Exam cell – approver 1") or its role's name contains the search text, all compared in lower case so "EXAM" finds "exam".
+>>> 287
+`useMemo(…, [filter])` remembers the result and recomputes it only when the search text changes.
+>>> 289-291
+The section, named for screen readers, and its heading row…
+>>> 295-296
+…the hint "All demo accounts use the password Edumate@2026. Double-click one to sign in straight away."…
+>>> 298-305
+…and the search box with a magnifying-glass icon.
+>>> 308
+The grid of cards, appearing one after another. The `key` changes between "all" and "filtered", which makes React build a fresh grid when searching starts or stops, so the staggered entrance plays again.
+>>> 309-310
+For each matching account, the icon of its role.
+>>> 311-318
+A card button: pressed-looking when it is the chosen one (`aria-pressed`), click = pick, double-click = sign in.
+>>> 320-321
+The role icon, then the username and description.
 
-=== FILE frontend/src/pages/DashboardPage.tsx
+=== FILE frontend/src/pages/LandingPage.tsx
 >>> SUMMARY
-**The home page** after login: "Welcome, Aarav Sharma", then a grid of coloured **cards**. The backend decides which cards the person's role sees (`DashboardService`), and the frontend just draws them. Each card is a link to the page where its number can be acted on.
->>> 15-16
-The drawing starts. `<>` groups the parts without an extra box.
->>> 17
-The title "Welcome, <name>" and a subtitle.
->>> 18
-While waiting: "Loading…".
->>> 19
-If loading failed: the red box with a "Try again" button that calls `reload`.
->>> 20
-If there are no cards at all: a grey message.
->>> 21-23
-Otherwise, a grid with one tile per card.
->>> 24
-Each tile is a link (`<Link>` changes the page without reloading). Its class, e.g. `stat tone-warn`, gives it its colour. The label, big value and hint are drawn inside it.
+**The public welcome page** at `/welcome`: EduMate's "shop window", and the page where the **scroll effects** live. A visitor who is not signed in and opens `/` is sent here (`RequireAuth.tsx`); a deep link such as `/results` still goes straight to the login page.
 
-=== FILE frontend/src/pages/NotFoundPage.tsx
->>> SUMMARY
-Shown for any address that is not listed in `App.tsx`, for example `/nonsense`: "Page not found", with a button back to the dashboard.
->>> 9-10
-The drawing.
->>> 11
-The title and explanation, from `messages.ts` (`notFound`).
->>> 12
-A button-looking link to the dashboard.
+The page, from top to bottom, and the technique behind each effect:
+
+| Section | What the visitor sees | How it works |
+|---|---|---|
+| Top bar | transparent at first, turns to frosted glass once the page scrolls | `useScrolled(24)` → `data-scrolled="true"` → `backdrop-filter: blur()` in `landing.css` |
+| Hero | the headline **slides up word by word**; a product preview below it starts **tilted back in 3-D** and straightens as you scroll; glass cards float with the mouse | `Words` (each word in a clipped box); `useScroll` + `useTransform` → `rotateX`; `Float` / `usePointer` |
+| Marquee | two rows of module names gliding in opposite directions, pausing on hover | pure CSS `@keyframes marquee` moving a doubled list by −50 % |
+| Numbers | 7 modules, 9 roles, 19 findings, 2 campuses, **counting up** when scrolled into view | `CountUp` inside `Reveal` |
+| Modules | a "bento" grid of tiles that appear one after another and light up under the mouse | `Stagger inView` + `followPointer` |
+| Journey | the big ring on the left **stays pinned** while the five steps scroll past; the ring fills a fifth per step and the icon and number swap | CSS `position: sticky` + `useInView` with a narrow middle band |
+| Roles | scrolling **down** moves a row of role cards **sideways** | a 320vh-tall section with a sticky 100vh window; `useScroll` progress × row width → `x` |
+| Quality | the six tested fixes from the SQA report | `Stagger inView` |
+| Call to action | an aurora panel with "Sign in" | `Reveal` |
+
+**Smooth scrolling.** All of this sits on top of **Lenis** (`motion/SmoothScroll.tsx`): the wheel does not jump the page in fixed steps but glides it, so scroll-linked effects move fluidly instead of in jerks.
+
+**Reduced motion.** Everything here respects the visitor's "reduce motion" setting: the tilt becomes flat (`useReducedMotion` below), `MotionConfig reducedMotion="user"` in `App.tsx` turns motion's movements into simple fades, `CountUp` shows the final number at once, and `landing.css` stops the marquee.
+
+**Phones.** Below 760 px the sticky effects switch off (`landing.css`): the journey picture is hidden, and the roles become a normal sideways-swipe row with snap points, because pinned sections feel awkward on small touch screens.
+
+**All texts** are in `messages.ts` under `landing` (`L` below is a short name for it).
+>>> 54
+`L`: a short name for `t.landing`, the texts of this page, because they are used very often below.
+>>> 57-62
+The four big numbers and their labels. They are written as text (`'7'`), because `CountUp` works on text such as "92.40%" too; here they are whole numbers.
+>>> 64-72
+An icon for each module tile. `Record<keyof typeof L.modules, LucideIcon>` means: an object with **exactly** the same keys as the module texts in `messages.ts`, each with an icon. If someone adds a module text and forgets its icon, TypeScript reports an error.
+>>> 74-80
+An icon for each of the five journey steps, checked against `L.journey` in the same way.
+>>> 82-89
+An icon for each of the six quality cards.
+>>> 91-104
+Icons for the marquee chips, used in turn (the 13th chip would reuse the 1st icon).
+>>> 107
+`scrolled` becomes true once the page has scrolled more than 24 px (`useScrolled` in `components/ScrollExtras.tsx`).
+>>> 109-111
+The page, and its top bar. `data-scrolled` is an HTML attribute that CSS can test: `.l-nav[data-scrolled="true"]` gives the bar its frosted-glass background and a border.
+>>> 112-114
+The logo and name, linking to the top of this page.
+>>> 118
+The in-page links ("Modules", "How it works", "Roles", "Quality"). They are plain `<a href="#modules">` links to the sections' ids; Lenis (with `anchors: true` in `SmoothScroll.tsx`) turns the jump into a smooth glide.
+>>> 124-127
+On the right: the light/dark switch and a "Sign in" button with an arrow.
+>>> 132-133
+The hero and the marquee (both drawn by their own functions below).
+>>> 135-137
+The numbers section: a row of four.
+>>> 138
+Each number rises into view when it is scrolled to, 0.08 s after its left neighbour.
+>>> 139-140
+The number, in gradient letters, counting up from 0 over 1.6 s once it is visible.
+>>> 148-150
+The modules section (its id `modules` is the target of the "Modules" link), with its heading block.
+>>> 151
+The bento grid. `inView`: its tiles start appearing only when the grid scrolls into view.
+>>> 152
+For each module key in `messages.ts`. `Object.keys` returns plain texts; `as (keyof typeof L.modules)[]` tells TypeScript they are exactly the module keys, so `L.modules[key]` is known to exist.
+>>> 153-155
+One tile: a stat-style card that lights up under the mouse (`followPointer` in `StatCard.tsx` stores the mouse position in CSS variables; a soft radial gradient follows them), with a large icon…
+>>> 165-166
+The journey and roles sections (below).
+>>> 168-170
+The quality section, with its heading block.
+>>> 171-175
+Six green-toned cards, one per fix from the SQA report (role-based access, locking, payment callbacks, two-person approval, audit trail, account lockout), appearing one after another.
+>>> 185-187
+The final call to action: a rounded panel with film grain…
+>>> 188-192
+…its own drifting aurora…
+>>> 193
+…a large gradient heading…
+>>> 197-198
+…and a large "Sign in" button.
+>>> 204-205
+The footer: "EduMate (EduAutomate) · Software Quality Assurance, 23CSE701", then the release name.
+>>> 212-213
+`SectionHead`: the small eyebrow, heading and paragraph at the start of each section, rising in as a block when scrolled to.
+>>> 222
+`Words`: the headline effect. The idea: every word sits in its own little box with `overflow: hidden` (`.word` in `landing.css`); inside it the word starts pushed **below** the box (invisible, clipped) and slides up into it. The result looks like the words rise out of a slot, one after another.
+>>> 223-226
+Split the text at spaces and draw each word. `Fragment` is `<>` with a `key`, needed because it is inside a list.
+>>> 227-231
+The clipping box, and inside it the word, starting 110 % of its own height lower (fully hidden) and moving to 0.
+>>> 232
+Each word 0.07 s after the previous one, starting after `delay`.
+>>> 234
+The word itself.
+>>> 236
+The space between words is placed **outside** the clipping box. (Inside, the box would swallow it and the words would run together.)
+>>> 244-246
+The hero's tools: a ref to the product preview ("stage"), the smoothed mouse position for the floating cards, and whether the visitor asked for reduced motion.
+>>> 248
+**Scroll-linked progress.** `useScroll` with a `target` measures how far the stage has travelled through the window: `offset: ['start end', 'start start']` means "0 when the stage's top touches the window's bottom, 1 when it touches the window's top". The result, `scrollYProgress`, is a **motion value**: a number that changes as you scroll **without** making React redraw the page (so it stays smooth at 120 frames a second).
+>>> 249
+`useTransform` maps that progress onto a tilt: 26° at 0, 0° at 1. So the preview starts leaning back, like a laptop screen being opened, and stands upright as it scrolls up. With reduced motion, the tilt is always 0.
+>>> 250
+The same progress also grows the preview from 90 % to full size.
+>>> 251
+How many words the first part of the title has, so the next parts can wait until those have risen.
+>>> 253-254
+The hero section. Mouse movement over it drives the floating cards.
+>>> 255-260
+The aurora and grid lines behind the text.
+>>> 262-267
+A small glowing pill with a sparkle: "Release 3.0 · built from an SQA activity report".
+>>> 271-272
+The headline "The whole campus, *beautifully* in one place.", in three parts. The first part rises word by word from 0.1 s…
+>>> 273
+…the accent word, in the italic serif font with the brand gradient, follows straight after…
+>>> 274
+…and the last part after a small extra pause.
+>>> 277-283
+The paragraph under the headline fades up at 0.55 s, while the last words are still settling.
+>>> 285-289
+The two buttons fade up at 0.7 s.
+>>> 291-292
+"Sign in to EduMate" (to the login page)…
+>>> 294-295
+…and "Explore the modules" (a smooth glide down to the modules section).
+>>> 299-301
+"Scroll to explore" with a little drawn mouse whose wheel dot moves down and fades, over and over (CSS animation in `landing.css`).
+>>> 304
+The stage for the product preview, a picture only (hidden from screen readers). `ref={stage}` is what `useScroll` above watches.
+>>> 305-306
+A floating card on the left: a 92 % attendance ring, moving against the mouse.
+>>> 309
+Its text: "Attendance" / "On track".
+>>> 314-316
+A floating card on the right, "Fee paid", moving with the mouse.
+>>> 321-323
+A third card, "Results approved".
+>>> 329
+**The product preview** ("mock"): a miniature EduMate screen built from the app's real CSS classes. Its `style` receives the two motion values: motion applies them directly to the element's `transform` as you scroll, without React redrawing. (`landing.css` gives the stage a `perspective`, which is what makes `rotateX` look three-dimensional instead of just squashed.)
+>>> 330-333
+A fake window bar with three dots.
+>>> 335-337
+A fake sidebar with five menu items; the first is "active".
+>>> 338
+The active item's highlight pill, as in the real sidebar.
+>>> 339-341
+Each item's icon and label, using the real menu texts.
+>>> 346-353
+The fake main area: a small welcome banner with its own aurora and grid lines…
+>>> 354-355
+…saying "Good morning, *Priya*"…
+>>> 358-360
+…and three fake tiles: attendance 92.40 %…
+>>> 364-365
+…CGPA 8.63…
+>>> 369-370
+…and fees due ₹0.
+>>> 383
+The marquee's chips: each module name from `messages.ts` with an icon (`i % MARQUEE_ICONS.length` cycles through the icons).
+>>> 385
+**The seamless-loop trick.** The row holds the list **twice**, and the CSS animation slides the row left by exactly half its width (`translateX(-50%)`) and then starts again. At that moment the second copy is exactly where the first one began, so the jump back is invisible and the row seems endless.
+>>> 386-388
+The marquee (decoration: the same names are in the modules section) and its first row.
+>>> 389-391
+Each chip: an icon and a name.
+>>> 395-398
+The second row, in reverse order, with the class `reverse` that runs the animation backwards and a little slower, so the two rows drift apart.
+>>> 407
+The five step keys (`apply`, `attend`, `examine`, `results`, `pay`).
+>>> 409
+The icon of the step that is currently in the middle of the window.
+>>> 411-414
+The section (target of the "How it works" link), its container and heading block.
+>>> 415-416
+Two columns: on the left the picture, which is `position: sticky; top: 18vh` in `landing.css`. **Sticky** means: it scrolls normally until it reaches 18 % from the top of the window, then stays there while the rest of its column scrolls on, until the column ends. That is the "pinned" effect, with no JavaScript at all.
+>>> 417-418
+A large ring that shows progress through the journey: step 1 of 5 = 20 %, step 2 = 40 %… `key={active}` makes React create a new ring for each step, so its drawing animation plays again.
+>>> 419-426
+The step's icon, swapped with a small twist: the old one shrinks and turns away, then the new one grows and turns in. `AnimatePresence mode="wait"` waits for the old icon to leave before the new one enters, and `key={active}` is what tells it "this is a different icon now".
+>>> 428
+The icon in a large accent-coloured tile.
+>>> 431-438
+The big step number, swapped the same way: the old number slides up and out, the new one slides up from below.
+>>> 440
+"01", "02"… (a `0` in front of the step number).
+>>> 445-447
+On the right, the list of steps. Each step reports when it becomes the active one (`onActive={setActive}`).
+>>> 457-467
+`JourneyStep`'s inputs: its position, its texts, and the function that makes it active.
+>>> 468-469
+**"Is this step in the middle of the window?"** `useInView` normally asks "is it visible at all?". The `margin` shrinks the window it compares against by 45 % at the top and 45 % at the bottom, leaving a thin band across the middle (10 % of the height). A step counts as "in view" only while it crosses that band, so exactly one step is active at a time, and it changes as each step passes the middle.
+>>> 471-473
+When this step enters the middle band, make it the active one. (A layout effect runs just before the screen is painted, so the picture on the left never shows the old step for one frame.)
+>>> 475-481
+The step: faint (35 %) while elsewhere, fully visible while it is in the middle.
+>>> 491-492
+Refs to the roles section and to its row of cards.
+>>> 493
+`distance`: how far the row must slide so its last card ends at the right edge: the row's full width minus the window's width. It is kept in a motion value too, so it can be combined with the scroll progress below.
+>>> 494
+The scroll progress through the section: 0 when its top reaches the window's top, 1 when its bottom reaches the window's bottom. The section is 320vh tall (`landing.css`), so this takes 2.2 screen-heights of scrolling.
+>>> 495
+**Turning vertical scroll into sideways movement.** `x = −progress × distance`: at the start of the section the row is in place; at the end it has slid left by its whole extra width. Meanwhile the `.h-sticky` window (100vh tall, sticky at the top) stays pinned, so the visitor scrolls **down** and sees the cards move **sideways**.
+>>> 496
+The nine roles, in the order of `L.roleBlurbs`.
+>>> 498-499
+`measure`: work out `distance` from the real widths (`scrollWidth` = the row's full width, including the part off screen). `Math.max(0, …)` handles a window wide enough to show every card, where nothing needs to slide.
+>>> 500
+Measure once now…
+>>> 501-502
+…again whenever the row changes size (for example when the web fonts finish loading and the texts get wider). A `ResizeObserver` calls `measure` whenever the watched element's size changes…
+>>> 503
+…and again whenever the window is resized.
+>>> 504-507
+When the page is left: stop watching (otherwise the observers would keep running for a page that no longer exists).
+>>> 508
+Run this once (`distance` never changes identity).
+>>> 510-514
+The tall section, the sticky 100vh window inside it, and the heading block.
+>>> 516
+The row of cards. Its `x` is the motion value from line 495, so it slides as you scroll.
+>>> 517-518
+One card per role, with the role's icon.
+>>> 519-521
+The card: a large icon tile, alternating blue and violet tones…
+>>> 524-525
+…and a counter in the corner: "03 / 09".

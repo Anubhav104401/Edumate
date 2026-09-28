@@ -21,8 +21,8 @@ is written in the register (audit).</div>
 <tr><td><a href="#f-frontend-src-components-DocumentUpload-tsx"><code>DocumentUpload.tsx</code></a></td><td>one box: drag &amp; drop / click, progress bar, View, Remove</td></tr>
 <tr><td><a href="#f-frontend-src-utils-fileChecks-ts"><code>fileChecks.ts</code></a></td><td>browser checks: empty, size, extension, magic bytes</td></tr>
 <tr><td><a href="#f-frontend-src-api-endpoints-ts-L140"><code>endpoints.ts</code> (uploadDocument)</a></td><td>builds the multipart form</td></tr>
-<tr><td><a href="#f-frontend-src-api-http-ts-L129"><code>http.ts</code> (uploadWithProgress, download)</a></td><td>sends with progress; downloads with the token</td></tr>
-<tr><td><a href="#f-frontend-src-config-ts-L12"><code>config.ts</code> (MAX_UPLOAD_BYTES)</a>, <a href="#f-frontend-src-i18n-messages-ts"><code>messages.ts</code> (upload, documentTypes)</a></td><td>the limit and every text</td></tr>
+<tr><td><a href="#f-frontend-src-api-http-ts-L163"><code>http.ts</code> (uploadWithProgress, download)</a></td><td>sends with progress; downloads with the token</td></tr>
+<tr><td><a href="#f-frontend-src-config-ts-L13"><code>config.ts</code> (MAX_UPLOAD_BYTES)</a>, <a href="#f-frontend-src-i18n-messages-ts"><code>messages.ts</code> (upload, documentTypes)</a></td><td>the limit and every text</td></tr>
 <tr><td rowspan="2">Between</td><td><a href="#f-frontend-vite-config-ts"><code>vite.config.ts</code></a> / <a href="#f-frontend-nginx-conf-L13"><code>nginx.conf</code> (client_max_body_size 6m)</a></td><td>forward <code>/api</code> to port 8080</td></tr>
 <tr><td><a href="#f-backend-src-main-resources-application-yml-L30"><code>application.yml</code> (multipart limits)</a></td><td>5 MB per file, 6 MB per request</td></tr>
 <tr><td rowspan="9">Server</td><td><a href="#f-backend-src-main-java-com-edumate-security-RoleMatrix-java-L107"><code>RoleMatrix</code></a></td><td>only APPLICANT may upload; applicant, officer and admin may view</td></tr>
@@ -127,7 +127,7 @@ Base64 text, which is <strong>33% larger</strong> (4 characters for every 3 byte
 both sides. Multipart carries the raw bytes as they are, and every web server understands it.</p>
 
 <h2>Step 4: sending, with a progress bar</h2>
-<p><a href="#f-frontend-src-api-http-ts-L129"><code>uploadWithProgress</code></a> uses
+<p><a href="#f-frontend-src-api-http-ts-L163"><code>uploadWithProgress</code></a> uses
 <strong><code>XMLHttpRequest</code></strong> rather than <code>fetch</code>, because <code>fetch</code> cannot report
 upload progress. While the bytes leave the computer, the browser fires <code>xhr.upload.onprogress</code> with
 <code>loaded</code> and <code>total</code>:</p>

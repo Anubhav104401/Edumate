@@ -1,0 +1,398 @@
+=== FILE frontend/src/components/Sidebar.tsx
+>>> SUMMARY
+**The side menu**: the EduMate logo, the links this role may use (grouped under small headings such as "My studies" and "Finance"), and the signed-in person at the bottom.
+
+**The sliding highlight.** The light "pill" behind the active link is **one** element that `motion` slides from link to link when the page changes. This is a **shared layout animation**: every link can draw a pill with the same `layoutId="nav-pill"`, but only the active one does; when a different link becomes active, motion notices that the element with that id has moved and animates it from the old position to the new one, instead of making one disappear and another appear.
+
+**Collapsed mode.** On a computer, the menu can be folded to a narrow strip of icons (the button at the bottom), which leaves more room for wide tables. The choice is remembered. In collapsed mode, hovering or focusing an icon shows its name in a **tooltip** (Radix UI Tooltip, which also works with the keyboard and for screen readers).
+
+**On phones** (under 960 px wide) the same menu becomes a drawer that slides in from the left (the CSS is in `app.css`).
+>>> 22-26
+Its inputs, all from `Layout.tsx`: whether it is collapsed, whether it is open as a phone drawer, what to do when a link is chosen (close the drawer), and what to do when the collapse button is pressed.
+>>> 31
+This role's links, from `navigation.ts`.
+>>> 33-34
+`Tooltip.Provider` shares one tooltip timing for everything inside: a tooltip appears after 150 ms of hovering.
+>>> 35
+The menu itself. `<nav>` with a label tells screen readers "this is the main menu"; `data-open` lets the CSS slide the phone drawer in.
+>>> 36-38
+The logo (the gradient square with a graduation cap) and the name, linking to the dashboard.
+>>> 43-45
+The list of links. For each item a `Fragment` (an invisible group) holds its heading, if any, and the link; the `key` tells React which item is which.
+>>> 47
+A heading appears only where the section changes from the item before (and above the first item), so each heading is shown once above its group.
+>>> 48
+The tooltip wrapper (it only does something when the menu is collapsed).
+>>> 49
+`NavLink`: a link that knows whether it is the current page and then adds the class `active`. `end` for `/` means the dashboard is only active on exactly `/`, not on every address.
+>>> 50-51
+A NavLink's content may be a function that receives `isActive`; here it draws:
+>>> 52
+the sliding pill, only on the active link (see above);
+>>> 53
+the item's icon (each menu item carries its own icon component, drawn here like a tag)…
+>>> 63
+The bottom area.
+>>> 64
+In collapsed mode, the person's name and role appear as a tooltip.
+>>> 65
+The person's chip. When collapsed it can receive the keyboard focus (`tabIndex={0}`), so keyboard users can reach its tooltip too.
+>>> 66-67
+A round avatar with their initials, and their name…
+>>> 69-70
+…and their role and campus code.
+>>> 75
+The collapse button's tooltip ("Expand the menu", useful only when collapsed).
+>>> 76
+The button. `aria-expanded` tells screen readers whether the menu is currently expanded.
+>>> 77
+Its icon points the way the menu will move: "open" when collapsed, "close" when expanded.
+>>> 89-90
+`NavTip`: when the tooltip should not show, return the child untouched.
+>>> 92-94
+Otherwise wrap it: the child becomes the tooltip's trigger (`asChild` gives the trigger behaviour to the child itself instead of adding a box).
+>>> 95-97
+The tooltip text, drawn in a portal (on top of everything), to the right of the icon with a 12 px gap.
+
+=== FILE frontend/src/components/Topbar.tsx
+>>> SUMMARY
+**The bar across the top of every signed-in page:**
+<pre class="block">[☰ on phones]  Student › Attendance ........ [🔍 Search or jump to… Ctrl K] [☀] [(AS) Aarav ▾]</pre>
+- a **breadcrumb** (role › current page), found from the address with `findNavItem`;
+- the **search box**, which opens the command menu (it only looks like a search field);
+- the **theme switch**: the sun turns into a moon (and back) with a small spin, and the page changes theme in a growing circle (see `theme/ThemeContext.tsx`);
+- the **user menu** (Radix DropdownMenu): who is signed in, the theme choice (light / dark / same as my computer), and "Log out".
+
+It is see-through at the top of the page and turns into **frosted glass** (a blurred, slightly transparent background) once the page scrolls, so content passing underneath stays readable.
+>>> 19-22
+What `Layout.tsx` gives it: how to open the phone drawer, how to open the command menu, and how to log out.
+>>> 26
+Is this a Mac? Macs show the ⌘ symbol for the command key; everyone else sees "Ctrl". `typeof navigator !== 'undefined'` avoids a crash where there is no browser (tests).
+>>> 31
+Has the page scrolled a little? (from `ScrollExtras.tsx`)
+>>> 32
+The menu item this page belongs to, for the breadcrumb.
+>>> 34-35
+The bar; `data-scrolled` switches on the glass look in `app.css`.
+>>> 36-37
+The ☰ button that opens the drawer. The CSS shows it only on narrow screens.
+>>> 39
+The breadcrumb, labelled "You are here" for screen readers.
+>>> 41
+A small arrow between the role and the page (hidden on very small screens, together with the role).
+>>> 44
+An empty box that takes up all spare space, pushing the next items to the right.
+>>> 45-50
+The search button. `aria-keyshortcuts` tells assistive technology that Ctrl+K (or ⌘K) does the same.
+>>> 52
+A magnifying-glass icon; then the text and the keyboard hint.
+>>> 56-57
+The theme switch and the user menu.
+>>> 64
+The theme actually shown, and the function that flips it.
+>>> 66-69
+On click, start the theme's circle from the **middle of this button** (`getBoundingClientRect()` gives its position and size). Using the button's centre instead of the mouse position means a keyboard press also looks right.
+>>> 72-73
+The round button, labelled "Switch between light and dark" for screen readers (it has no visible text).
+>>> 74-81
+The icon inside swaps with a spin: the old one turns away and shrinks while the new one turns in and grows. `mode="wait"` finishes the exit before the entrance; `key={resolved}` makes a new element whenever the theme changes, which triggers the swap.
+>>> 83
+A moon in dark mode, a sun in light mode.
+>>> 93
+The saved choice and the function that changes it.
+>>> 95-96
+The drop-down menu. `modal={false}`: while it is open the rest of the page stays usable (no scroll lock needed).
+>>> 97-98
+The button that opens it (Radix gives it the opening behaviour through `asChild`).
+>>> 99
+The person's avatar, then (on wide screens) their first name…
+>>> 101
+…and a small arrow.
+>>> 104-105
+The menu, drawn on top of everything, aligned to the right edge of the button, 8 px below it.
+>>> 106
+A header with the person's full name…
+>>> 108
+…their role and campus.
+>>> 110-111
+A dividing line, then the small heading "Theme".
+>>> 112
+A **radio group**: exactly one of its items is chosen (the current `choice`); choosing another calls `setChoice`.
+>>> 113-115
+One item per option from `THEME_OPTIONS`, with its icon and label.
+>>> 116-117
+A tick, shown only next to the chosen item.
+>>> 122-124
+A dividing line, then "Log out" (in red when highlighted).
+
+=== FILE frontend/src/components/CommandPalette.tsx
+>>> SUMMARY
+**The command menu**, opened with Ctrl+K (⌘K on a Mac) or by clicking the search box in the top bar. Type a few letters ("hall", "fee", "dark"), move with the arrow keys, press Enter.
+
+It lists every page this role may open (the same `MENU` as the side menu, so it can never offer a page the person cannot use) and a few actions: switch to light, dark or system theme, and log out.
+
+Three libraries work together:
+- **cmdk** does the searching (a *fuzzy* match: "htk" still finds "Hall ticket"), the sorting by best match, and the arrow-key selection;
+- **Radix UI Dialog** makes it a proper pop-up: focus trapped inside, Escape closes it, screen readers announce it;
+- **motion** animates it in and out.
+>>> 19-22
+Its inputs: whether it is open, and the function to open or close it (both owned by `Layout.tsx`).
+>>> 27
+The function that changes the theme.
+>>> 29
+While it is open, the page behind does not scroll.
+>>> 32-34
+`run(action)`: close the menu first, then do the chosen thing (go to a page, switch theme, log out).
+>>> 37-38
+A Radix dialog, open or closed as `Layout.tsx` says; pressing Escape or clicking outside calls `onOpenChange(false)`.
+>>> 39-41
+As with the confirm dialog: `AnimatePresence` allows an exit animation, and the dialog is drawn in a portal on top of everything.
+>>> 42-43
+The dimmed, blurred backdrop.
+>>> 45
+A full-screen box that places the menu near the top of the window.
+>>> 46
+The dialog's content. `aria-describedby={undefined}` tells Radix that this dialog deliberately has no separate description.
+>>> 47-52
+The menu's box: it drops in slightly from above, growing from 96%, on a spring.
+>>> 54
+A title for screen readers only (`sr-only` hides it visually).
+>>> 55
+cmdk's root. `loop`: pressing ↓ on the last item wraps to the first.
+>>> 56-58
+The search row: a magnifying glass and the text box. cmdk filters the items below as you type.
+>>> 61-62
+The list of results, and the text shown when nothing matches.
+>>> 63-64
+The group "Pages": one item per menu link of this role.
+>>> 65-68
+One item. `value` is what the search looks at: the page's label and its section, so "finance" finds "Fees". Choosing it closes the menu and goes to that page.
+>>> 70-71
+The page's icon in a tinted tile…
+>>> 75
+…and an arrow that slides in on the highlighted item.
+>>> 79-84
+The group "Actions": one item per theme option ("Theme: Dark"…); choosing one switches the theme.
+>>> 86-87
+Its icon, tinted violet.
+>>> 89-90
+Its label, "Theme: Light" and so on.
+>>> 94-99
+"Log out": close the menu, forget the token with the message "You have been logged out.", and go to the login page.
+>>> 103-104
+Its icon, tinted red.
+>>> 110
+The footer with keyboard hints (hidden from screen readers, which announce the keys themselves).
+>>> 111-113
+↑ ↓ to move…
+>>> 115-116
+↵ (Enter) to open…
+>>> 118-119
+Esc to close.
+
+=== FILE frontend/src/components/ScrollExtras.tsx
+>>> SUMMARY
+Three small helpers that react to **scrolling**:
+- `<ScrollProgress />`: a thin gradient line along the very top of the window that fills from left to right as you read down the page;
+- `<BackToTop />`: a round button that appears in the bottom-right corner after you have scrolled down a long way, and glides back to the top when clicked;
+- `useScrolled()`: true once the page has scrolled a little. The top bar uses it to turn into frosted glass.
+
+They all use motion's `useScroll()`, which provides the scroll position as **motion values**: numbers that update on every scroll frame without making React redraw anything that does not need it.
+>>> 15
+`scrollYProgress`: how far down the page you are, from 0 (top) to 1 (bottom).
+>>> 17
+A **spring** follows that value, so the line eases after the scroll instead of jumping with every wheel click. `restDelta` is how close counts as "arrived".
+>>> 18
+The line itself: `scaleX` stretches it from 0 to the full width. Scaling (instead of changing the width) is cheap for the browser, because it does not recalculate the page layout.
+>>> 22
+`scrollY`: the scroll position in pixels.
+>>> 24
+Whenever it changes, set `scrolled` to "more than `threshold` pixels down". React only redraws when the true/false answer actually flips.
+>>> 25
+The answer.
+>>> 29
+The smooth-scrolling engine, if present.
+>>> 30
+Show the button once the page has scrolled more than 700 px.
+>>> 32-34
+Going up: glide with Lenis over 1.2 seconds, or ask the browser for a smooth scroll if Lenis is not running.
+>>> 37-39
+The button pops in and out (`AnimatePresence` allows the exit animation).
+>>> 40-43
+A round icon button; `no-print` hides it when printing; the label is read by screen readers because the button shows only an arrow.
+>>> 44-46
+It grows in from 60% and rises; it leaves the same way.
+>>> 47-48
+It lifts a little under the mouse and shrinks slightly while pressed, which makes it feel physical.
+>>> 49-50
+Moved by the house spring; clicking scrolls to the top.
+>>> 52
+An up arrow.
+
+=== FILE frontend/src/components/TopLoader.tsx
+>>> SUMMARY
+**The glowing line along the top edge while EduMate waits for the backend**, the way YouTube and GitHub show loading.
+
+`api/http.ts` counts the requests on their way. `useSyncExternalStore` lets React read that count safely and redraw this component when it changes. We cannot know how far along a request really is, so the line **creeps** towards 85% while waiting (fast at first, then slower and slower), then shoots to 100% and fades out when the last answer arrives.
+
+It waits `LOADER_DELAY_MS` (150 ms) before appearing, so answers that come back quickly never make it flicker.
+>>> 15
+Subscribe to the request count; `busy` is true while at least one request is on its way.
+>>> 18-21
+When nothing is loading, hide the line.
+>>> 23-24
+When loading starts, show the line only after the delay. If loading finishes before that, the cleanup function cancels the timer and the line never appears.
+>>> 25
+Run this whenever `busy` changes.
+>>> 27-29
+The line appears and disappears with animation.
+>>> 30-32
+A decorative element: `aria-hidden` keeps screen readers quiet (pages announce their own loading).
+>>> 33-34
+It starts at zero width and creeps to 85% over 6 seconds, along a curve that starts quickly and slows down, so it always looks alive but never "finishes" before the answer does.
+>>> 35
+On leaving: stretch to 100% in 0.2 s, then fade out.
+
+=== FILE frontend/src/components/StatCard.tsx
+>>> SUMMARY
+**A dashboard tile**: a tinted icon, a label, a big number that **counts up** when it comes into view, and a hint. Used on the dashboard (the tiles the backend chooses for each role) and on the merit list's seat matrix.
+
+If it has a link, the whole tile is clickable: it lifts a little on hover, a small arrow moves up-right, and a soft **spotlight** follows the mouse across the tile. The spotlight is a CSS radial gradient (in `.stat::before`, `app.css`) centred on two CSS variables, `--mx` and `--my`. This file only writes the mouse position into those variables; the browser does the drawing.
+>>> 13
+The four colours a tile can have: good (green), warn (amber), bad (red), neutral (blue). They match the `tone` of the backend's `DashboardCard`.
+>>> 15-21
+Its inputs: the label, the value (as text, exactly as the backend sent it), an optional hint, the tone, the icon, and an optional link.
+>>> 26-28
+`followPointer`: the mouse position inside the tile, in pixels from its top-left corner, written into `--mx` and `--my` on the tile itself. Exported so the welcome page's tiles can use it too.
+>>> 32-34
+The tile's content, shared by the link version and the plain version: the top row…
+>>> 35
+…with the tinted icon tile…
+>>> 36
+…and, for clickable tiles, the arrow (decorative, so hidden from screen readers).
+>>> 39-40
+The big value, counting up (see `motion/CountUp.tsx`).
+>>> 42
+The hint, if there is one.
+>>> 46
+The CSS classes: `stat` plus the tone (for example `stat tone-good`), which sets the colour used by the icon, the top accent line and the spotlight.
+>>> 47-49
+With a link: the whole tile is a React Router `Link`, so a click changes page without reloading.
+>>> 51-53
+Without a link: a plain box (it still has the spotlight).
+
+=== FILE frontend/src/components/charts.tsx
+>>> SUMMARY
+**Two hand-drawn charts**, made of SVG shapes and animated with motion:
+- `<Ring>`: a **progress ring** (a "meter"): the attendance of each course, the overall attendance, the share of fees paid, the step of the welcome page's journey;
+- `<TrendChart>`: a **line chart** of SGPA and CGPA, one point per semester.
+
+**Why draw them by hand instead of using a chart library?** Both are small, and drawing them directly keeps full control of the look in both themes and keeps the app light (a general chart library adds 100 kB or more).
+
+**The rules they follow** (from established data-visualisation practice):
+- thin lines (2 px), a solid hairline grid in the background, never heavy boxes;
+- two series → a **legend** is always shown; the values are written only at the **end** of each line (and only if the two labels would not overlap), never at every point;
+- numbers are written in the normal **text** colours, never in the line colours (a light line colour is hard to read as text);
+- the two line colours (`--chart-1` blue, `--chart-2` orange in `theme.css`) were checked with a colour-vision validator, so people with colour-blindness can still tell them apart, in light and in dark mode;
+- a **read-out**: hover (or Tab to the chart and use ← →) and a vertical line snaps to the nearest semester, with a small box listing both values;
+- every value is **also written as plain text** on the same page (the semester cards), so nothing depends on seeing the chart.
+
+**How the ring works.** An SVG circle's outline can be drawn as a dash pattern. The dash is made exactly as long as the circle's circumference; then `stroke-dashoffset` slides that dash along, hiding part of it. Offset = circumference → nothing visible; offset = 0 → the full circle. Animating the offset from "all hidden" to "hidden except the percentage" draws the ring.
+>>> 19
+The ring's possible colours.
+>>> 23-36
+The ring's inputs, with defaults: the percentage (or `null` for "no data"), the size and line thickness in pixels, the tone, a delay before drawing, and what to show in the middle.
+>>> 37
+The circle's radius: half the size, minus half the line thickness on each side, so the line stays inside the box.
+>>> 38
+The circumference, 2 × π × radius: the length of the full circle.
+>>> 39
+How much to fill, from 0 to 1 (`clamp` keeps silly values such as 104% inside 0–100).
+>>> 40
+The centre point.
+>>> 42-43
+The box around the ring; its `tone-…` class sets the colour.
+>>> 44
+The SVG drawing area, hidden from screen readers (the number next to it says the same thing).
+>>> 45
+The faint full circle behind (the "track"), a light shade of the same colour.
+>>> 46-54
+The coloured circle on top: no fill, a line of the given thickness with rounded ends, drawn as one dash as long as the whole circle.
+>>> 55
+It starts completely hidden (offset = the whole circumference)…
+>>> 56
+…and, when it scrolls into view, slides to show exactly the filled part.
+>>> 57-58
+Only the first time, over 1.3 s, after the optional delay.
+>>> 67-70
+One point of the trend chart: its label ("Sem 3") and the two values.
+>>> 73-75
+The drawing is planned on a 640 × 240 grid (the SVG scales it to any width). `PAD` keeps room around the plot: on the left for the axis numbers, on the right for the end labels, and below for the semester names.
+>>> 78
+A unique id for this chart's gradient, so two charts on one page would not share one by accident.
+>>> 81
+All the values shown.
+>>> 82-83
+The vertical range: from one whole point below the lowest value (never below 0) up to 10, the top of the 10-point scale. Starting near the data, rather than at 0, keeps small differences between semesters visible.
+>>> 84-85
+The width and height of the plotting area inside the padding.
+>>> 86
+`x(i)`: where point number `i` goes, from left to right, evenly spaced (a single point sits in the middle).
+>>> 87
+`y(v)`: where value `v` goes. SVG's y axis points **down**, so higher values must get smaller y numbers: the formula measures up from the bottom of the plot.
+>>> 88
+The horizontal grid lines and their axis numbers: every whole number in the range, or every second one if the range is wider than 5 points.
+>>> 90
+`line(key)`: an SVG path description such as `M34,120 L210,96 L386,90`: **M**ove to the first point, then draw a **L**ine to each next point.
+>>> 91
+The shaded area under the SGPA line: the same path, then down to the bottom right, across to the bottom left, and `Z` (close the shape).
+>>> 93-95
+The last point, and whether its two end labels would be at least 14 px apart. If they would overlap, they are left out; the legend and the read-out still give the values.
+>>> 98-100
+Hovering: convert the mouse position into the chart's own 640-wide coordinates.
+>>> 101-105
+Find the point nearest to it and make it active. (The read-out follows the nearest semester, so the person never has to hit a 4-pixel dot.)
+>>> 109-113
+The keyboard: → and ← move the read-out between semesters. `preventDefault` stops the arrows from also scrolling the page. Other keys are left alone.
+>>> 116-120
+`draw(delay)`: motion's `pathLength` goes from 0 (nothing drawn) to 1 (fully drawn), so the line appears to be drawn by a pen when the chart scrolls into view.
+>>> 123-124
+The chart's box (the read-out is positioned inside it).
+>>> 125-130
+The legend: a short coloured line and the name of each series.
+>>> 133-137
+The SVG. `role="img"` with an `aria-label` that lists every value, so a screen reader reads the whole chart as one sentence ("Grade point trend: Sem 1 SGPA 8.40, CGPA 8.40; …").
+>>> 138
+It can receive the keyboard focus (Tab), for the arrow keys.
+>>> 139-143
+The event handlers: follow the mouse; hide the read-out when the mouse leaves; show the latest semester when the chart gets the focus; hide it when it loses the focus; handle the arrow keys.
+>>> 145-148
+A vertical gradient from white to transparent…
+>>> 150-151
+…used as a **mask** (a stencil): the shaded area under the line is strongest at the top and fades towards the bottom.
+>>> 155-157
+For every grid value, a hairline across the plot…
+>>> 158-159
+…and its number on the left.
+>>> 163-165
+The semester names along the bottom.
+>>> 169-176
+The shaded area, fading in 0.6 s after the chart comes into view (once the lines are half drawn).
+>>> 178-179
+The two lines, drawn like a pen, CGPA just after SGPA. The `series-…` classes set their colours.
+>>> 181
+The vertical read-out line, when a semester is active.
+>>> 183-186
+A dot for every value (a little bigger for the active semester). Each dot has a 2 px ring in the background colour, so dots stay clear where they overlap a line.
+>>> 190-191
+The end labels, if they fit:
+>>> 192-193
+"SGPA 8.90" to the right of the last SGPA point…
+>>> 195-196
+…and "CGPA 8.65" to the right of the last CGPA point.
+>>> 202-203
+The read-out box, placed above the active semester (its position as a percentage of the width, so it works at any size). `aria-live` makes screen readers announce the new values when it changes.
+>>> 205-206
+The SGPA row: a line key in the SGPA colour, the value in bold, the name after it. The value leads because it is what the reader is looking for.
+>>> 208-209
+The CGPA row, the same way.
